@@ -321,6 +321,7 @@ impl AddCommand {
             ProviderType::Keychain => crate::config::ProviderConfig::Keychain {
                 service: StringOrSecretRef::from("fnox"),
                 prefix: OptionStringOrSecretRef::none(),
+                touch_id: false,
                 auth_command: None,
                 daemon_cache: None,
             },

@@ -23,7 +23,13 @@
           src = craneLib.path ./.;
           filter =
             path: type:
-            (craneLib.filterCargoSources path type) || (pkgs.lib.hasInfix "/src/assets/" (toString path));
+            let
+              sourcePath = toString path;
+            in
+            (craneLib.filterCargoSources path type)
+            || (pkgs.lib.hasInfix "/src/assets/" sourcePath)
+            || (pkgs.lib.hasInfix "/crates/fnox-core/native" sourcePath)
+            || (pkgs.lib.hasInfix "/crates/fnox-core/src/providers" sourcePath);
         };
         commonArgs = {
           inherit src;
@@ -31,7 +37,7 @@
           nativeBuildInputs = with pkgs; [
             perl
             pkg-config
-          ];
+          ] ++ lib.optionals stdenv.isDarwin [ nodejs_26 apple-sdk_26 ];
           buildInputs =
             with pkgs;
             [ ]
@@ -77,7 +83,7 @@
             cargo
             clippy
             rustfmt
-          ];
+          ] ++ lib.optionals stdenv.isDarwin [ nodejs_26 ];
         };
       }
     );

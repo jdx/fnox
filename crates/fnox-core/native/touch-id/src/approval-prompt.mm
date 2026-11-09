@@ -814,30 +814,76 @@ NSString* CredentialSummary(const RunOptions& options) {
   return [names componentsJoinedByString:@", "];
 }
 
+NSString* SafeDisplayValue(NSString* value) {
+  NSMutableString* safe = [NSMutableString string];
+  NSCharacterSet* whitespace = NSCharacterSet.whitespaceAndNewlineCharacterSet;
+  NSCharacterSet* controls = NSCharacterSet.controlCharacterSet;
+  for (NSUInteger index = 0; index < value.length; index++) {
+    unichar character = [value characterAtIndex:index];
+    const BOOL invisibleFormat = character == 0x061c || character == 0x200e ||
+                                 character == 0x200f ||
+                                 (character >= 0x202a && character <= 0x202e) ||
+                                 (character >= 0x2066 && character <= 0x2069);
+    if ([whitespace characterIsMember:character]) {
+      if (safe.length > 0 && [safe characterAtIndex:safe.length - 1] != ' ') {
+        [safe appendString:@" "];
+      }
+      continue;
+    }
+    if (invisibleFormat || [controls characterIsMember:character]) {
+      continue;
+    }
+    if (character >= 0xd800 && character <= 0xdbff && index + 1 < value.length) {
+      unichar next = [value characterAtIndex:index + 1];
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        [safe appendString:[value substringWithRange:NSMakeRange(index, 2)]];
+        index++;
+        continue;
+      }
+    }
+    [safe appendString:[NSString stringWithCharacters:&character length:1]];
+  }
+  return safe;
+}
+
+NSString* BoundedDisplayValue(NSString* value, NSUInteger limit) {
+  NSString* safe = SafeDisplayValue(value ?: @"");
+  if (safe.length > limit) {
+    NSRange lastCharacter = [safe rangeOfComposedCharacterSequenceAtIndex:limit];
+    return [[safe substringToIndex:lastCharacter.location] stringByAppendingString:@"…"];
+  }
+  return safe;
+}
+
 NSArray<NSArray<NSString*>*>* RequestDetailRows(const RunOptions& options,
                                                 std::string_view request_id, NSString* operation) {
-  (void)options;
-  (void)request_id;
-  (void)operation;
-  NSString* approval =
-      fnox::IsSystemVerification() ? @"Touch ID · verification only, no credential access"
+  NSString* executable = MakeString(options.executable.canonical_path) ?: @"";
+  NSString* command = options.invoking_command.empty()
+                          ? (executable.lastPathComponent ?: executable)
+                          : (MakeString(options.invoking_command) ?: @"");
+  NSString* project = MakeString(options.project_directory) ?: @"";
+  NSString* fullCommand = SafeDisplayValue(command);
+  NSString* fullProject = SafeDisplayValue(project);
+  command = BoundedDisplayValue(fullCommand, 80);
+  project = BoundedDisplayValue(fullProject, 80);
+  NSString* secret = BoundedDisplayValue(CredentialSummary(options) ?: @"", 80);
+  NSString* source = BoundedDisplayValue(MakeString(options.credential_source) ?: @"", 80);
+  NSString* service = BoundedDisplayValue(MakeString(options.credential_scope) ?: @"", 60);
+  const bool systemVerification = options.system_verification || fnox::IsSystemVerification();
+  NSString* approval = systemVerification
+      ? (options.credential_access ? @"Touch ID required for this Keychain read"
+                                   : @"Touch ID · verification only, no credential access")
       : fnox::IsScreenshotMode() ? @"Touch ID" : @"Touch ID · Shift + Return in preview";
+  NSString* request = MakeString(request_id);
+  if (request.length > 12) request = [request substringToIndex:12];
   return @[
-    @[
-      @"Fnox request", @"Sample credential proxy request · preview only",
-      @"Sample credential proxy request · preview only"
-    ],
-    @[ @"Action", @"Start credential proxy", @"Start credential proxy" ],
-    @[ @"Command", @"claude", @"claude" ],
-    @[ @"Project", @"/Users/jdalton/projects/keel", @"/Users/jdalton/projects/keel" ],
-    @[ @"Secret", @"GITHUB_TOKEN", @"GITHUB_TOKEN" ],
-    @[ @"Credential source", @"1Password · op", @"1Password · op" ],
-    @[ @"Destination", @"api.github.com", @"api.github.com" ],
-    @[ @"Allowed requests", @"GET /repos/jdalton/keel/**", @"GET /repos/jdalton/keel/**" ],
-    @[
-      @"Credential delivery", @"Authorization header · proxy only",
-      @"Authorization header · proxy only"
-    ],
+    @[ @"Fnox request", request, request ],
+    @[ @"Action", operation, operation ],
+    @[ @"Command (unverified)", command, fullCommand ],
+    @[ @"Project (unverified)", project, fullProject ],
+    @[ @"Keychain service (unverified)", service, service ],
+    @[ @"Secret", secret, secret ],
+    @[ @"Credential source", source, source ],
     @[ @"Approval", approval, approval ],
   ];
 }
@@ -910,17 +956,19 @@ NSScrollView* DetailRowsView(NSArray<NSArray<NSString*>*>* rows) {
 }  // namespace
 
 static bool ShowApprovalPromptImpl(const RunOptions& options, std::string_view request_id,
-                                   PreviewAuthorization& context, std::string_view reason,
-                                   PreviewError& error) {
+                                   TouchIdAuthorization& context, std::string_view reason,
+                                   TouchIdError& error) {
   @autoreleasepool {
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
     [NSApp finishLaunching];
     NSString* credentials = CredentialSummary(options);
-    NSString* executable = MakeString(options.executable.canonical_path);
-    NSString* child = executable.lastPathComponent;
-    NSString* title = child.length > 0
-                          ? [NSString stringWithFormat:@"Allow %@ to use %@?", child, credentials]
+    NSString* command = options.invoking_command.empty()
+                            ? MakeString(options.executable.canonical_path).lastPathComponent
+                            : MakeString(options.invoking_command);
+    command = BoundedDisplayValue(command ?: @"Unknown command", 48);
+    NSString* title = credentials.length > 0
+                          ? [NSString stringWithFormat:@"Unverified command: %@ · Allow access to %@?", command, BoundedDisplayValue(credentials, 28)]
                           : MakeString(reason);
     NSPanel* panel = RequestPanel(360, 256, title);
     FnoxPanelButton* cancel =
@@ -948,7 +996,9 @@ static bool ShowApprovalPromptImpl(const RunOptions& options, std::string_view r
     details.toolTip = @"Show Touch ID request details";
     details.accessibilityLabel = details.toolTip;
     FnoxInstructionLabel* instruction = [[FnoxInstructionLabel alloc] initWithFrame:NSZeroRect];
-    instruction.stringValue = fnox::IsSystemVerification() ? @"Verify with Touch ID" : @"Touch ID to continue";
+    instruction.stringValue = options.system_verification || fnox::IsSystemVerification()
+                                  ? @"Verify with Touch ID"
+                                  : @"Touch ID to continue";
     instruction.bezeled = NO;
     instruction.drawsBackground = NO;
     instruction.focusRingType = NSFocusRingTypeNone;
@@ -1002,7 +1052,7 @@ static bool ShowApprovalPromptImpl(const RunOptions& options, std::string_view r
     __block NSUInteger keyboardFocusIndex = 0;
     __block BOOL showKeyboardHint = NO;
     NSTimer* previewHintTimer =
-        (fnox::IsScreenshotMode() || fnox::IsSystemVerification())
+        (fnox::IsScreenshotMode() || options.system_verification || fnox::IsSystemVerification())
             ? nil
             : [NSTimer scheduledTimerWithTimeInterval:2.8
                                               repeats:YES
@@ -1308,7 +1358,9 @@ static bool ShowApprovalPromptImpl(const RunOptions& options, std::string_view r
                                          return nil;
                                        }
                                        if (verifying || transitioningDetails) return event;
-                                       if ((key == 36 || key == 76) &&
+                                       if (!options.system_verification &&
+                                           !fnox::IsSystemVerification() &&
+                                           (key == 36 || key == 76) &&
                                            (event.modifierFlags & NSEventModifierFlagShift) != 0) {
                                          FnoxPreviewAcceptTouchId();
                                          return nil;
@@ -1417,7 +1469,9 @@ static bool ShowApprovalPromptImpl(const RunOptions& options, std::string_view r
         cancel.keyEquivalent = @"";
         details.enabled = NO;
         scanStartedAt = [NSDate date];
-        fingerprint.accessibilityLabel = fnox::IsSystemVerification() ? @"User verified" : @"Simulated approval";
+        fingerprint.accessibilityLabel = options.system_verification || fnox::IsSystemVerification()
+                                             ? @"User verified"
+                                             : @"Simulated approval";
         [fingerprint animateSuccess];
         if (NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion) {
           cancel.alphaValue = 0;
@@ -1487,13 +1541,13 @@ static bool ShowApprovalPromptImpl(const RunOptions& options, std::string_view r
     [NSEvent removeMonitor:keyboardMonitor];
     if (cancelled) {
       context.Invalidate();
-      error.status = PreviewStatus::kCancelled;
+      error.status = TouchIdStatus::kCancelled;
       error.detail = "Approval cancelled.";
       return false;
     }
     if (readiness == fnox::ApprovalReadinessStatus::kUnavailable) {
       context.Invalidate();
-      error.status = PreviewStatus::kUnavailable;
+      error.status = TouchIdStatus::kUnavailable;
       error.os_status = 0;
       error.detail = "Authentication unavailable: approval interface did not become "
                      "active and visible.";
@@ -1504,8 +1558,8 @@ static bool ShowApprovalPromptImpl(const RunOptions& options, std::string_view r
 }
 
 bool ShowApprovalPrompt(const RunOptions& options, std::string_view request_id,
-                        PreviewAuthorization& context, std::string_view reason,
-                        PreviewError& error) {
+                        TouchIdAuthorization& context, std::string_view reason,
+                        TouchIdError& error) {
   return ShowApprovalPromptImpl(options, request_id, context, reason, error);
 }
 

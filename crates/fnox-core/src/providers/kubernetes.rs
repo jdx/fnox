@@ -59,13 +59,16 @@ impl KubernetesProvider {
             connect(self.selected_context(), self.kubeconfig.as_deref())
                 .await
                 .ok_or_else(config_error)?;
-        let namespace = self
-            .namespace
-            .clone()
-            .filter(|namespace| !namespace.is_empty())
-            .unwrap_or(default_namespace);
+        let namespace = self.resolved_namespace(default_namespace);
 
         Ok((client, namespace))
+    }
+
+    fn resolved_namespace(&self, default_namespace: String) -> String {
+        self.namespace
+            .clone()
+            .filter(|namespace| !namespace.is_empty())
+            .unwrap_or(default_namespace)
     }
 
     fn secret_name(&self, name: &str) -> String {
@@ -186,6 +189,13 @@ pub(crate) async fn connect(
     context: Option<String>,
     kubeconfig: Option<&str>,
 ) -> Option<(Client, String)> {
+    let config = load_kube_config(context, kubeconfig).await?;
+    let namespace = config.default_namespace.clone();
+    let client = Client::try_from(config).ok()?;
+    Some((client, namespace))
+}
+
+async fn load_kube_config(context: Option<String>, kubeconfig: Option<&str>) -> Option<Config> {
     let options = KubeConfigOptions {
         context,
         ..KubeConfigOptions::default()
@@ -207,9 +217,7 @@ pub(crate) async fn connect(
         None => Config::infer().await.ok()?,
     };
 
-    let namespace = config.default_namespace.clone();
-    let client = Client::try_from(config).ok()?;
-    Some((client, namespace))
+    Some(config)
 }
 
 fn non_empty(value: Option<String>) -> Option<String> {
@@ -590,32 +598,39 @@ contexts:
   - name: current
     context:
       cluster: first
+      user: test
       namespace: current-namespace
   - name: selected
     context:
       cluster: first
+      user: test
       namespace: selected-namespace
 current-context: current
-users: []
+users:
+  - name: test
+    user:
+      token: test-token
 "#,
         )
         .unwrap();
         let kubeconfig = Some(file.path().to_string_lossy().into_owned());
 
-        let provider =
-            KubernetesProvider::new(Some("selected".to_string()), None, kubeconfig.clone(), None)
-                .unwrap();
-        let (_, namespace) = provider.client_and_namespace().await.unwrap();
-        assert_eq!(namespace, "selected-namespace");
+        let config = load_kube_config(Some("selected".to_string()), kubeconfig.as_deref())
+            .await
+            .unwrap();
+        assert_eq!(config.default_namespace, "selected-namespace");
 
         let provider = KubernetesProvider::new(
             Some("selected".to_string()),
             Some("configured-namespace".to_string()),
-            kubeconfig,
+            kubeconfig.clone(),
             None,
         )
         .unwrap();
-        let (_, namespace) = provider.client_and_namespace().await.unwrap();
+        let config = load_kube_config(Some("selected".to_string()), kubeconfig.as_deref())
+            .await
+            .unwrap();
+        let namespace = provider.resolved_namespace(config.default_namespace);
         assert_eq!(namespace, "configured-namespace");
     }
 

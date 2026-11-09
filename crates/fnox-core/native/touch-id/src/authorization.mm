@@ -1,6 +1,6 @@
 #import <LocalAuthentication/LocalAuthentication.h>
 #include <atomic>
-#include "preview-authorization.h"
+#include "authorization.h"
 #include "preview-mode.h"
 
 namespace {
@@ -14,33 +14,38 @@ bool FnoxPreviewAcceptTouchId() {
 }
 
 namespace fnox {
-struct PreviewAuthorization::Impl {
+struct TouchIdAuthorization::Impl {
   LAContext* context = [LAContext new];
+  bool system_verification = false;
   bool cancelled = false;
 };
-PreviewAuthorization::PreviewAuthorization() : impl_(std::make_unique<Impl>()) {}
-PreviewAuthorization::~PreviewAuthorization() { Invalidate(); }
-void PreviewAuthorization::Invalidate() {
+TouchIdAuthorization::TouchIdAuthorization(bool system_verification)
+    : impl_(std::make_unique<Impl>()) {
+  impl_->system_verification = system_verification;
+}
+TouchIdAuthorization::~TouchIdAuthorization() { Invalidate(); }
+void TouchIdAuthorization::Invalidate() {
   impl_->cancelled = true;
   [impl_->context invalidate];
 }
-bool PreviewAuthorization::AuthenticateWithEvents(std::string_view, PreviewError& error,
+void* TouchIdAuthorization::AuthenticationContext() const {
+  return (__bridge void*)impl_->context;
+}
+bool TouchIdAuthorization::AuthenticateWithEvents(std::string_view reason, TouchIdError& error,
                                                   const std::function<void()>& process_events) {
-  if (!IsSystemVerification()) {
+  if (!impl_->system_verification && !IsSystemVerification()) {
     while (!impl_->cancelled && !gFnoxPreviewAccepted) {
       process_events();
       [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
     }
-    if (impl_->cancelled) error.status = PreviewStatus::kCancelled;
+    if (impl_->cancelled) error.status = TouchIdStatus::kCancelled;
     return !impl_->cancelled && gFnoxPreviewAccepted;
   }
-  // This verifies the person only. A future protected Keychain operation must
-  // bind its own access control to this context; this demo never reads a secret.
   NSError* availability = nil;
   impl_->context.localizedFallbackTitle = @"";
   if (![impl_->context canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
                                    error:&availability]) {
-    error.status = PreviewStatus::kUnavailable;
+    error.status = TouchIdStatus::kUnavailable;
     error.os_status = static_cast<int>(availability.code);
     error.detail = availability.localizedDescription.UTF8String ?: "Touch ID unavailable";
     return false;
@@ -52,8 +57,13 @@ bool PreviewAuthorization::AuthenticateWithEvents(std::string_view, PreviewError
     std::string detail;
   };
   auto result = std::make_shared<Result>();
+  NSString* localizedReason = [[NSString alloc] initWithBytes:reason.data()
+                                                        length:reason.size()
+                                                      encoding:NSUTF8StringEncoding];
+  if (localizedReason.length == 0) localizedReason = @"authorize this Fnox Keychain request";
+  impl_->context.localizedReason = localizedReason;
   [impl_->context evaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
-                 localizedReason:@"verify this Fnox request preview. No credentials will be read."
+                 localizedReason:localizedReason
                            reply:^(BOOL approved, NSError* failure) {
                              result->approved = approved;
                              if (failure) {
@@ -68,26 +78,26 @@ bool PreviewAuthorization::AuthenticateWithEvents(std::string_view, PreviewError
     [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
   }
   if (impl_->cancelled) {
-    error.status = PreviewStatus::kCancelled;
+    error.status = TouchIdStatus::kCancelled;
     return false;
   }
   error.detail = result->detail;
   error.os_status = result->code;
   if (result->approved) {
-    error.status = PreviewStatus::kSuccess;
+    error.status = TouchIdStatus::kSuccess;
   } else {
     switch (result->code) {
       case LAErrorUserCancel:
       case LAErrorAppCancel:
       case LAErrorSystemCancel:
-        error.status = PreviewStatus::kCancelled;
+        error.status = TouchIdStatus::kCancelled;
         break;
       case LAErrorAuthenticationFailed:
       case LAErrorUserFallback:
-        error.status = PreviewStatus::kDenied;
+        error.status = TouchIdStatus::kDenied;
         break;
       default:
-        error.status = PreviewStatus::kUnavailable;
+        error.status = TouchIdStatus::kUnavailable;
         break;
     }
   }

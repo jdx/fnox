@@ -4,7 +4,7 @@ import {
   contrastRatio,
   luminance,
   transformLightColor,
-} from "../../../native/touch-id-preview/color.mts";
+} from "../../paths/touch-id.mts";
 
 test("sRGB luminance matches standard primary-color weights", () => {
   assert.equal(luminance("#ff0000"), 0.2126);

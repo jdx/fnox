@@ -22,7 +22,7 @@ jobs:
           node-version: "26"
       - name: Build universal preview
         run: |
-          cmake -S native/touch-id-preview -B build/preview \
+          cmake -S crates/fnox-core/native/touch-id/preview -B build/preview \
             -DCMAKE_BUILD_TYPE=Debug -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64' \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
           cmake --build build/preview --target fnox-touch-id-preview --parallel 4
@@ -35,7 +35,7 @@ jobs:
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
-        run: bash native/touch-id-preview/sign-app.sh
+        run: bash crates/fnox-core/native/touch-id/preview/sign-app.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fnox-touch-id-preview-macos

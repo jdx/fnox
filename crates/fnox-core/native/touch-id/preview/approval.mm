@@ -1,11 +1,22 @@
 #import <AppKit/AppKit.h>
 #include <iostream>
+#include <string>
 #include "approval-button-style.h"
 #include "approval-prompt.h"
 #include "preview-mode.h"
 #include "detail-copy-icons.generated.h"
 
 namespace {
+NSString* PreviewValue(NSString* key, NSString* fallback) {
+  NSString* value = NSProcessInfo.processInfo.environment[key];
+  return value.length > 0 ? value : fallback;
+}
+
+std::string PreviewString(NSString* value) {
+  const char* utf8 = value.UTF8String;
+  return utf8 ? utf8 : "";
+}
+
 constexpr CGFloat kPreviewLogoSize = 24;
 constexpr CGFloat kPreviewLabelSize = 9;
 constexpr CGFloat kDarkRibbonBorderWidth = 2;
@@ -137,15 +148,29 @@ int main() {
                   [content addSubview:ribbon positioned:NSWindowAbove relativeTo:nil];
                 }];
     fnox::RunOptions options;
-    options.credentials.push_back({"project:keel/GITHUB_TOKEN", "GITHUB_TOKEN"});
-    options.executable.canonical_path = "/usr/local/bin/claude";
-    fnox::PreviewAuthorization context;
-    fnox::PreviewError error;
+    NSString* projectDirectory =
+        PreviewValue(@"FNOX_PREVIEW_PROJECT_DIRECTORY", @"/workspace/example");
+    NSString* credentialName =
+        PreviewValue(@"FNOX_PREVIEW_CREDENTIAL_NAME", @"EXAMPLE_SECRET");
+    NSString* projectName = projectDirectory.lastPathComponent;
+    NSString* credentialBinding =
+        [NSString stringWithFormat:@"project:%@/%@", projectName, credentialName];
+    options.credential_source =
+        PreviewString(PreviewValue(@"FNOX_PREVIEW_CREDENTIAL_SOURCE", @"Example provider"));
+    options.credentials.push_back(
+        {PreviewString(credentialBinding), PreviewString(credentialName)});
+    options.executable.canonical_path =
+        PreviewString(PreviewValue(@"FNOX_PREVIEW_EXECUTABLE", @"/usr/local/bin/example-command"));
+    options.invoking_command =
+        PreviewString(PreviewValue(@"FNOX_PREVIEW_COMMAND", @"fnox exec -- ./example.sh"));
+    options.project_directory = PreviewString(projectDirectory);
+    fnox::TouchIdAuthorization context;
+    fnox::TouchIdError error;
     const bool approved = fnox::ShowApprovalPrompt(options, std::string(64, 'a'), context,
                                                    "Fnox credential proxy preview", error);
     [NSNotificationCenter.defaultCenter removeObserver:observer];
     if (!approved) {
-      if (error.status != fnox::PreviewStatus::kCancelled) {
+      if (error.status != fnox::TouchIdStatus::kCancelled) {
         std::cerr << "fnox preview failed: " << error.detail << '\n';
       }
       return 1;

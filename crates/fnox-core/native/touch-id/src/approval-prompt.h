@@ -3,14 +3,14 @@
 
 #include <string_view>
 
-#include "preview-authorization.h"
+#include "authorization.h"
 #include "run-request.h"
 
 namespace fnox {
 
 bool ShowApprovalPrompt(const RunOptions& options, std::string_view request_id,
-                        PreviewAuthorization& context, std::string_view reason,
-                        PreviewError& error);
+                        TouchIdAuthorization& context, std::string_view reason,
+                        TouchIdError& error);
 
 }  // namespace fnox
 

@@ -14,17 +14,10 @@ import {
   parseFingerprintColor,
   sampleFingerprintFlow,
   FINGERPRINT_PALETTES,
-} from "../../../native/touch-id-preview/animation.mts";
+  touchIdPaths,
+} from "../../paths/touch-id.mts";
 
-const flow = JSON.parse(
-  fs.readFileSync(
-    new URL(
-      "../../../native/touch-id-preview/assets/flow.json",
-      import.meta.url,
-    ),
-    "utf8",
-  ),
-);
+const flow = JSON.parse(fs.readFileSync(touchIdPaths.assets.flow, "utf8"));
 
 test("animation boundaries clamp malformed progress and preserve endpoints", () => {
   for (const input of [-1, NaN, Infinity])
