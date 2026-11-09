@@ -320,3 +320,21 @@ TOML
 	mask_count=$(echo "$output" | grep -c "::add-mask::" || true)
 	[ "$mask_count" -eq 2 ]
 }
+
+@test "ci-redact masks a plaintext default marked sensitive" {
+	cat >"$FNOX_CONFIG_FILE" <<'TOML'
+root = true
+
+[secrets]
+LOG_LEVEL = { default = "INFO" }
+LOCAL_TOKEN = { default = "dev-token-123", sensitive = true }
+TOML
+
+	export CI=true
+	export GITHUB_ACTIONS=true
+
+	run "$FNOX_BIN" ci-redact
+	assert_success
+	assert_output --partial "::add-mask::dev-token-123"
+	refute_output --partial "::add-mask::INFO"
+}

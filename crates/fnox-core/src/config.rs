@@ -339,6 +339,12 @@ pub struct SecretConfig {
     /// Write secret to a temporary file and set env var to the file path instead of the secret value
     #[serde(default, skip_serializing_if = "is_false")]
     pub as_file: bool,
+
+    /// Always redact this secret's value from `fnox exec --redact`, MCP `exec` and
+    /// `ci-redact` output, even when it is a plaintext `default`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub sensitive: bool,
+
     /// JSON path to extract from the secret value (supports dot notation: "nested.key")
     /// When set, the secret value is parsed as JSON and the specified path is extracted.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2700,6 +2706,7 @@ impl SecretConfig {
             value: None,
             env: None,
             as_file: false,
+            sensitive: false,
             json_path: None,
             line: None,
             sync: None,
@@ -2768,6 +2775,9 @@ impl SecretConfig {
         if self.as_file {
             inline.insert("as_file", toml_edit::Value::from(true));
         }
+        if self.sensitive {
+            inline.insert("sensitive", toml_edit::Value::from(true));
+        }
         if let Some(ref sync) = self.sync {
             let mut sync_table = toml_edit::InlineTable::new();
             sync_table.insert("provider", toml_edit::Value::from(sync.provider.as_str()));
@@ -2835,6 +2845,11 @@ impl SecretConfig {
         set_or_remove(table, "as_file", self.as_file.then(|| Value::from(true)));
         set_or_remove(
             table,
+            "sensitive",
+            self.sensitive.then(|| Value::from(true)),
+        );
+        set_or_remove(
+            table,
             "sync",
             self.sync.as_ref().map(|sync| {
                 let mut sync_table = toml_edit::InlineTable::new();
@@ -2882,9 +2897,10 @@ impl SecretConfig {
     /// hides nothing. A secret with a `value` (or synced copy) is excluded
     /// because a provider answer wins over the default, and so is a default
     /// that interpolates (`${OTHER}`) or renders a template (`{{ ... }}`)
-    /// because it can embed another secret's value.
+    /// because it can embed another secret's value. `sensitive = true` opts a
+    /// plaintext default back into redaction.
     pub fn literal_default(&self) -> Option<&str> {
-        if self.value.is_some() || self.sync.is_some() {
+        if self.sensitive || self.value.is_some() || self.sync.is_some() {
             return None;
         }
         let default = self.default.as_deref()?;
@@ -4032,6 +4048,10 @@ DEV_INHERITED = { provider = "plain", value = "d" }
         assert_eq!(with_default("${OTHER}-x").literal_default(), None);
         assert_eq!(with_default("{{ fnox.profile }}").literal_default(), None);
         assert_eq!(SecretConfig::new().literal_default(), None);
+
+        let mut sensitive = with_default("INFO");
+        sensitive.sensitive = true;
+        assert_eq!(sensitive.literal_default(), None);
 
         let mut provider_backed = with_default("fallback");
         provider_backed.set_value(Some("ref".to_string()));

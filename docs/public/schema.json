@@ -1950,6 +1950,10 @@
           "description": "Write secret to a temporary file and set env var to the file path instead of the secret value",
           "type": "boolean"
         },
+        "sensitive": {
+          "description": "Always redact this secret's value from `fnox exec --redact`, MCP `exec` and\n`ci-redact` output, even when it is a plaintext `default`.",
+          "type": "boolean"
+        },
         "json_path": {
           "description": "JSON path to extract from the secret value (supports dot notation: \"nested.key\")\nWhen set, the secret value is parsed as JSON and the specified path is extracted.",
           "type": ["string", "null"]

@@ -109,3 +109,16 @@ TOML
 	assert_success
 	assert_output "INFO public publication [REDACTED] [REDACTED]"
 }
+
+@test "exec --redact still redacts a plaintext default marked sensitive" {
+	cat >fnox.toml <<'TOML'
+root = true
+
+[secrets]
+LOG_LEVEL = { default = "INFO" }
+LOCAL_TOKEN = { default = "dev-token-123", sensitive = true }
+TOML
+	run bash -c "'$FNOX_BIN' exec --redact -- sh -c 'echo \"\$LOG_LEVEL \$LOCAL_TOKEN\"' | cat"
+	assert_success
+	assert_output "INFO [REDACTED]"
+}
