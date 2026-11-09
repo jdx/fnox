@@ -5,13 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { touchIdPaths } from "../../paths/touch-id.mts";
 
-const checkModule = fileURLToPath(
-  new URL(
-    "../../../native/touch-id-preview/node-version-check.cmake",
-    import.meta.url,
-  ),
-);
+const checkModule = fileURLToPath(touchIdPaths.preview.nodeVersionCheck);
 
 test("CMake accepts Node versions with flag-free type stripping", () => {
   const directory = fs.mkdtempSync(

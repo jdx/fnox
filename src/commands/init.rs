@@ -236,6 +236,15 @@ impl InitCommand {
         let mut fields = HashMap::new();
 
         for field in info.fields {
+            if field.is_boolean {
+                match Confirm::new(field.label).run() {
+                    Ok(value) => {
+                        fields.insert(field.name.to_string(), value.to_string());
+                    }
+                    Err(e) => return Err(FnoxError::Config(format!("Wizard cancelled: {}", e))),
+                }
+                continue;
+            }
             let result = Input::new(field.label).placeholder(field.placeholder).run();
 
             match result {

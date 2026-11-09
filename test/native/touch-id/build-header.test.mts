@@ -5,11 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { generateHeaders } from "../../../native/touch-id-preview/build-header.mts";
+import { generateHeaders, touchIdPaths } from "../../paths/touch-id.mts";
 
-const script = fileURLToPath(
-  new URL("../../../native/touch-id-preview/build-header.mts", import.meta.url),
-);
+const script = fileURLToPath(touchIdPaths.buildHeader);
 
 test("header command rejects missing output without creating artifacts", () => {
   assert.throws(() => generateHeaders(""));

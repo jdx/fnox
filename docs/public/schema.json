@@ -1446,6 +1446,9 @@
             "prefix": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "touch_id": {
+              "type": "boolean"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },

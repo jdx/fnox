@@ -31,10 +31,14 @@ struct ProviderTomlRaw {
     /// Used to skip the provider in non-interactive contexts like the TUI.
     #[serde(default)]
     requires_interactive_auth: bool,
+    #[serde(default)]
+    requires_interactive_auth_field: Option<String>,
     /// When false, daemon memory caching is forbidden even when a provider instance
     /// explicitly sets `daemon_cache = true`.
     #[serde(default = "default_true")]
     daemon_cache_supported: bool,
+    #[serde(default)]
+    daemon_cache_disabled_field: Option<String>,
     #[serde(default)]
     fields: IndexMap<String, FieldDef>,
     #[serde(default)]
@@ -56,7 +60,9 @@ struct ProviderToml {
     auth_command: Option<String>,
     pass_provider_name: bool,
     requires_interactive_auth: bool,
+    requires_interactive_auth_field: Option<String>,
     daemon_cache_supported: bool,
+    daemon_cache_disabled_field: Option<String>,
     fields: IndexMap<String, FieldDef>,
     wizard_fields: IndexMap<String, WizardFieldDef>,
 }
@@ -97,7 +103,9 @@ impl ProviderTomlRaw {
             auth_command: self.auth_command,
             pass_provider_name: self.pass_provider_name,
             requires_interactive_auth: self.requires_interactive_auth,
+            requires_interactive_auth_field: self.requires_interactive_auth_field,
             daemon_cache_supported: self.daemon_cache_supported,
+            daemon_cache_disabled_field: self.daemon_cache_disabled_field,
             fields: self.fields,
             wizard_fields: self.wizard_fields,
         }
@@ -265,6 +273,8 @@ fn generate_provider_config(
             backend.as_ref().is_none_or(|b| *b == BitwardenBackend::Bw)
         }
 
+        fn is_false(value: &bool) -> bool { !value }
+
         #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, AsRefStr)]
         #[serde(tag = "type")]
         #[serde(deny_unknown_fields)]
@@ -292,6 +302,12 @@ fn generate_config_variant_fields(provider: &ProviderToml) -> Vec<TokenStream> {
             "required" => {
                 fields.push(quote! {
                     #field_name: StringOrSecretRef
+                });
+            }
+            "bool" => {
+                fields.push(quote! {
+                    #[serde(default, skip_serializing_if = "is_false")]
+                    #field_name: bool
                 });
             }
             "optional" => {
@@ -363,6 +379,9 @@ fn generate_resolved_variant_fields(provider: &ProviderToml) -> Vec<TokenStream>
         match field.typ.as_str() {
             "required" => {
                 fields.push(quote! { #field_name: String });
+            }
+            "bool" => {
+                fields.push(quote! { #field_name: bool });
             }
             "optional" => {
                 fields.push(quote! { #field_name: Option<String> });
@@ -440,19 +459,29 @@ fn generate_provider_methods(
                 None => resolved.or(#static_default),
             }
         });
-        let daemon_cache_arm = if provider.daemon_cache_supported {
-            quote! { Self::#variant { daemon_cache, .. } => daemon_cache.unwrap_or(true) }
-        } else {
+        let daemon_cache_arm = if !provider.daemon_cache_supported {
             quote! { Self::#variant { .. } => false }
+        } else if let Some(field) = &provider.daemon_cache_disabled_field {
+            let field = Ident::new(field, Span::call_site());
+            quote! { Self::#variant { daemon_cache, #field, .. } => !*#field && daemon_cache.unwrap_or(true) }
+        } else {
+            quote! { Self::#variant { daemon_cache, .. } => daemon_cache.unwrap_or(true) }
         };
         daemon_cache_arms.push(daemon_cache_arm);
         env_deps_arms.push(quote! {
             Self::#variant { .. } => #module::env_dependencies()
         });
-        let interactive = provider.requires_interactive_auth;
-        interactive_auth_arms.push(quote! {
-            Self::#variant { .. } => #interactive
-        });
+        if let Some(field) = &provider.requires_interactive_auth_field {
+            let field = Ident::new(field, Span::call_site());
+            interactive_auth_arms.push(quote! {
+                Self::#variant { #field, .. } => *#field
+            });
+        } else {
+            let interactive = provider.requires_interactive_auth;
+            interactive_auth_arms.push(quote! {
+                Self::#variant { .. } => #interactive
+            });
+        }
     }
 
     // Note: Use super::super:: because this is included inside mod generated { mod providers_methods { ... } }
@@ -628,6 +657,9 @@ fn generate_try_to_resolved_body(provider: &ProviderToml) -> TokenStream {
             "required" => {
                 field_conversions.push(quote! { #field_name: req(#local_ident)? });
             }
+            "bool" => {
+                field_conversions.push(quote! { #field_name: *#local_ident });
+            }
             "optional" => {
                 field_conversions.push(quote! { #field_name: opt(#local_ident)? });
             }
@@ -755,6 +787,17 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
             "required" => {
                 field_inits.push(quote! { #field_name: get_required(#name_str)? });
             }
+            "bool" => {
+                let invalid_message = format!("invalid boolean value for '{name_str}'");
+                field_inits.push(quote! {
+                    #field_name: fields
+                        .get(#name_str)
+                        .map(|value| value.parse::<bool>())
+                        .transpose()
+                        .map_err(|_| FnoxError::Config(#invalid_message.to_string()))?
+                        .unwrap_or(false)
+                });
+            }
             "optional" => {
                 field_inits.push(quote! { #field_name: get_optional(#name_str) });
             }
@@ -836,6 +879,7 @@ fn generate_new_args(provider: &ProviderToml) -> Vec<TokenStream> {
             let local_name = local_var_name(name);
             let local_ident = Ident::new(&local_name, Span::call_site());
             match field.typ.as_str() {
+                "bool" => quote! { *#local_ident },
                 "backend_enum" => quote! { *backend },
                 _ => quote! { #local_ident.clone() },
             }
@@ -907,6 +951,9 @@ fn generate_resolver_fields(provider: &ProviderToml) -> Vec<TokenStream> {
                     quote! {
                         #field_name: super::super::resolver::resolve_required(config, profile, provider_name, #name_str, #local_ident, ctx).await?
                     }
+                }
+                "bool" => {
+                    quote! { #field_name: *#local_ident }
                 }
                 "optional" => {
                     quote! {
@@ -996,6 +1043,7 @@ fn generate_provider_wizard(
                     label: #label,
                     placeholder: #placeholder,
                     required: #required,
+                    is_boolean: false,
                 }
             });
         }
@@ -1007,12 +1055,14 @@ fn generate_provider_wizard(
                 let label = &field.label;
                 let placeholder = &field.placeholder;
                 let required = field.typ == "required";
+                let is_boolean = field.typ == "bool";
                 wizard_fields.push(quote! {
                     WizardField {
                         name: #name_str,
                         label: #label,
                         placeholder: #placeholder,
                         required: #required,
+                        is_boolean: #is_boolean,
                     }
                 });
             }

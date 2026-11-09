@@ -4,6 +4,7 @@
 #include <QColor>
 #include <QDialog>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -25,6 +26,11 @@
 #include "theme.generated.h"
 
 namespace {
+QString preview_value(const char* name, const QString& fallback) {
+  const QByteArray value = qgetenv(name);
+  return value.isEmpty() ? fallback : QString::fromUtf8(value);
+}
+
 QColor theme_color(const uint32_t (&colors)[2], bool dark) {
   return QColor::fromRgb(colors[dark ? 1 : 0]);
 }
@@ -69,20 +75,36 @@ class Preview final : public QDialog {
     fingerprint_->setAlignment(Qt::AlignCenter);
     fingerprint_->setAccessibleName("Fingerprint preview");
     root->addWidget(fingerprint_);
-    auto* heading = new QLabel("Allow agent to use GITHUB_TOKEN?");
+    const QString project_directory = preview_value(
+        "FNOX_PREVIEW_PROJECT_DIRECTORY", QStringLiteral("/workspace/example"));
+    const QString project_name = QFileInfo(project_directory).fileName();
+    const QString credential_name =
+        preview_value("FNOX_PREVIEW_CREDENTIAL_NAME", QStringLiteral("EXAMPLE_SECRET"));
+    const QString credential_binding =
+        QStringLiteral("project:%1/%2").arg(project_name, credential_name);
+    const QString credential_source =
+        preview_value("FNOX_PREVIEW_CREDENTIAL_SOURCE", QStringLiteral("Example provider"));
+    const QString executable = preview_value(
+        "FNOX_PREVIEW_EXECUTABLE", QStringLiteral("/usr/local/bin/example-command"));
+    const QString command =
+        preview_value("FNOX_PREVIEW_COMMAND", QStringLiteral("fnox exec -- ./example.sh"));
+    auto* heading = new QLabel(QString("Allow agent to use %1?").arg(credential_name));
     heading->setStyleSheet("font-size: 16px; font-weight: 600");
     root->addWidget(heading);
-    auto* body = new QLabel(
-        "Source: project:keel/GITHUB_TOKEN\nProgram: "
-        "/usr/local/bin/claude\n\nNo credentials will be read.");
+    auto* body = new QLabel(QString("Source: %1 · %2\nProgram: %3\nCommand: %4\nProject: %5\n\n"
+                                    "No credentials will be read.")
+                                .arg(credential_source, credential_binding, executable, command,
+                                     project_directory));
     body->setWordWrap(true);
     body->setTextInteractionFlags(Qt::TextSelectableByMouse);
     root->addWidget(body);
     auto* details = new QPushButton("Copy details");
     details->setFlat(true);
-    connect(details, &QPushButton::clicked, this, [] {
+    connect(details, &QPushButton::clicked, this, [credential_name, credential_binding,
+                                                    executable, command, project_directory] {
       QGuiApplication::clipboard()->setText(
-          "GITHUB_TOKEN\nproject:keel/GITHUB_TOKEN\n/usr/local/bin/claude");
+          QString("%1\n%2\n%3\n%4\n%5")
+              .arg(credential_name, credential_binding, executable, command, project_directory));
     });
     root->addWidget(details, 0, Qt::AlignLeft);
     status_ = new QLabel(system_auth

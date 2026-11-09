@@ -8,6 +8,7 @@ set(CMAKE_OBJCXX_STANDARD 23)
 set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_OBJCXX_EXTENSIONS OFF)
+set(TOUCH_ID_ROOT "${CMAKE_CURRENT_LIST_DIR}/..")
 
 find_program(NODE_EXECUTABLE node REQUIRED)
 execute_process(
@@ -27,11 +28,20 @@ add_custom_command(
   OUTPUT "${FINGERPRINT_HEADER}"
   BYPRODUCTS "${GENERATED_DIR}/theme.generated.h"
              "${GENERATED_DIR}/detail-copy-icons.generated.h"
-  COMMAND "${NODE_EXECUTABLE}"
-          "${CMAKE_CURRENT_SOURCE_DIR}/build-header.mts" "${GENERATED_DIR}"
+  COMMAND "${NODE_EXECUTABLE}" "${TOUCH_ID_ROOT}/build-header.mts"
+          "${GENERATED_DIR}"
   DEPENDS
-    build-header.mts animation.mts native.mts theme.mts color.mts
-    assets/geometry.svg assets/flow.json assets/copy.svg assets/check.svg assets/logo.svg
+    "${TOUCH_ID_ROOT}/build-header.mts"
+    "${TOUCH_ID_ROOT}/paths/touch-id.mts"
+    "${TOUCH_ID_ROOT}/animation.mts"
+    "${TOUCH_ID_ROOT}/native.mts"
+    "${TOUCH_ID_ROOT}/theme.mts"
+    "${TOUCH_ID_ROOT}/color.mts"
+    "${TOUCH_ID_ROOT}/assets/geometry.svg"
+    "${TOUCH_ID_ROOT}/assets/flow.json"
+    "${TOUCH_ID_ROOT}/assets/copy.svg"
+    "${TOUCH_ID_ROOT}/assets/check.svg"
+    "${TOUCH_ID_ROOT}/assets/logo.svg"
   VERBATIM
 )
 add_custom_target(fnox-touch-id-preview-fingerprint DEPENDS "${FINGERPRINT_HEADER}")
@@ -54,7 +64,10 @@ if(NOT APPLE OR FNOX_PORTABLE_PREVIEW)
   target_include_directories(fnox-touch-id-preview PRIVATE "${GENERATED_DIR}")
   target_link_libraries(fnox-touch-id-preview PRIVATE Qt6::Widgets Qt6::Svg)
   qt_add_resources(fnox-touch-id-preview preview_assets
-    PREFIX "/fnox-preview" BASE assets FILES assets/logo.svg assets/geometry.svg assets/check.svg)
+    PREFIX "/fnox-preview" BASE "${TOUCH_ID_ROOT}/assets"
+    FILES "${TOUCH_ID_ROOT}/assets/logo.svg"
+          "${TOUCH_ID_ROOT}/assets/geometry.svg"
+          "${TOUCH_ID_ROOT}/assets/check.svg")
   add_dependencies(fnox-touch-id-preview fnox-touch-id-preview-fingerprint)
   enable_testing()
   add_test(NAME preview-smoke COMMAND fnox-touch-id-preview --smoke-test)
@@ -70,14 +83,14 @@ endif()
 
 enable_language(OBJCXX)
 add_executable(fnox-touch-id-preview MACOSX_BUNDLE EXCLUDE_FROM_ALL
-  preview/approval.mm
-  preview/authorization.mm
-  src/approval-prompt.mm
-  src/fingerprint-view.mm
+  approval.mm
+  ../src/authorization.mm
+  ../src/approval-prompt.mm
+  ../src/fingerprint-view.mm
 )
 add_dependencies(fnox-touch-id-preview fnox-touch-id-preview-fingerprint)
 target_include_directories(fnox-touch-id-preview PRIVATE
-  src "${GENERATED_DIR}"
+  ../src "${GENERATED_DIR}"
 )
 target_compile_options(fnox-touch-id-preview PRIVATE
   $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>

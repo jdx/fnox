@@ -5,10 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { touchIdPaths } from "../../paths/touch-id.mts";
 
-const script = fileURLToPath(
-  new URL("../../../native/touch-id-preview/sign-app.sh", import.meta.url),
-);
+const script = fileURLToPath(touchIdPaths.preview.signApp);
 // The script uses macOS tools. No test invokes real signing or contacts Apple.
 for (const verdict of [
   "Accepted",
