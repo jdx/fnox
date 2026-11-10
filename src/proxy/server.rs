@@ -433,6 +433,7 @@ where
         .await;
     }
     let mut headers = request.headers;
+    let sent_headers = headers.clone();
     policy
         .refresh_pending(domain, &request.method, &url, &headers)
         .await;
@@ -440,6 +441,7 @@ where
         Ok(injected) => injected,
         Err(error) => return refuse(stream, &path, &error.to_string()).await,
     };
+    let echo_redactions = basic_redactions(&sent_headers, &headers);
 
     if policy.audit {
         tracing::info!(
@@ -499,7 +501,7 @@ where
         status,
         &response_headers,
         has_body,
-        || policy.redactions(),
+        || policy.redactions_with(&echo_redactions),
         &mut response,
     )
     .await

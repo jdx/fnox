@@ -147,7 +147,7 @@ pub(super) fn loggable_target(target: &str) -> String {
         .to_string()
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) struct Redaction {
     pub(super) value: Vec<u8>,
     pub(super) placeholder: Vec<u8>,
@@ -270,6 +270,18 @@ impl ProxyPolicy {
         self.values.redactions()
     }
 
+    /// [`Self::redactions`] plus redactions only this request knows
+    pub(super) fn redactions_with(&self, extra: &[Redaction]) -> Arc<Vec<Redaction>> {
+        let base = self.redactions();
+        if extra.is_empty() {
+            return base;
+        }
+        let mut all = base.as_ref().clone();
+        all.extend_from_slice(extra);
+        all.sort_by_key(|redaction| std::cmp::Reverse(redaction.value.len()));
+        Arc::new(all)
+    }
+
     /// Resolve again the pending secrets this request needs, and mint or
     /// renew the leases it needs
     pub(super) async fn refresh_pending(
@@ -312,15 +324,28 @@ impl ProxyPolicy {
             .filter(|rule| {
                 domain_matches(&rule.domain, domain)
                     && rule.route_matches(method, path)
-                    // `authorize` refuses a placeholder that appears more than once
-                    && Occurrences::count(&rule.placeholder, headers, path, &query).total == 1
-                    && match &rule.target {
-                        Target::Header(name) => headers.iter().any(|(header, value)| {
-                            header.eq_ignore_ascii_case(name) && value.contains(&rule.placeholder)
-                        }),
-                        Target::Query(name) => query
-                            .param_containing(&rule.placeholder)
-                            .is_some_and(|param| param == *name),
+                    && match rule.basic.then(|| basic_hit(rule, headers)).flatten() {
+                        Some(hit) => {
+                            hit.count == 1
+                                && count_outside_basic(rule, Some(&hit), headers, path, &query)
+                                    .total
+                                    == 0
+                        }
+                        None => {
+                            // `authorize` refuses a placeholder that appears more than once
+                            Occurrences::count(&rule.placeholder, headers, path, &query).total == 1
+                                && match &rule.target {
+                                    Target::Header(name) => {
+                                        headers.iter().any(|(header, value)| {
+                                            header.eq_ignore_ascii_case(name)
+                                                && value.contains(&rule.placeholder)
+                                        })
+                                    }
+                                    Target::Query(name) => query
+                                        .param_containing(&rule.placeholder)
+                                        .is_some_and(|param| param == *name),
+                                }
+                        }
                     }
             })
             .map(|rule| &rule.source)
@@ -411,58 +436,54 @@ impl ProxyPolicy {
             )));
         }
 
-        let basic_headers: HashSet<&str> = domain_rules
-            .iter()
-            .filter(|rule| rule.basic)
-            .filter_map(|rule| match &rule.target {
-                Target::Header(name) => Some(name.as_str()),
-                Target::Query(_) => None,
-            })
-            .collect();
-        let decoded = decode_basic_headers(headers, &basic_headers);
+        let mut injected = Vec::new();
+        let mut checked = HashSet::new();
+        for rule in &domain_rules {
+            if !checked.insert((rule.placeholder.as_str(), rule.basic)) {
+                continue;
+            }
 
-        let result = (|| -> Result<Vec<String>> {
-            let mut injected = Vec::new();
-            let mut checked = HashSet::new();
-            for rule in &domain_rules {
-                if !checked.insert(rule.placeholder.as_str()) {
-                    continue;
-                }
+            let query = QuerySegments::parse(url.query());
+            let basic = if rule.basic {
+                basic_hit(rule, headers)
+            } else {
+                None
+            };
+            let Occurrences {
+                in_headers,
+                in_path,
+                total: occurrences,
+            } = count_outside_basic(rule, basic.as_ref(), headers, &path, &query);
+            let basic_count = basic.as_ref().map_or(0, |hit| hit.count);
+            if occurrences + basic_count == 0 {
+                continue;
+            }
+            if occurrences + basic_count > 1 {
+                return Err(proxy_error(format!(
+                    "placeholder for '{}' appeared more than once",
+                    rule.source.name()
+                )));
+            }
 
-                let query = QuerySegments::parse(url.query());
-                let Occurrences {
-                    in_headers,
-                    in_path,
-                    total: occurrences,
-                } = Occurrences::count(&rule.placeholder, headers, &path, &query);
-                if occurrences == 0 {
-                    continue;
-                }
-                if occurrences > 1 {
-                    return Err(proxy_error(format!(
-                        "placeholder for '{}' appeared more than once",
-                        rule.source.name()
-                    )));
-                }
+            let outside = || {
+                proxy_error(format!(
+                    "placeholder for '{}' appeared outside its allowed route or target",
+                    rule.source.name()
+                ))
+            };
+            let allows = |target: &dyn Fn(&PreparedRule) -> bool| {
+                domain_rules.iter().any(|candidate| {
+                    candidate.placeholder == rule.placeholder
+                        && candidate.basic == rule.basic
+                        && candidate.route_matches(method, &path)
+                        && target(candidate)
+                })
+            };
 
-                let outside = || {
-                    proxy_error(format!(
-                        "placeholder for '{}' appeared outside its allowed route or target",
-                        rule.source.name()
-                    ))
-                };
-                let allows = |target: &dyn Fn(&Target) -> bool| {
-                    domain_rules.iter().any(|candidate| {
-                        candidate.placeholder == rule.placeholder
-                            && candidate.route_matches(method, &path)
-                            && target(&candidate.target)
-                    })
-                };
-
-                // Checked after the placeholder's place, so a misplaced one is
-                // reported as misplaced rather than as a secret to set
-                let value = || {
-                    self.values
+            // Checked after the placeholder's place, so a misplaced one is
+            // reported as misplaced rather than as a secret to set
+            let value = || {
+                self.values
                     .value(&rule.source)
                     .ok_or_else(|| match &rule.source {
                         Source::Secret(secret) => proxy_error(format!(
@@ -470,103 +491,145 @@ impl ProxyPolicy {
                         )),
                         Source::Lease { lease, .. } => self.leases.unavailable(lease),
                     })
-                };
+            };
 
-                if in_path > 0 {
+            if let Some(hit) = basic {
+                if !allows(
+                    &|candidate| matches!(&candidate.target, Target::Header(name) if hit.name.eq_ignore_ascii_case(name)),
+                ) {
                     return Err(outside());
                 }
-                if in_headers > 0 {
-                    let (header_name, header_value) = headers
-                        .iter_mut()
-                        .find(|(_, value)| value.contains(&rule.placeholder))
-                        .expect("placeholder occurrence was counted");
-                    if !allows(
-                        &|target| matches!(target, Target::Header(name) if header_name.eq_ignore_ascii_case(name)),
-                    ) {
-                        return Err(outside());
-                    }
-                    *header_value = header_value.replacen(&rule.placeholder, &value()?, 1);
-                } else {
-                    let name = query
-                        .param_containing(&rule.placeholder)
-                        .ok_or_else(outside)?;
-                    if !allows(
-                        &|target| matches!(target, Target::Query(allowed) if *allowed == name),
-                    ) {
-                        return Err(outside());
-                    }
-                    url.set_query(Some(&query.replaced(&rule.placeholder, &value()?)));
+                let credentials = hit.credentials.replacen(&rule.placeholder, &value()?, 1);
+                headers[hit.index].1 =
+                    format!("{BASIC_PREFIX}{}", BASIC_ENGINE.encode(credentials));
+            } else if in_path > 0 {
+                return Err(outside());
+            } else if in_headers > 0 {
+                let (header_name, header_value) = headers
+                    .iter_mut()
+                    .find(|(_, value)| value.contains(&rule.placeholder))
+                    .expect("placeholder occurrence was counted");
+                if !allows(
+                    &|candidate| matches!(&candidate.target, Target::Header(name) if header_name.eq_ignore_ascii_case(name)),
+                ) {
+                    return Err(outside());
                 }
-                injected.push(rule.source.label());
+                *header_value = header_value.replacen(&rule.placeholder, &value()?, 1);
+            } else {
+                let name = query
+                    .param_containing(&rule.placeholder)
+                    .ok_or_else(outside)?;
+                if !allows(
+                    &|candidate| matches!(&candidate.target, Target::Query(allowed) if *allowed == name),
+                ) {
+                    return Err(outside());
+                }
+                url.set_query(Some(&query.replaced(&rule.placeholder, &value()?)));
             }
-            Ok(injected)
-        })();
-
-        if result.is_ok() {
-            encode_basic_headers(headers, &decoded);
+            injected.push(rule.source.label());
         }
-        result
+        Ok(injected)
     }
 }
 
 const BASIC_PREFIX: &str = "Basic ";
-
-struct DecodedBasic {
-    index: usize,
-    original: String,
-    text: String,
-}
-
-fn decode_basic_headers(
-    headers: &mut [(String, String)],
-    names: &HashSet<&str>,
-) -> Vec<DecodedBasic> {
-    let mut decoded = Vec::new();
-    for (index, (name, value)) in headers.iter_mut().enumerate() {
-        if !names.contains(name.to_ascii_lowercase().as_str()) {
-            continue;
-        }
-        let Some(encoded) = value
-            .get(..BASIC_PREFIX.len())
-            .filter(|prefix| prefix.eq_ignore_ascii_case(BASIC_PREFIX))
-            .map(|_| value[BASIC_PREFIX.len()..].trim())
-        else {
-            continue;
-        };
-        let Some(text) = BASIC_ENGINE
-            .decode(encoded)
-            .ok()
-            .and_then(|bytes| String::from_utf8(bytes).ok())
-        else {
-            continue;
-        };
-        let original = std::mem::replace(value, format!("{BASIC_PREFIX}{text}"));
-        decoded.push(DecodedBasic {
-            index,
-            original,
-            text,
-        });
-    }
-    decoded
-}
-
-fn encode_basic_headers(headers: &mut [(String, String)], decoded: &[DecodedBasic]) {
-    for entry in decoded {
-        let value = &mut headers[entry.index].1;
-        let current = &value[BASIC_PREFIX.len()..];
-        *value = if current == entry.text {
-            entry.original.clone()
-        } else {
-            format!("{BASIC_PREFIX}{}", BASIC_ENGINE.encode(current))
-        };
-    }
-}
 
 const BASIC_ENGINE: base64::engine::GeneralPurpose = base64::engine::GeneralPurpose::new(
     &base64::alphabet::STANDARD,
     base64::engine::GeneralPurposeConfig::new()
         .with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent),
 );
+
+/// A Basic header whose decoded credentials carry a rule's placeholder
+struct BasicHit {
+    index: usize,
+    name: String,
+    credentials: String,
+    count: usize,
+}
+
+/// Occurrences of a rule's placeholder, leaving out the `Basic` header it was
+/// found in, whose encoded text and `Basic ` prefix are not credentials
+fn count_outside_basic(
+    rule: &PreparedRule,
+    hit: Option<&BasicHit>,
+    headers: &[(String, String)],
+    path: &str,
+    query: &QuerySegments,
+) -> Occurrences {
+    match hit {
+        Some(hit) => {
+            let others: Vec<_> = headers
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| *index != hit.index)
+                .map(|(_, header)| header.clone())
+                .collect();
+            Occurrences::count(&rule.placeholder, &others, path, query)
+        }
+        None => Occurrences::count(&rule.placeholder, headers, path, query),
+    }
+}
+
+fn strip_basic(value: &str) -> Option<&str> {
+    let prefix = value.get(..BASIC_PREFIX.len())?;
+    prefix
+        .eq_ignore_ascii_case(BASIC_PREFIX)
+        .then(|| value[BASIC_PREFIX.len()..].trim())
+}
+
+/// The decoded `user:password` of a `Basic` value, if it is one
+fn decode_basic(value: &str) -> Option<String> {
+    let bytes = BASIC_ENGINE.decode(strip_basic(value)?).ok()?;
+    let credentials = String::from_utf8(bytes).ok()?;
+    credentials.contains(':').then_some(credentials)
+}
+
+/// The `Basic` header a rule targets, if its decoded credentials carry the
+/// rule's placeholder
+fn basic_hit(rule: &PreparedRule, headers: &[(String, String)]) -> Option<BasicHit> {
+    let Target::Header(target) = &rule.target else {
+        return None;
+    };
+    headers
+        .iter()
+        .enumerate()
+        .find_map(|(index, (name, value))| {
+            if !name.eq_ignore_ascii_case(target) {
+                return None;
+            }
+            let credentials = decode_basic(value)?;
+            let count = credentials.matches(&rule.placeholder).count();
+            (count > 0).then(|| BasicHit {
+                index,
+                name: name.clone(),
+                credentials,
+                count,
+            })
+        })
+}
+
+/// Redactions for the encoded `Basic` values a request carried upstream, so a
+/// server that echoes the header back shows the client the value it sent
+pub(super) fn basic_redactions(
+    before: &[(String, String)],
+    after: &[(String, String)],
+) -> Vec<Redaction> {
+    before
+        .iter()
+        .zip(after)
+        .filter(|(sent, injected)| sent.1 != injected.1)
+        .filter_map(|(sent, injected)| {
+            let placeholder = strip_basic(&sent.1)?;
+            let value = strip_basic(&injected.1)?;
+            Some(Redaction {
+                value: value.as_bytes().to_vec(),
+                placeholder: placeholder.as_bytes().to_vec(),
+                lenient: false,
+            })
+        })
+        .collect()
+}
 
 /// A request's raw query string split on `&`, keeping the original bytes of
 /// every segment so that only the substituted one is re-encoded.

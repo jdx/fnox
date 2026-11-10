@@ -1917,3 +1917,76 @@ fn basic_scheme_is_refused_on_a_query_rule() {
     rule.scheme = Some(crate::config::ProxyScheme::Basic);
     assert!(plan_with(vec![rule], "real-token").is_err());
 }
+
+#[test]
+fn basic_scheme_sources_are_needed_from_the_decoded_header() {
+    let plan = plan_with(vec![basic_rule("github.com")], "real-token").unwrap();
+    let url = reqwest::Url::parse("https://github.com/o/r.git/info/refs").unwrap();
+    let headers = vec![basic_header("x-access-token:basic_placeholder")];
+    assert_eq!(
+        plan.policy
+            .sources_needed("github.com", "GET", &url, &headers)
+            .len(),
+        1
+    );
+    let unrelated = vec![basic_header("x-access-token:something-else")];
+    assert!(
+        plan.policy
+            .sources_needed("github.com", "GET", &url, &unrelated)
+            .is_empty()
+    );
+}
+
+#[test]
+fn plain_rule_does_not_inherit_basic_decoding_from_a_sibling() {
+    let mut basic = basic_rule("github.com");
+    basic.paths = vec!["/git/**".to_string()];
+    let mut plain = basic_rule("github.com");
+    plain.scheme = None;
+    plain.paths = vec!["/api/**".to_string()];
+    let plan = plan_with(vec![basic, plain], "real-token").unwrap();
+
+    let original = basic_header("u:basic_placeholder");
+    let mut headers = vec![original.clone()];
+    assert!(authorize(&plan, "github.com", "GET", "/api/x", &mut headers).is_err());
+    assert_eq!(headers[0], original);
+
+    let mut headers = vec![original];
+    let (injected, _) = authorize(&plan, "github.com", "GET", "/git/x", &mut headers).unwrap();
+    assert_eq!(injected, ["API_KEY"]);
+    assert_eq!(decode_basic(&headers[0].1), "u:real-token");
+}
+
+#[test]
+fn basic_scheme_handles_a_placeholder_equal_to_the_prefix() {
+    let mut rule = basic_rule("github.com");
+    rule.placeholder = Some("Basic".to_string());
+    let plan = plan_with(vec![rule], "real-token").unwrap();
+    let mut headers = vec![basic_header("u:Basic")];
+    let (injected, _) = authorize(&plan, "github.com", "GET", "/", &mut headers).unwrap();
+    assert_eq!(injected, ["API_KEY"]);
+    assert_eq!(decode_basic(&headers[0].1), "u:real-token");
+}
+
+#[test]
+fn basic_scheme_requires_a_colon_in_the_credentials() {
+    let plan = plan_with(vec![basic_rule("github.com")], "real-token").unwrap();
+    let original = basic_header("basic_placeholder");
+    let mut headers = vec![original.clone()];
+    let (injected, _) = authorize(&plan, "github.com", "GET", "/", &mut headers).unwrap();
+    assert!(injected.is_empty());
+    assert_eq!(headers[0], original);
+}
+
+#[test]
+fn basic_scheme_redacts_the_encoded_header_from_responses() {
+    let plan = plan_with(vec![basic_rule("github.com")], "real-token").unwrap();
+    let sent = vec![basic_header("u:basic_placeholder")];
+    let mut headers = sent.clone();
+    authorize(&plan, "github.com", "GET", "/", &mut headers).unwrap();
+    let extra = basic_redactions(&sent, &headers);
+    let echoed = format!("echo: {}", headers[0].1);
+    let redacted = redact_string(&echoed, &plan.policy.redactions_with(&extra));
+    assert_eq!(redacted, format!("echo: {}", sent[0].1));
+    assert!(basic_redactions(&sent, &sent).is_empty());
+}
