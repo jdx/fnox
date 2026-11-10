@@ -307,6 +307,8 @@ fn check_env_name(rule: &ProxyRule, env_name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Rejects a rule that names no source, a bad domain or target, or options
+/// that cannot go together
 pub(super) fn validate_rule(rule: &ProxyRule) -> Result<()> {
     match (&rule.secret, &rule.lease) {
         (Some(_), Some(_)) => {

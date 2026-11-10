@@ -1990,3 +1990,35 @@ fn basic_scheme_redacts_the_encoded_header_from_responses() {
     assert_eq!(redacted, format!("echo: {}", sent[0].1));
     assert!(basic_redactions(&sent, &sent).is_empty());
 }
+
+#[test]
+fn basic_scheme_finds_the_placeholder_in_a_later_target_header() {
+    let first = basic_rule("github.com");
+    let mut second = basic_rule("github.com");
+    second.header = Some("x-auth".to_string());
+    let plan = plan_with(vec![first, second], "real-token").unwrap();
+    let mut headers = vec![("X-Auth".to_string(), basic_header("u:basic_placeholder").1)];
+    let (injected, _) = authorize(&plan, "github.com", "GET", "/", &mut headers).unwrap();
+    assert_eq!(injected, ["API_KEY"]);
+    assert_eq!(decode_basic(&headers[0].1), "u:real-token");
+
+    let url = reqwest::Url::parse("https://github.com/").unwrap();
+    let sent = vec![("X-Auth".to_string(), basic_header("u:basic_placeholder").1)];
+    let needed = plan.policy.sources_needed("github.com", "GET", &url, &sent);
+    assert!(!needed.is_empty());
+    assert!(needed.iter().all(|source| source.name() == "API_KEY"));
+}
+
+#[test]
+fn basic_scheme_refuses_the_placeholder_in_two_copies_of_the_header() {
+    let plan = plan_with(vec![basic_rule("github.com")], "real-token").unwrap();
+    let copy = basic_header("u:basic_placeholder");
+    let mut headers = vec![copy.clone(), copy];
+    assert!(authorize(&plan, "github.com", "GET", "/", &mut headers).is_err());
+    let url = reqwest::Url::parse("https://github.com/").unwrap();
+    assert!(
+        plan.policy
+            .sources_needed("github.com", "GET", &url, &headers)
+            .is_empty()
+    );
+}

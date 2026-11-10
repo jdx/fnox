@@ -319,15 +319,24 @@ impl ProxyPolicy {
     ) -> Vec<&Source> {
         let path = url.path();
         let query = QuerySegments::parse(url.query());
-        self.rules
+        let domain_rules: Vec<&PreparedRule> = self
+            .rules
             .iter()
+            .filter(|rule| domain_matches(&rule.domain, domain))
+            .collect();
+        domain_rules
+            .iter()
+            .copied()
             .filter(|rule| {
-                domain_matches(&rule.domain, domain)
-                    && rule.route_matches(method, path)
-                    && match rule.basic.then(|| basic_hit(rule, headers)).flatten() {
-                        Some(hit) => {
-                            hit.count == 1
-                                && count_outside_basic(rule, Some(&hit), headers, path, &query)
+                rule.route_matches(method, path)
+                    && match rule
+                        .basic
+                        .then(|| basic_view(rule, &domain_rules, headers))
+                        .filter(|view| view.count() > 0)
+                    {
+                        Some(view) => {
+                            view.count() == 1
+                                && count_outside_basic(rule, Some(&view), headers, path, &query)
                                     .total
                                     == 0
                         }
@@ -408,6 +417,8 @@ impl ProxyPolicy {
         }
     }
 
+    /// Checks a request against the rules for its domain and replaces the
+    /// placeholders it carries, returning the sources it injected
     pub(super) fn authorize(
         &self,
         domain: &str,
@@ -444,17 +455,13 @@ impl ProxyPolicy {
             }
 
             let query = QuerySegments::parse(url.query());
-            let basic = if rule.basic {
-                basic_hit(rule, headers)
-            } else {
-                None
-            };
+            let basic = rule.basic.then(|| basic_view(rule, &domain_rules, headers));
             let Occurrences {
                 in_headers,
                 in_path,
                 total: occurrences,
             } = count_outside_basic(rule, basic.as_ref(), headers, &path, &query);
-            let basic_count = basic.as_ref().map_or(0, |hit| hit.count);
+            let basic_count = basic.as_ref().map_or(0, BasicView::count);
             if occurrences + basic_count == 0 {
                 continue;
             }
@@ -493,7 +500,7 @@ impl ProxyPolicy {
                     })
             };
 
-            if let Some(hit) = basic {
+            if let Some(hit) = basic.as_ref().and_then(|view| view.hits.first()) {
                 if !allows(
                     &|candidate| matches!(&candidate.target, Target::Header(name) if hit.name.eq_ignore_ascii_case(name)),
                 ) {
@@ -548,21 +555,21 @@ struct BasicHit {
     count: usize,
 }
 
-/// Occurrences of a rule's placeholder, leaving out the `Basic` header it was
-/// found in, whose encoded text and `Basic ` prefix are not credentials
+/// Occurrences of a rule's placeholder, leaving out the `Basic` headers it was
+/// looked for in, whose encoded text and `Basic ` prefix are not credentials
 fn count_outside_basic(
     rule: &PreparedRule,
-    hit: Option<&BasicHit>,
+    view: Option<&BasicView>,
     headers: &[(String, String)],
     path: &str,
     query: &QuerySegments,
 ) -> Occurrences {
-    match hit {
-        Some(hit) => {
+    match view {
+        Some(view) => {
             let others: Vec<_> = headers
                 .iter()
                 .enumerate()
-                .filter(|(index, _)| *index != hit.index)
+                .filter(|(index, _)| !view.decoded.contains(index))
                 .map(|(_, header)| header.clone())
                 .collect();
             Occurrences::count(&rule.placeholder, &others, path, query)
@@ -571,6 +578,7 @@ fn count_outside_basic(
     }
 }
 
+/// The encoded part of a `Basic` value, if it is one
 fn strip_basic(value: &str) -> Option<&str> {
     let prefix = value.get(..BASIC_PREFIX.len())?;
     prefix
@@ -585,28 +593,56 @@ fn decode_basic(value: &str) -> Option<String> {
     credentials.contains(':').then_some(credentials)
 }
 
-/// The `Basic` header a rule targets, if its decoded credentials carry the
-/// rule's placeholder
-fn basic_hit(rule: &PreparedRule, headers: &[(String, String)]) -> Option<BasicHit> {
-    let Target::Header(target) = &rule.target else {
-        return None;
-    };
-    headers
+/// The `Basic` headers any rule sharing a rule's placeholder targets: those
+/// that decode, and those whose credentials carry the placeholder
+struct BasicView {
+    hits: Vec<BasicHit>,
+    decoded: Vec<usize>,
+}
+
+impl BasicView {
+    /// Placeholder occurrences across every decoded header
+    fn count(&self) -> usize {
+        self.hits.iter().map(|hit| hit.count).sum()
+    }
+}
+
+fn basic_view(
+    rule: &PreparedRule,
+    siblings: &[&PreparedRule],
+    headers: &[(String, String)],
+) -> BasicView {
+    let targets: HashSet<&str> = siblings
         .iter()
-        .enumerate()
-        .find_map(|(index, (name, value))| {
-            if !name.eq_ignore_ascii_case(target) {
-                return None;
-            }
-            let credentials = decode_basic(value)?;
-            let count = credentials.matches(&rule.placeholder).count();
-            (count > 0).then(|| BasicHit {
+        .filter(|sibling| sibling.basic && sibling.placeholder == rule.placeholder)
+        .filter_map(|sibling| match &sibling.target {
+            Target::Header(name) => Some(name.as_str()),
+            Target::Query(_) => None,
+        })
+        .collect();
+    let mut view = BasicView {
+        hits: Vec::new(),
+        decoded: Vec::new(),
+    };
+    for (index, (name, value)) in headers.iter().enumerate() {
+        if !targets.contains(name.to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let Some(credentials) = decode_basic(value) else {
+            continue;
+        };
+        view.decoded.push(index);
+        let count = credentials.matches(&rule.placeholder).count();
+        if count > 0 {
+            view.hits.push(BasicHit {
                 index,
                 name: name.clone(),
                 credentials,
                 count,
-            })
-        })
+            });
+        }
+    }
+    view
 }
 
 /// Redactions for the encoded `Basic` values a request carried upstream, so a
