@@ -265,3 +265,21 @@ EOF
 	# Should still mask single-line secrets
 	assert_output --partial "::add-mask::safe-value"
 }
+
+@test "ci-redact skips secrets marked sensitive = false" {
+	cat >"$FNOX_CONFIG_FILE" <<'TOML'
+root = true
+
+[secrets]
+LOG_LEVEL = { default = "INFO", sensitive = false }
+LOCAL_TOKEN = { default = "dev-token-123" }
+TOML
+
+	export CI=true
+	export GITHUB_ACTIONS=true
+
+	run "$FNOX_BIN" ci-redact
+	assert_success
+	assert_output --partial "::add-mask::dev-token-123"
+	refute_output --partial "::add-mask::INFO"
+}

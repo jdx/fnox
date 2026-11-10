@@ -1955,6 +1955,10 @@
           "description": "Write secret to a temporary file and set env var to the file path instead of the secret value",
           "type": "boolean"
         },
+        "sensitive": {
+          "description": "Whether `fnox exec --redact`, MCP `exec` and `ci-redact` hide this\nsecret's value in output (default: true). Set `false` for plain\nconfiguration such as a log level, so ordinary words are not replaced\nwith `[REDACTED]`. `fnox exec` and MCP `exec` also skip values shorter\nthan 3 bytes after trimming, `fnox exec` filters only non-terminal\noutput, and `ci-redact` cannot mask multi-line values.",
+          "type": ["boolean", "null"]
+        },
         "json_path": {
           "description": "JSON path to extract from the secret value (supports dot notation: \"nested.key\")\nWhen set, the secret value is parsed as JSON and the specified path is extracted.",
           "type": ["string", "null"]
