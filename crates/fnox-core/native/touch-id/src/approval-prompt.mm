@@ -131,7 +131,9 @@ static void FnoxGlassUpdateSurface(NSGlassEffectView* self, SEL) {
   self.contentView.layer.backgroundColor = tint.CGColor;
 }
 
-static Class FnoxGlassSuperclass(id self) { return class_getSuperclass(object_getClass(self)); }
+// Always the fixed base class, never derived from the instance: a KVO-style subclass swapped in
+// as the instance's class would otherwise make the super call re-enter these overrides.
+static Class FnoxGlassSuperclass(id) { return NSClassFromString(@"NSGlassEffectView"); }
 
 static void FnoxGlassDidChangeAppearance(NSGlassEffectView* self, SEL cmd)
     API_AVAILABLE(macos(26.0));
