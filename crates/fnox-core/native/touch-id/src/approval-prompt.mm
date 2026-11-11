@@ -136,7 +136,7 @@ static Class FnoxGlassSuperclass(id self) { return class_getSuperclass(object_ge
 static void FnoxGlassDidChangeAppearance(NSGlassEffectView* self, SEL cmd)
     API_AVAILABLE(macos(26.0));
 static void FnoxGlassDidChangeAppearance(NSGlassEffectView* self, SEL cmd) {
-  struct objc_super super_ = {(__bridge void*)self, FnoxGlassSuperclass(self)};
+  struct objc_super super_ = {self, FnoxGlassSuperclass(self)};
   ((void (*)(struct objc_super*, SEL))objc_msgSendSuper)(&super_, cmd);
   FnoxGlassUpdateSurface(self, nullptr);
 }
@@ -144,7 +144,7 @@ static void FnoxGlassDidChangeAppearance(NSGlassEffectView* self, SEL cmd) {
 static void FnoxGlassSetStyle(NSGlassEffectView* self, SEL cmd, NSGlassEffectViewStyle style)
     API_AVAILABLE(macos(26.0));
 static void FnoxGlassSetStyle(NSGlassEffectView* self, SEL cmd, NSGlassEffectViewStyle style) {
-  struct objc_super super_ = {(__bridge void*)self, FnoxGlassSuperclass(self)};
+  struct objc_super super_ = {self, FnoxGlassSuperclass(self)};
   ((void (*)(struct objc_super*, SEL, NSGlassEffectViewStyle))objc_msgSendSuper)(&super_, cmd,
                                                                                   style);
   FnoxGlassUpdateSurface(self, nullptr);
