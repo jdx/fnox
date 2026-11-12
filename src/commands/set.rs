@@ -47,7 +47,12 @@ pub(crate) fn local_target_path(
     // Any other value means the user explicitly chose a config file.
     if config_arg == Path::new(config::DEFAULT_CONFIG_FILENAME) {
         let write_profile = Config::resolve_write_profile(profile, write_profile)?;
-        Ok(find_default_config(&current_dir, &write_profile, walk_up))
+        Ok(find_default_config(
+            &current_dir,
+            profile,
+            &write_profile,
+            walk_up,
+        ))
     } else {
         Ok(current_dir.join(config_arg))
     }
@@ -55,12 +60,16 @@ pub(crate) fn local_target_path(
 
 /// The config file in `dir` that write commands target for `write_profile`,
 /// searching parent directories too when `walk_up` is set.
-pub(crate) fn find_default_config(dir: &Path, write_profile: &str, walk_up: bool) -> PathBuf {
-    let profiles = [write_profile.to_string()];
+pub(crate) fn find_default_config(
+    dir: &Path,
+    active: &[String],
+    write_profile: &str,
+    walk_up: bool,
+) -> PathBuf {
     if walk_up {
-        config::find_local_config_walk_up(dir, &profiles)
+        config::find_local_config_walk_up(dir, active, write_profile)
     } else {
-        config::find_local_config(dir, &profiles)
+        config::find_local_config(dir, &[write_profile.to_string()])
     }
 }
 

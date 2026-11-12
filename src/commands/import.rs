@@ -229,7 +229,12 @@ impl ImportCommand {
                 let current_dir = std::env::current_dir().map_err(|e| {
                     FnoxError::Config(format!("Failed to get current directory: {}", e))
                 })?;
-                crate::commands::set::find_default_config(&current_dir, &write_profile, cli.walk_up)
+                crate::commands::set::find_default_config(
+                    &current_dir,
+                    &profile,
+                    &write_profile,
+                    cli.walk_up,
+                )
             } else {
                 cli.config.clone()
             }
