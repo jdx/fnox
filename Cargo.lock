@@ -2488,6 +2488,7 @@ dependencies = [
  "url",
  "usage-rs",
  "which",
+ "x509-parser",
 ]
 
 [[package]]

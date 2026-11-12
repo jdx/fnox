@@ -7,7 +7,9 @@ use base64::Engine;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use indexmap::IndexMap;
 use ipnet::IpNet;
-use rcgen::{BasicConstraints, Certificate, CertificateParams, IsCa, Issuer, KeyPair};
+use rcgen::{
+    BasicConstraints, Certificate, CertificateParams, IsCa, Issuer, KeyPair, KeyUsagePurpose,
+};
 use reqwest::Method;
 use rustls::ServerConfig;
 use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};

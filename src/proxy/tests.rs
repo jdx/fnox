@@ -1780,3 +1780,45 @@ role_arn = "arn:aws:iam::123456789012:role/app"
     secret_credential.secret = Some("TOKEN".to_string());
     assert!(plan(secret_credential, command).contains("only a lease rule"));
 }
+
+/// Python 3.13+ verifies with OpenSSL's `X509_STRICT` flag by default, which
+/// requires a keyUsage extension on the CA and an authority key identifier on
+/// every certificate it signs (#1160).
+#[test]
+fn certificates_satisfy_strict_x509_verification() {
+    use x509_parser::prelude::*;
+
+    fn subject_key_id<'a>(certificate: &'a X509Certificate<'_>) -> Option<&'a [u8]> {
+        certificate
+            .extensions()
+            .iter()
+            .find_map(|extension| match extension.parsed_extension() {
+                ParsedExtension::SubjectKeyIdentifier(id) => Some(id.0),
+                _ => None,
+            })
+    }
+
+    let authority = super::ca::CertificateAuthority::new().unwrap();
+    let (host, _key) = authority.host_certificate("api.github.com").unwrap();
+    let (_, ca) = X509Certificate::from_der(authority.certificate.der()).unwrap();
+    let (_, host) = X509Certificate::from_der(host.der()).unwrap();
+
+    let constraints = ca
+        .basic_constraints()
+        .unwrap()
+        .expect("CA basicConstraints");
+    assert!(constraints.critical && constraints.value.ca);
+    let key_usage = ca.key_usage().unwrap().expect("CA keyUsage");
+    assert!(key_usage.value.key_cert_sign());
+    let ca_key_id = subject_key_id(&ca).expect("CA subject key identifier");
+
+    let authority_key_id = host
+        .extensions()
+        .iter()
+        .find_map(|extension| match extension.parsed_extension() {
+            ParsedExtension::AuthorityKeyIdentifier(aki) => aki.key_identifier.as_ref(),
+            _ => None,
+        })
+        .expect("host certificate authority key identifier");
+    assert_eq!(authority_key_id.0, ca_key_id);
+}
