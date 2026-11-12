@@ -371,3 +371,26 @@ EOF
 	assert_line --index 5 --partial "already has a value"
 	assert_line --index 6 --partial matched
 }
+
+@test "request_secret with --walk-up stores the value in the nearest parent config" {
+	mkdir -p sub/dir
+	cd sub/dir
+	export MCP_CLIENT_FNOX_ARGS="--walk-up"
+	mcp_client url save:walked-value-1 '[["request_secret", {"name": "API_TOKEN"}]]'
+	assert_success
+	assert_line --index 0 --partial "fnox stored it with provider 'age'"
+	assert [ ! -f fnox.toml ]
+	run grep -c API_TOKEN ../../fnox.toml
+	assert_output 1
+}
+
+@test "request_secret without --walk-up stores the value in the current directory" {
+	mkdir -p sub/dir
+	cd sub/dir
+	mcp_client url save:local-value-1 '[["request_secret", {"name": "API_TOKEN"}]]'
+	assert_success
+	assert_line --index 0 --partial "fnox stored it with provider 'age'"
+	assert [ -f fnox.toml ]
+	run grep -c API_TOKEN ../../fnox.toml
+	assert_output 0
+}

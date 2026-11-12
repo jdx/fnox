@@ -391,7 +391,8 @@ impl ProxyRunCommand {
             crate::daemon::Purpose::Proxy,
             all_secrets.clone(),
         )
-        .with_write_target(cli.config.clone(), cli.write_profile.clone());
+        .with_write_target(cli.config.clone(), cli.write_profile.clone())
+        .with_walk_up(cli.walk_up);
         let resolved = session.resolve_now(&requested).await?;
         // A rule secret without a value is pending: the child still gets its
         // placeholder, and the proxy resolves it again when a request needs it
