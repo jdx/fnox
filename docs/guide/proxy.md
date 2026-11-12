@@ -40,6 +40,19 @@ With this config, the agent sees a placeholder in `GITHUB_TOKEN`. fnox substitut
 
 Set `placeholder = "ghp_000…"` on a rule if an SDK checks the credential's format; otherwise fnox generates one per session.
 
+### Git over HTTPS and Basic credentials
+
+`git` authenticates with `Authorization: Basic base64(user:password)`, so a plain placeholder never appears in the header. Set `scheme = "basic"` and fnox decodes the header, replaces the placeholder in the decoded `user:password`, and encodes it again:
+
+```toml
+[[proxy.rules]]
+secret = "GH_TOKEN"
+domain = "github.com"
+scheme = "basic"
+```
+
+Git sends credentials only after the server asks for them, so the sandboxed command needs a credential helper that returns the placeholder as the password, for example `git -c credential.helper='!f() { echo username=x-access-token; echo password=$GH_TOKEN; }; f' pull`. The rule applies to a header rule only, and the same checks apply: one occurrence, in the named header, on a matching route. A value that isn't valid Basic credentials is left untouched.
+
 ### Secrets in the query string
 
 Some APIs take the key as a query parameter. Use `query` instead of `header` to name the parameter:

@@ -259,6 +259,7 @@ mod tests {
                 methods: vec![],
                 paths: vec![],
                 placeholder: None,
+                scheme: None,
             }],
             ..Default::default()
         };

@@ -664,6 +664,21 @@ pub struct ProxyRule {
     /// Placeholder passed to the child. A unique value is generated when omitted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placeholder: Option<String>,
+
+    /// How the credential is encoded in the header. With `basic`, fnox decodes
+    /// an `Authorization: Basic` value, substitutes the placeholder in the
+    /// decoded `user:password`, and encodes it again, as `git` over HTTPS
+    /// needs. Only valid for a header rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheme: Option<ProxyScheme>,
+}
+
+/// Encoding a proxy rule looks through to find its placeholder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ProxyScheme {
+    /// `Authorization: Basic base64(user:password)`.
+    Basic,
 }
 
 impl ProxyRule {
@@ -3893,6 +3908,7 @@ inherits = []
             methods: Vec::new(),
             paths: Vec::new(),
             placeholder: None,
+            scheme: None,
         }
     }
 

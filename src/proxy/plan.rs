@@ -200,6 +200,7 @@ impl ProxyPlan {
                     .collect(),
                 paths: compile_paths(&rule.paths)?,
                 placeholder,
+                basic: rule.scheme.is_some(),
             });
         }
 
@@ -306,6 +307,8 @@ fn check_env_name(rule: &ProxyRule, env_name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Rejects a rule that names no source, a bad domain or target, or options
+/// that cannot go together
 pub(super) fn validate_rule(rule: &ProxyRule) -> Result<()> {
     match (&rule.secret, &rule.lease) {
         (Some(_), Some(_)) => {
@@ -373,6 +376,12 @@ pub(super) fn validate_rule(rule: &ProxyRule) -> Result<()> {
     {
         return Err(proxy_error(format!(
             "rule for '{}' has an invalid header name",
+            rule.name()
+        )));
+    }
+    if rule.scheme.is_some() && rule.query.is_some() {
+        return Err(proxy_error(format!(
+            "rule for '{}' sets scheme, which only a header rule can use",
             rule.name()
         )));
     }

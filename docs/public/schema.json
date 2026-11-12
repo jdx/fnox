@@ -2305,6 +2305,17 @@
         "placeholder": {
           "description": "Placeholder passed to the child. A unique value is generated when omitted.",
           "type": ["string", "null"]
+        },
+        "scheme": {
+          "description": "How the credential is encoded in the header. With `basic`, fnox decodes\nan `Authorization: Basic` value, substitutes the placeholder in the\ndecoded `user:password`, and encodes it again, as `git` over HTTPS\nneeds. Only valid for a header rule.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProxyScheme"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -2315,6 +2326,16 @@
         },
         {
           "required": ["lease"]
+        }
+      ]
+    },
+    "ProxyScheme": {
+      "description": "Encoding a proxy rule looks through to find its placeholder.",
+      "oneOf": [
+        {
+          "description": "`Authorization: Basic base64(user:password)`.",
+          "type": "string",
+          "const": "basic"
         }
       ]
     },
