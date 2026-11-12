@@ -13,6 +13,9 @@ impl CertificateAuthority {
         let mut params = CertificateParams::new(Vec::<String>::new())
             .map_err(|error| proxy_error(format!("failed to configure CA: {error}")))?;
         params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        // Strict X.509 verification (Python 3.13+ enables it by default)
+        // rejects a CA certificate without a keyUsage extension.
+        params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
         params
             .distinguished_name
             .push(rcgen::DnType::CommonName, "fnox proxy session");
@@ -27,15 +30,24 @@ impl CertificateAuthority {
         })
     }
 
-    pub(super) fn server_config(&self, domain: &str) -> Result<ServerConfig> {
-        let params = CertificateParams::new(vec![domain.to_string()]).map_err(|error| {
+    /// Issues the certificate the proxy presents for `domain`.
+    pub(super) fn host_certificate(&self, domain: &str) -> Result<(Certificate, KeyPair)> {
+        let mut params = CertificateParams::new(vec![domain.to_string()]).map_err(|error| {
             proxy_error(format!("failed to configure TLS certificate: {error}"))
         })?;
+        // Strict X.509 verification (Python 3.13+ enables it by default)
+        // rejects a certificate that is not self-signed and has no AKI.
+        params.use_authority_key_identifier_extension = true;
         let key = KeyPair::generate()
             .map_err(|error| proxy_error(format!("failed to generate TLS key: {error}")))?;
         let certificate = params
             .signed_by(&key, &self.issuer)
             .map_err(|error| proxy_error(format!("failed to sign TLS certificate: {error}")))?;
+        Ok((certificate, key))
+    }
+
+    pub(super) fn server_config(&self, domain: &str) -> Result<ServerConfig> {
+        let (certificate, key) = self.host_certificate(domain)?;
         let private_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.serialize_der()));
         let mut config = ServerConfig::builder()
             .with_no_client_auth()
