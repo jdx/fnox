@@ -39,6 +39,16 @@ pub fn remove_var<K: AsRef<OsStr>>(key: K) {
     }
 }
 
+/// The process environment, without the variables whose name or value is not
+/// valid UTF-8.
+///
+/// Use this instead of [`std::env::vars`], which panics on the first such
+/// variable. A shell or a test harness can hand fnox one that has nothing to
+/// do with fnox, and fnox's own variables are always UTF-8.
+pub fn utf8_vars() -> impl Iterator<Item = (String, String)> {
+    vars_os().filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
+}
+
 // Directory configuration
 pub static HOME_DIR: LazyLock<PathBuf> = LazyLock::new(|| dirs::home_dir().unwrap_or_default());
 pub static FNOX_CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {

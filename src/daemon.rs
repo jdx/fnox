@@ -14,6 +14,7 @@ use fnox_client::wire::{
 use fnox_client::{MIN_PROTOCOL, WIRE_VERSION, daemon_env_override, platform_supported};
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
+use std::ffi::{OsStr, OsString};
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
 #[cfg(windows)]
@@ -230,7 +231,7 @@ pub async fn resolve_batch_with_context(
         purpose: purpose.as_str().to_string(),
         keys,
         include_all_modes,
-        env: std::env::vars().collect(),
+        env: crate::env::utf8_vars().collect(),
     };
 
     match call_or_start(ctx, config, Request::ResolveBatch(batch_request.clone())).await? {
@@ -384,7 +385,7 @@ pub async fn resolve_one_with_context(
         non_interactive: ctx.non_interactive,
         purpose: purpose.as_str().to_string(),
         key: key.to_string(),
-        env: std::env::vars().collect(),
+        env: crate::env::utf8_vars().collect(),
     };
 
     match call_or_start(ctx, config, Request::ResolveOne(one_request.clone())).await? {
@@ -1929,31 +1930,37 @@ fn current_uid() -> u32 {
     fnox_client::peer::current_euid()
 }
 
+/// The daemon's environment while it serves one request: the client's, with
+/// the daemon's own restored on drop.
+///
+/// Names and values are `OsString` because the daemon may have inherited a
+/// variable that is not valid UTF-8; the client leaves those out of its
+/// request, so the overlay removes them and puts them back byte for byte.
 struct EnvOverlay {
-    previous: Vec<(String, Option<String>)>,
+    previous: Vec<(OsString, Option<OsString>)>,
 }
 
 impl EnvOverlay {
     fn apply(env: &[(String, String)]) -> Result<Self> {
         let incoming = env
             .iter()
-            .map(|(key, _)| key.as_str())
+            .map(|(key, _)| OsStr::new(key.as_str()))
             .collect::<HashSet<_>>();
         let mut touched = env
             .iter()
-            .map(|(key, _)| key.clone())
+            .map(|(key, _)| OsString::from(key))
             .collect::<HashSet<_>>();
-        for (key, _) in std::env::vars() {
-            if !incoming.contains(key.as_str()) {
+        for (key, _) in std::env::vars_os() {
+            if !incoming.contains(key.as_os_str()) {
                 touched.insert(key);
             }
         }
         let previous = touched
             .iter()
-            .map(|key| (key.clone(), std::env::var(key).ok()))
+            .map(|key| (key.clone(), std::env::var_os(key)))
             .collect::<Vec<_>>();
         for key in touched {
-            if !incoming.contains(key.as_str()) {
+            if !incoming.contains(key.as_os_str()) {
                 crate::env::remove_var(key);
             }
         }

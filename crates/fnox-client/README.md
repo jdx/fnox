@@ -34,7 +34,10 @@ use fnox_client::document::EnvScope;
 use fnox_client::{CliFlags, Client, EnvOutcome, EnvRequest, RuntimeEnv, SocketKey};
 use std::path::Path;
 
-let env: Vec<(String, String)> = std::env::vars().collect();
+let env: Vec<(String, String)> = std::env::vars_os()
+    // `std::env::vars` panics on a variable that is not valid UTF-8; skip it.
+    .filter_map(|(k, v)| Some((k.into_string().ok()?, v.into_string().ok()?)))
+    .collect();
 let get = |k: &str| env.iter().find(|(key, _)| key == k).map(|(_, v)| v.clone());
 
 let flags = CliFlags::default();
