@@ -662,7 +662,7 @@ mod tests {
             .send()
             .await
             .unwrap();
-        assert_eq!(response.status(), 400);
+        assert_eq!(response.status(), 413);
     }
 
     #[tokio::test]
