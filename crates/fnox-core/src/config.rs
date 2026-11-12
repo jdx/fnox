@@ -152,7 +152,7 @@ pub fn find_local_config(dir: &Path, profiles: &[String]) -> PathBuf {
 /// use the nearest parent directory that has one.
 ///
 /// A directory counts as having a config when any config file for any of the
-/// `active` profiles exists there, including profile-specific and local ones.
+/// `active` profiles or for `write_profile` exists there, including profile-specific and local ones.
 /// The file is then picked for `write_profile`, as `find_local_config` does.
 /// The walk only considers project configs, so it never falls back to the
 /// global config. It does not pass a directory whose config sets `root = true`,
@@ -161,7 +161,11 @@ pub fn find_local_config(dir: &Path, profiles: &[String]) -> PathBuf {
 /// directory has a config, the result is `dir/fnox.toml`.
 pub fn find_local_config_walk_up(dir: &Path, active: &[String], write_profile: &str) -> PathBuf {
     let write = [write_profile.to_string()];
-    let filenames = all_config_filenames(active);
+    let mut discovery: Vec<String> = active.to_vec();
+    if !discovery.iter().any(|p| p == write_profile) {
+        discovery.push(write_profile.to_string());
+    }
+    let filenames = all_config_filenames(&discovery);
     let existing = |d: &Path| -> Vec<PathBuf> {
         filenames
             .iter()
@@ -3430,6 +3434,24 @@ root = true
         assert_eq!(
             super::find_local_config_walk_up(&sub, &active, "staging"),
             sub.join("fnox.toml")
+        );
+    }
+
+    #[test]
+    fn test_walk_up_counts_write_profile_file_even_when_not_active() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(sub.join("fnox.prod.toml"), "").unwrap();
+        assert_eq!(
+            super::find_local_config_walk_up(&sub, &[], "prod"),
+            sub.join("fnox.prod.toml")
+        );
+        let active = ["staging".to_string()];
+        assert_eq!(
+            super::find_local_config_walk_up(&sub, &active, "prod"),
+            sub.join("fnox.prod.toml")
         );
     }
 
