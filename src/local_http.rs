@@ -8,8 +8,54 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, BufReader}
 /// Largest request line plus headers that is read
 pub(crate) const MAX_HEADER_BYTES: usize = 64 * 1024;
 
-fn http_error(message: impl Into<String>) -> String {
-    message.into()
+/// Why a request could not be read
+#[derive(Debug)]
+pub(crate) enum HttpReadError {
+    /// The body is larger than the caller allows (413)
+    BodyTooLarge { limit: usize },
+    /// The request line and headers are larger than [`MAX_HEADER_BYTES`] (431)
+    HeadersTooLarge,
+    /// Anything else the client sent wrong, or a dropped connection (400)
+    Invalid(String),
+}
+
+impl HttpReadError {
+    /// The HTTP status that best describes this error
+    pub(crate) fn status(&self) -> u16 {
+        match self {
+            Self::BodyTooLarge { .. } => 413,
+            Self::HeadersTooLarge => 431,
+            Self::Invalid(_) => 400,
+        }
+    }
+}
+
+impl std::fmt::Display for HttpReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BodyTooLarge { limit } => write!(
+                f,
+                "request body is larger than the {} MiB limit",
+                limit / (1024 * 1024)
+            ),
+            Self::HeadersTooLarge => write!(
+                f,
+                "request headers are larger than the {} KiB limit",
+                MAX_HEADER_BYTES / 1024
+            ),
+            Self::Invalid(message) => f.write_str(message),
+        }
+    }
+}
+
+impl From<HttpReadError> for String {
+    fn from(error: HttpReadError) -> Self {
+        error.to_string()
+    }
+}
+
+fn http_error(message: impl Into<String>) -> HttpReadError {
+    HttpReadError::Invalid(message.into())
 }
 
 /// Compare two byte strings in time that depends only on their lengths
@@ -34,7 +80,7 @@ pub(crate) struct HttpRequest {
 pub(crate) async fn read_http_request_limited<S>(
     stream: &mut S,
     max_body: usize,
-) -> Result<HttpRequest, String>
+) -> Result<HttpRequest, HttpReadError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -83,7 +129,7 @@ where
     }
     let content_length = content_length.unwrap_or(0);
     if content_length > max_body {
-        return Err(http_error("request body exceeded proxy limit"));
+        return Err(HttpReadError::BodyTooLarge { limit: max_body });
     }
     let mut body = vec![0; content_length];
     reader
@@ -98,12 +144,15 @@ where
     })
 }
 
-pub(crate) async fn read_line_limited<R>(reader: &mut R, remaining: usize) -> Result<String, String>
+pub(crate) async fn read_line_limited<R>(
+    reader: &mut R,
+    remaining: usize,
+) -> Result<String, HttpReadError>
 where
     R: tokio::io::AsyncBufRead + Unpin,
 {
     if remaining == 0 {
-        return Err(http_error("HTTP headers exceeded proxy limit"));
+        return Err(HttpReadError::HeadersTooLarge);
     }
     let mut line = Vec::with_capacity(remaining.min(1024));
     loop {
@@ -119,7 +168,7 @@ where
             .position(|byte| *byte == b'\n')
             .map_or(available.len(), |position| position + 1);
         if consumed > remaining.saturating_sub(line.len()) {
-            return Err(http_error("HTTP headers exceeded proxy limit"));
+            return Err(HttpReadError::HeadersTooLarge);
         }
         let complete = available[consumed - 1] == b'\n';
         line.extend_from_slice(&available[..consumed]);

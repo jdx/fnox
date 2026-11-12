@@ -85,6 +85,47 @@ async fn malformed_tls_request_receives_http_error() {
     );
 }
 
+async fn proxy_response_to_post_of(body_len: usize) -> Vec<u8> {
+    let (mut client, mut server) = tokio::io::duplex(1024);
+    let policy = policy().policy;
+    let task =
+        tokio::spawn(
+            async move { proxy_http_request(&mut server, "api.github.com", &policy).await },
+        );
+    let head = format!(
+        "POST /repos/example/fnox HTTP/1.1\r\nhost: api.github.com\r\ncontent-length: {body_len}\r\n\r\n"
+    );
+    client.write_all(head.as_bytes()).await.unwrap();
+    client.shutdown().await.unwrap();
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).await.unwrap();
+    task.await.unwrap().unwrap();
+    response
+}
+
+#[tokio::test]
+async fn oversized_request_body_receives_413() {
+    let response = proxy_response_to_post_of(MAX_BODY_BYTES + 1).await;
+    let text = String::from_utf8_lossy(&response);
+    assert!(
+        text.starts_with("HTTP/1.1 413 Content Too Large\r\n"),
+        "unexpected response: {text}"
+    );
+    assert!(text.contains("request body is larger than the 10 MiB limit"));
+    assert!(!text.contains("Configuration error"));
+}
+
+#[tokio::test]
+async fn request_body_at_the_limit_is_not_refused_as_too_large() {
+    // The body never arrives, so the read fails after the size check passes.
+    let response = proxy_response_to_post_of(MAX_BODY_BYTES).await;
+    let text = String::from_utf8_lossy(&response);
+    assert!(
+        !text.contains("413") && !text.contains("larger than"),
+        "unexpected response: {text}"
+    );
+}
+
 #[test]
 fn substitutes_only_on_allowed_route_and_header() {
     let plan = policy();

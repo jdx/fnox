@@ -22,7 +22,8 @@ use tokio::sync::oneshot;
 use tokio_rustls::TlsAcceptor;
 
 use crate::local_http::{
-    HttpRequest, MAX_HEADER_BYTES, constant_time_eq, read_http_request_limited, read_line_limited,
+    HttpReadError, HttpRequest, MAX_HEADER_BYTES, constant_time_eq, read_http_request_limited,
+    read_line_limited,
 };
 
 const MAX_BODY_BYTES: usize = 10 * 1024 * 1024;

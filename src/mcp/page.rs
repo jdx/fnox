@@ -199,8 +199,14 @@ async fn handle(mut stream: TcpStream, state: &PageState) -> Result<()> {
     {
         Ok(Ok(request)) => request,
         Ok(Err(e)) => {
-            respond(&mut stream, 400, &message_page("Bad request", ""), None).await?;
-            return Err(FnoxError::Config(e));
+            let status = e.status();
+            let title = match status {
+                413 => "Request too large",
+                431 => "Request headers too large",
+                _ => "Bad request",
+            };
+            respond(&mut stream, status, &message_page(title, ""), None).await?;
+            return Err(FnoxError::Config(e.to_string()));
         }
         Err(_) => return Ok(()),
     };
@@ -327,6 +333,8 @@ async fn respond(
         404 => "Not Found",
         405 => "Method Not Allowed",
         410 => "Gone",
+        413 => "Content Too Large",
+        431 => "Request Header Fields Too Large",
         _ => "Internal Server Error",
     };
     let location = redirect
