@@ -148,6 +148,49 @@ pub fn find_local_config(dir: &Path, profiles: &[String]) -> PathBuf {
     dir.join(DEFAULT_CONFIG_FILENAME)
 }
 
+/// Like [`find_local_config`], but when `dir` has no config file of its own,
+/// use the nearest parent directory that has one.
+///
+/// A directory counts as having a config when any config file for any of the
+/// `active` profiles or for `write_profile` exists there, including profile-specific and local ones.
+/// The file is then picked for `write_profile`, as `find_local_config` does.
+/// The walk only considers project configs, so it never falls back to the
+/// global config. It does not pass a directory whose config sets `root = true`,
+/// since reads never see anything above it either: if that directory has no
+/// file eligible for `write_profile`, the result is its `fnox.toml`. When no
+/// directory has a config, the result is `dir/fnox.toml`.
+pub fn find_local_config_walk_up(dir: &Path, active: &[String], write_profile: &str) -> PathBuf {
+    let write = [write_profile.to_string()];
+    let mut discovery: Vec<String> = active.to_vec();
+    if !discovery.iter().any(|p| p == write_profile) {
+        discovery.push(write_profile.to_string());
+    }
+    let filenames = all_config_filenames(&discovery);
+    let existing = |d: &Path| -> Vec<PathBuf> {
+        filenames
+            .iter()
+            .map(|name| d.join(name))
+            .filter(|path| path.exists())
+            .collect()
+    };
+    if !existing(dir).is_empty() {
+        return find_local_config(dir, &write);
+    }
+    for parent in dir.ancestors().skip(1) {
+        let files = existing(parent);
+        if files.is_empty() {
+            continue;
+        }
+        let found = find_local_config(parent, &write);
+        // A profile can hide a directory's only file, such as a lone
+        // `fnox.local.toml`. Keep walking unless this is the project root.
+        if found.exists() || files.iter().any(|f| Config::load(f).is_ok_and(|c| c.root)) {
+            return found;
+        }
+    }
+    find_local_config(dir, &write)
+}
+
 /// Check whether a file is a profile-specific config file (e.g.
 /// `fnox.prod.toml` or `.fnox.prod.toml`). Such files use top-level
 /// `[secrets]` to represent the profile's secrets, rather than nesting
@@ -3312,6 +3355,145 @@ root = true
 
         let secrets = config.get_secrets(&["prod".to_string()]).unwrap();
         assert!(secrets.is_empty());
+    }
+
+    #[test]
+    fn test_walk_up_uses_current_dir_when_it_has_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(sub.join("fnox.local.toml"), "").unwrap();
+        assert_eq!(
+            super::find_local_config_walk_up(&sub, &[], "default"),
+            sub.join("fnox.local.toml")
+        );
+    }
+
+    #[test]
+    fn test_walk_up_finds_nearest_parent_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let near = dir.path().join("a/b");
+        std::fs::create_dir_all(&near).unwrap();
+        let deep = near.join("c/d");
+        std::fs::create_dir_all(&deep).unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(near.join(".fnox.toml"), "").unwrap();
+        assert_eq!(
+            super::find_local_config_walk_up(&deep, &[], "default"),
+            near.join(".fnox.toml")
+        );
+    }
+
+    #[test]
+    fn test_walk_up_finds_project_config_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::create_dir(dir.path().join(".config")).unwrap();
+        std::fs::write(dir.path().join(".config/fnox.toml"), "").unwrap();
+        assert_eq!(
+            super::find_local_config_walk_up(&sub, &[], "default"),
+            dir.path().join(".config/fnox.toml")
+        );
+    }
+
+    #[test]
+    fn test_walk_up_prefers_profile_file_in_parent() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(dir.path().join("fnox.staging.toml"), "").unwrap();
+        assert_eq!(
+            super::find_local_config_walk_up(&sub, &["staging".to_string()], "staging"),
+            dir.path().join("fnox.staging.toml")
+        );
+    }
+
+    #[test]
+    fn test_walk_up_reaches_root_config_but_not_beyond() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("project");
+        let sub = project.join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(project.join("fnox.toml"), "root = true\n").unwrap();
+        assert_eq!(
+            super::find_local_config_walk_up(&sub, &[], "default"),
+            project.join("fnox.toml")
+        );
+    }
+
+    #[test]
+    fn test_walk_up_skips_non_root_parent_with_only_hidden_local_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("project");
+        let sub = project.join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(project.join("fnox.local.toml"), "").unwrap();
+        assert_eq!(
+            super::find_local_config_walk_up(&sub, &["staging".to_string()], "staging"),
+            dir.path().join("fnox.toml")
+        );
+    }
+
+    #[test]
+    fn test_walk_up_stops_at_root_parent_with_only_hidden_local_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("project");
+        let sub = project.join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(project.join("fnox.local.toml"), "root = true\n").unwrap();
+        assert_eq!(
+            super::find_local_config_walk_up(&sub, &["staging".to_string()], "staging"),
+            project.join("fnox.toml")
+        );
+    }
+
+    #[test]
+    fn test_walk_up_treats_any_active_profile_file_as_current_dir_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(sub.join("fnox.dev.toml"), "").unwrap();
+        let active = ["dev".to_string(), "staging".to_string()];
+        assert_eq!(
+            super::find_local_config_walk_up(&sub, &active, "staging"),
+            sub.join("fnox.toml")
+        );
+    }
+
+    #[test]
+    fn test_walk_up_counts_write_profile_file_even_when_not_active() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(dir.path().join("fnox.toml"), "").unwrap();
+        std::fs::write(sub.join("fnox.prod.toml"), "").unwrap();
+        assert_eq!(
+            super::find_local_config_walk_up(&sub, &[], "prod"),
+            sub.join("fnox.prod.toml")
+        );
+        let active = ["staging".to_string()];
+        assert_eq!(
+            super::find_local_config_walk_up(&sub, &active, "prod"),
+            sub.join("fnox.prod.toml")
+        );
+    }
+
+    #[test]
+    fn test_walk_up_without_any_config_falls_back_to_current_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        assert_eq!(
+            super::find_local_config_walk_up(&sub, &[], "default"),
+            sub.join("fnox.toml")
+        );
     }
 
     #[test]

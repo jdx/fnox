@@ -125,6 +125,17 @@ pub struct Cli {
     #[usage(long, global, env = "FNOX_NON_INTERACTIVE")]
     pub non_interactive: bool,
 
+    /// Write to the nearest parent config when the current directory has none
+    ///
+    /// Applies to `set`, `remove`, and `import`. Without it, those commands
+    /// create `fnox.toml` in the current directory when it has no config file.
+    /// With it, they use the nearest parent directory's config, picked by the
+    /// same rules, and create `fnox.toml` here only if no parent has one. The
+    /// global config is never a fallback. `--config` and `--global` take
+    /// precedence.
+    #[usage(long, global, env = "FNOX_WALK_UP")]
+    pub walk_up: bool,
+
     /// Profile that write commands modify when several profiles are active
     ///
     /// Applies to `set`, `remove`, `import`, `sync`, and `provider add|remove`.

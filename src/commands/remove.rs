@@ -74,7 +74,12 @@ impl RemoveCommand {
             // Match set.rs: use find_local_config when --config is the default,
             // so profile-specific files (fnox.<profile>.toml) are found.
             if cli.config == std::path::Path::new(crate::config::DEFAULT_CONFIG_FILENAME) {
-                crate::config::find_local_config(&current_dir, std::slice::from_ref(&write_profile))
+                crate::commands::set::find_default_config(
+                    &current_dir,
+                    &profile,
+                    &write_profile,
+                    cli.walk_up,
+                )
             } else {
                 current_dir.join(&cli.config)
             }

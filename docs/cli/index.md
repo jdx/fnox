@@ -49,6 +49,12 @@ Put fnox options before the `--` that starts a child command, as in `fnox -P pro
 
   **Environment Variable:** `FNOX_NON_INTERACTIVE`
 
+- **`--walk-up`** — Write to the nearest parent config when the current directory has none
+
+  Applies to `set`, `remove`, and `import`. Without it, those commands create `fnox.toml` in the current directory when it has no config file. With it, they use the nearest parent directory's config, picked by the same rules, and create `fnox.toml` here only if no parent has one. The global config is never a fallback. `--config` and `--global` take precedence.
+
+  **Environment Variable:** `FNOX_WALK_UP`
+
 - **`--write-profile <WRITE_PROFILE>`** — Profile that write commands modify when several profiles are active
 
   Applies to `set`, `remove`, `import`, `sync`, and `provider add|remove`. Required when more than one profile is active; otherwise defaults to the active profile.

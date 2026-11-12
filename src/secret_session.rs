@@ -336,6 +336,7 @@ impl SecretSession {
             &self.config_path,
             &self.profile,
             self.write_profile.as_deref(),
+            false,
         )
     }
 
