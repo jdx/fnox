@@ -396,7 +396,7 @@ pub(super) async fn proxy_http_request<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let request = match read_http_request(stream).await {
+    let request = match read_http_request(stream, policy.max_body_bytes).await {
         Ok(request) => request,
         Err(error) => {
             write_error(stream, error.status(), &error.to_string()).await?;
@@ -622,11 +622,12 @@ where
 
 pub(super) async fn read_http_request<S>(
     stream: &mut S,
+    max_body: usize,
 ) -> std::result::Result<HttpRequest, HttpReadError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    read_http_request_limited(stream, MAX_BODY_BYTES).await
+    read_http_request_limited(stream, max_body).await
 }
 
 pub(super) fn is_hop_by_hop_header(name: &str) -> bool {

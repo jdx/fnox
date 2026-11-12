@@ -52,6 +52,9 @@ pub fn validate_config(config: &ProxyConfig) -> Result<()> {
     for entry in &config.allow_private {
         parse_allowed(entry)?;
     }
+    if config.max_body_bytes == Some(0) {
+        return Err(proxy_error("max_body_bytes must be greater than zero"));
+    }
     Ok(())
 }
 
@@ -249,6 +252,11 @@ impl ProxyPlan {
             policy: Arc::new(ProxyPolicy {
                 egress: config.egress,
                 audit: config.audit,
+                max_body_bytes: config
+                    .max_body_bytes
+                    .map_or(super::DEFAULT_MAX_BODY_BYTES, |bytes| {
+                        usize::try_from(bytes).unwrap_or(usize::MAX)
+                    }),
                 rules: prepared,
                 allow_domains: config
                     .allow_domains

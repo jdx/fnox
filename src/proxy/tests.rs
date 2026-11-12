@@ -86,8 +86,21 @@ async fn malformed_tls_request_receives_http_error() {
 }
 
 async fn proxy_response_to_post_of(body_len: usize) -> Vec<u8> {
+    proxy_response_to_post_with_limit(body_len, None).await
+}
+
+async fn proxy_response_to_post_with_limit(body_len: usize, limit: Option<u64>) -> Vec<u8> {
     let (mut client, mut server) = tokio::io::duplex(1024);
-    let policy = policy().policy;
+    let mut config = config();
+    config.max_body_bytes = limit;
+    let policy = ProxyPlan::new(
+        &config,
+        &[("GITHUB_TOKEN".to_string(), "real-token".to_string())]
+            .into_iter()
+            .collect(),
+    )
+    .unwrap()
+    .policy;
     let task =
         tokio::spawn(
             async move { proxy_http_request(&mut server, "api.github.com", &policy).await },
@@ -105,7 +118,7 @@ async fn proxy_response_to_post_of(body_len: usize) -> Vec<u8> {
 
 #[tokio::test]
 async fn oversized_request_body_receives_413() {
-    let response = proxy_response_to_post_of(MAX_BODY_BYTES + 1).await;
+    let response = proxy_response_to_post_of(DEFAULT_MAX_BODY_BYTES + 1).await;
     let text = String::from_utf8_lossy(&response);
     assert!(
         text.starts_with("HTTP/1.1 413 Content Too Large\r\n"),
@@ -118,7 +131,7 @@ async fn oversized_request_body_receives_413() {
 #[tokio::test]
 async fn request_body_at_the_limit_is_not_refused_as_too_large() {
     // The body never arrives, so the read fails after the size check passes.
-    let response = proxy_response_to_post_of(MAX_BODY_BYTES).await;
+    let response = proxy_response_to_post_of(DEFAULT_MAX_BODY_BYTES).await;
     let text = String::from_utf8_lossy(&response);
     assert!(
         !text.contains("413") && !text.contains("larger than"),
@@ -293,7 +306,10 @@ async fn body_bearing_methods_require_content_length() {
         .unwrap();
     drop(client);
 
-    let error = read_http_request(&mut server).await.err().unwrap();
+    let error = read_http_request(&mut server, DEFAULT_MAX_BODY_BYTES)
+        .await
+        .err()
+        .unwrap();
 
     assert!(error.to_string().contains("must include content-length"));
 }
@@ -309,9 +325,67 @@ async fn explicit_empty_request_body_is_allowed() {
         .unwrap();
     drop(client);
 
-    let request = read_http_request(&mut server).await.unwrap();
+    let request = read_http_request(&mut server, DEFAULT_MAX_BODY_BYTES)
+        .await
+        .unwrap();
 
     assert!(request.body.is_empty());
+}
+
+#[tokio::test]
+async fn configured_max_body_bytes_applies_to_proxied_requests() {
+    let response = proxy_response_to_post_with_limit(2049, Some(2048)).await;
+    let text = String::from_utf8_lossy(&response);
+    assert!(
+        text.starts_with("HTTP/1.1 413"),
+        "unexpected response: {text}"
+    );
+    assert!(
+        text.contains("2048 byte limit"),
+        "unexpected response: {text}"
+    );
+
+    // Larger than the 10 MiB default, but within the configured limit.
+    let response =
+        proxy_response_to_post_with_limit(DEFAULT_MAX_BODY_BYTES + 1, Some(64 << 20)).await;
+    let text = String::from_utf8_lossy(&response);
+    assert!(
+        !text.contains("413") && !text.contains("larger than"),
+        "unexpected response: {text}"
+    );
+
+    // Omitting it keeps the default.
+    let response = proxy_response_to_post_with_limit(DEFAULT_MAX_BODY_BYTES + 1, None).await;
+    assert!(String::from_utf8_lossy(&response).contains("10 MiB limit"));
+}
+
+#[tokio::test]
+async fn request_body_limit_is_configurable() {
+    let request = b"POST /upload HTTP/1.1\r\nhost: api.github.com\r\ncontent-length: 20\r\n\r\n01234567890123456789";
+
+    let (mut client, mut server) = tokio::io::duplex(1024);
+    client.write_all(request).await.unwrap();
+    drop(client);
+    let error = read_http_request(&mut server, 10).await.err().unwrap();
+    assert!(
+        matches!(error, HttpReadError::BodyTooLarge { limit: 10 }),
+        "{error}"
+    );
+
+    let (mut client, mut server) = tokio::io::duplex(1024);
+    client.write_all(request).await.unwrap();
+    drop(client);
+    let parsed = read_http_request(&mut server, 20).await.unwrap();
+    assert_eq!(parsed.body.len(), 20);
+}
+
+#[test]
+fn rejects_zero_max_body_bytes() {
+    let mut config = config();
+    config.max_body_bytes = Some(0);
+    assert!(validate_config(&config).is_err());
+    config.max_body_bytes = Some(64 * 1024 * 1024);
+    assert!(validate_config(&config).is_ok());
 }
 
 #[test]

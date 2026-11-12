@@ -33,11 +33,14 @@ impl HttpReadError {
 impl std::fmt::Display for HttpReadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BodyTooLarge { limit } => write!(
+            Self::BodyTooLarge { limit } if limit % (1024 * 1024) == 0 => write!(
                 f,
                 "request body is larger than the {} MiB limit",
                 limit / (1024 * 1024)
             ),
+            Self::BodyTooLarge { limit } => {
+                write!(f, "request body is larger than the {limit} byte limit")
+            }
             Self::HeadersTooLarge => write!(
                 f,
                 "request headers are larger than the {} KiB limit",

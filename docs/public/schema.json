@@ -2202,6 +2202,12 @@
           },
           "default": []
         },
+        "max_body_bytes": {
+          "description": "Largest request body the proxy accepts, in bytes. Defaults to 10 MiB\n(10485760). Bodies are held in memory, so each concurrent request can\nuse up to this much. Must be greater than zero.",
+          "type": ["integer", "null"],
+          "format": "uint64",
+          "minimum": 1
+        },
         "allow_private": {
           "description": "Non-public networks the proxy may connect to, as IP addresses or CIDR\nblocks, each optionally followed by a port (`127.0.0.1:4790`,\n`[::1]:4790`) that limits the entry to that port. Loopback, link-local\n(including cloud metadata endpoints), private, and other non-public\naddresses are refused unless listed.",
           "type": "array",
