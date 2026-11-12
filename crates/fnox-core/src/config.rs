@@ -557,6 +557,7 @@ pub struct ProxyConfig {
     /// (10485760). Bodies are held in memory, so each concurrent request can
     /// use up to this much. Must be greater than zero.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1))]
     pub max_body_bytes: Option<u64>,
 
     /// Non-public networks the proxy may connect to, as IP addresses or CIDR
