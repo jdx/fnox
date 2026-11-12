@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and Ideas
+    url: https://github.com/jdx/fnox/discussions/new/choose
+    about: Ask questions or suggest a feature.
