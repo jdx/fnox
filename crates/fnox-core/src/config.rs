@@ -348,6 +348,16 @@ pub struct SecretConfig {
     /// Write secret to a temporary file and set env var to the file path instead of the secret value
     #[serde(default, skip_serializing_if = "is_false")]
     pub as_file: bool,
+
+    /// Whether `fnox exec --redact`, MCP `exec` and `ci-redact` hide this
+    /// secret's value in output (default: true). Set `false` for plain
+    /// configuration such as a log level, so ordinary words are not replaced
+    /// with `[REDACTED]`. `fnox exec` and MCP `exec` also skip values shorter
+    /// than 3 bytes after trimming, `fnox exec` filters only non-terminal
+    /// output, and `ci-redact` cannot mask multi-line values.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sensitive: Option<bool>,
+
     /// JSON path to extract from the secret value (supports dot notation: "nested.key")
     /// When set, the secret value is parsed as JSON and the specified path is extracted.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2717,6 +2727,7 @@ impl SecretConfig {
             value: None,
             env: None,
             as_file: false,
+            sensitive: None,
             json_path: None,
             line: None,
             sync: None,
@@ -2788,6 +2799,9 @@ impl SecretConfig {
         if self.as_file {
             inline.insert("as_file", toml_edit::Value::from(true));
         }
+        if let Some(sensitive) = self.sensitive {
+            inline.insert("sensitive", toml_edit::Value::from(sensitive));
+        }
         if let Some(ref sync) = self.sync {
             let mut sync_table = toml_edit::InlineTable::new();
             sync_table.insert("provider", toml_edit::Value::from(sync.provider.as_str()));
@@ -2854,6 +2868,7 @@ impl SecretConfig {
         );
         set_or_remove(table, "env", self.env.map(EnvMode::to_toml_value));
         set_or_remove(table, "as_file", self.as_file.then(|| Value::from(true)));
+        set_or_remove(table, "sensitive", self.sensitive.map(Value::from));
         set_or_remove(
             table,
             "sync",
@@ -2895,6 +2910,13 @@ impl SecretConfig {
     /// Check if this secret has any value (provider, value, or default)
     pub fn has_value(&self) -> bool {
         self.provider().is_some() || self.value().is_some() || self.default.is_some()
+    }
+
+    /// Whether output redaction should hide this secret's value.
+    ///
+    /// True unless the config sets `sensitive = false`.
+    pub fn is_sensitive(&self) -> bool {
+        self.sensitive.unwrap_or(true)
     }
 
     /// Get the provider name, if set.
@@ -4082,6 +4104,32 @@ DEV_INHERITED = { provider = "plain", value = "d" }
             Some(Path::new("/tmp/fnox.toml"))
         );
         assert!(raw.source_is_profile);
+    }
+
+    #[test]
+    fn test_secrets_are_sensitive_unless_marked_false() {
+        let mut secret = SecretConfig::new();
+        assert!(secret.is_sensitive());
+        secret.sensitive = Some(true);
+        assert!(secret.is_sensitive());
+        secret.sensitive = Some(false);
+        assert!(!secret.is_sensitive());
+    }
+
+    #[test]
+    fn test_sensitive_false_round_trips_through_toml() {
+        let config: Config = toml_edit::de::from_str(
+            "[secrets]\nLOG_LEVEL = { default = \"INFO\", sensitive = false }\nTOKEN = { default = \"x\" }\n",
+        )
+        .unwrap();
+        assert_eq!(config.secrets["LOG_LEVEL"].sensitive, Some(false));
+        assert_eq!(config.secrets["TOKEN"].sensitive, None);
+        assert!(
+            config.secrets["LOG_LEVEL"]
+                .to_inline_table()
+                .to_string()
+                .contains("sensitive = false")
+        );
     }
 
     #[test]

@@ -9,6 +9,8 @@ description: "Set up a fnox development checkout, run checks, edit documentation
 Using AI to help write a Discussion, Issue, reply, or pull request is fine. Review it before you
 post it, and disclose that AI contributed.
 
+Bug reports, in Issues or Discussions, are only for problems you ran into while using fnox. Say what you were trying to do, what you ran, the relevant config, and what happened. Reports found by reading the source or by having an agent search the code will be closed.
+
 ## Contribution expectations
 
 Contributions should solve a clear problem within fnox's scope. For a substantial change, discuss the direction first in [GitHub Discussions](https://github.com/jdx/fnox/discussions) or [Discord](https://discord.gg/UBa7pJUN7Z). Small, obvious fixes can go straight to a pull request.

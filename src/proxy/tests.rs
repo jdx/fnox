@@ -85,6 +85,47 @@ async fn malformed_tls_request_receives_http_error() {
     );
 }
 
+async fn proxy_response_to_post_of(body_len: usize) -> Vec<u8> {
+    let (mut client, mut server) = tokio::io::duplex(1024);
+    let policy = policy().policy;
+    let task =
+        tokio::spawn(
+            async move { proxy_http_request(&mut server, "api.github.com", &policy).await },
+        );
+    let head = format!(
+        "POST /repos/example/fnox HTTP/1.1\r\nhost: api.github.com\r\ncontent-length: {body_len}\r\n\r\n"
+    );
+    client.write_all(head.as_bytes()).await.unwrap();
+    client.shutdown().await.unwrap();
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).await.unwrap();
+    task.await.unwrap().unwrap();
+    response
+}
+
+#[tokio::test]
+async fn oversized_request_body_receives_413() {
+    let response = proxy_response_to_post_of(DEFAULT_MAX_BODY_BYTES + 1).await;
+    let text = String::from_utf8_lossy(&response);
+    assert!(
+        text.starts_with("HTTP/1.1 413 Content Too Large\r\n"),
+        "unexpected response: {text}"
+    );
+    assert!(text.contains("request body is larger than the 10 MiB limit"));
+    assert!(!text.contains("Configuration error"));
+}
+
+#[tokio::test]
+async fn request_body_at_the_limit_is_not_refused_as_too_large() {
+    // The body never arrives, so the read fails after the size check passes.
+    let response = proxy_response_to_post_of(DEFAULT_MAX_BODY_BYTES).await;
+    let text = String::from_utf8_lossy(&response);
+    assert!(
+        !text.contains("413") && !text.contains("larger than"),
+        "unexpected response: {text}"
+    );
+}
+
 #[test]
 fn substitutes_only_on_allowed_route_and_header() {
     let plan = policy();
@@ -287,7 +328,7 @@ async fn request_body_limit_is_configurable() {
     drop(client);
     let error = read_http_request(&mut server, 10).await.err().unwrap();
     assert!(
-        error.to_string().contains("exceeded proxy limit"),
+        matches!(error, HttpReadError::BodyTooLarge { limit: 10 }),
         "{error}"
     );
 
@@ -1813,4 +1854,46 @@ role_arn = "arn:aws:iam::123456789012:role/app"
     secret_credential.lease = None;
     secret_credential.secret = Some("TOKEN".to_string());
     assert!(plan(secret_credential, command).contains("only a lease rule"));
+}
+
+/// Python 3.13+ verifies with OpenSSL's `X509_STRICT` flag by default, which
+/// requires a keyUsage extension on the CA and an authority key identifier on
+/// every certificate it signs (#1160).
+#[test]
+fn certificates_satisfy_strict_x509_verification() {
+    use x509_parser::prelude::*;
+
+    fn subject_key_id<'a>(certificate: &'a X509Certificate<'_>) -> Option<&'a [u8]> {
+        certificate
+            .extensions()
+            .iter()
+            .find_map(|extension| match extension.parsed_extension() {
+                ParsedExtension::SubjectKeyIdentifier(id) => Some(id.0),
+                _ => None,
+            })
+    }
+
+    let authority = super::ca::CertificateAuthority::new().unwrap();
+    let (host, _key) = authority.host_certificate("api.github.com").unwrap();
+    let (_, ca) = X509Certificate::from_der(authority.certificate.der()).unwrap();
+    let (_, host) = X509Certificate::from_der(host.der()).unwrap();
+
+    let constraints = ca
+        .basic_constraints()
+        .unwrap()
+        .expect("CA basicConstraints");
+    assert!(constraints.critical && constraints.value.ca);
+    let key_usage = ca.key_usage().unwrap().expect("CA keyUsage");
+    assert!(key_usage.value.key_cert_sign());
+    let ca_key_id = subject_key_id(&ca).expect("CA subject key identifier");
+
+    let authority_key_id = host
+        .extensions()
+        .iter()
+        .find_map(|extension| match extension.parsed_extension() {
+            ParsedExtension::AuthorityKeyIdentifier(aki) => aki.key_identifier.as_ref(),
+            _ => None,
+        })
+        .expect("host certificate authority key identifier");
+    assert_eq!(authority_key_id.0, ca_key_id);
 }

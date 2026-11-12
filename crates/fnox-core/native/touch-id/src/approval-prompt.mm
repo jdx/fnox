@@ -1,6 +1,8 @@
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
+#import <objc/message.h>
+#import <objc/runtime.h>
 #import "approval-button-style.h"
 #import "approval-presentation.h"
 #include "detail-copy-icons.generated.h"
@@ -102,13 +104,11 @@ NSColor* ColorForAppearance(NSColor* color, NSAppearance* appearance) {
 @end
 
 #if FNOX_HAS_GLASS_SDK
-API_AVAILABLE(macos(26.0))
-@interface FnoxApprovalGlassView : NSGlassEffectView
-- (void)updateSurface;
-@end
-
-@implementation FnoxApprovalGlassView
-- (void)updateSurface {
+// The glass view subclass is built at runtime. A static `@interface ... :
+// NSGlassEffectView` makes the binary link the superclass symbol at load time,
+// so dyld aborts before main on macOS releases that predate it.
+static void FnoxGlassUpdateSurface(NSGlassEffectView* self, SEL) API_AVAILABLE(macos(26.0));
+static void FnoxGlassUpdateSurface(NSGlassEffectView* self, SEL) {
   NSAppearanceName appearance = [self.effectiveAppearance
       bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]];
   const BOOL lightFrost = self.style == NSGlassEffectViewStyleRegular &&
@@ -130,15 +130,46 @@ API_AVAILABLE(macos(26.0))
   }
   self.contentView.layer.backgroundColor = tint.CGColor;
 }
-- (void)viewDidChangeEffectiveAppearance {
-  [super viewDidChangeEffectiveAppearance];
-  [self updateSurface];
+
+// Always the fixed base class, never derived from the instance: a KVO-style subclass swapped in
+// as the instance's class would otherwise make the super call re-enter these overrides.
+static Class FnoxGlassSuperclass(id) { return NSClassFromString(@"NSGlassEffectView"); }
+
+static void FnoxGlassDidChangeAppearance(NSGlassEffectView* self, SEL cmd)
+    API_AVAILABLE(macos(26.0));
+static void FnoxGlassDidChangeAppearance(NSGlassEffectView* self, SEL cmd) {
+  struct objc_super super_ = {self, FnoxGlassSuperclass(self)};
+  ((void (*)(struct objc_super*, SEL))objc_msgSendSuper)(&super_, cmd);
+  FnoxGlassUpdateSurface(self, nullptr);
 }
-- (void)setStyle:(NSGlassEffectViewStyle)style {
-  [super setStyle:style];
-  [self updateSurface];
+
+static void FnoxGlassSetStyle(NSGlassEffectView* self, SEL cmd, NSGlassEffectViewStyle style)
+    API_AVAILABLE(macos(26.0));
+static void FnoxGlassSetStyle(NSGlassEffectView* self, SEL cmd, NSGlassEffectViewStyle style) {
+  struct objc_super super_ = {self, FnoxGlassSuperclass(self)};
+  ((void (*)(struct objc_super*, SEL, NSGlassEffectViewStyle))objc_msgSendSuper)(&super_, cmd,
+                                                                                  style);
+  FnoxGlassUpdateSurface(self, nullptr);
 }
-@end
+
+// Returns Nil when the running system has no NSGlassEffectView (before macOS 26).
+static Class FnoxApprovalGlassViewClass() {
+  static Class glassClass = Nil;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    Class base = NSClassFromString(@"NSGlassEffectView");
+    if (base == Nil) return;
+    Class cls = objc_allocateClassPair(base, "FnoxApprovalGlassView", 0);
+    if (cls == Nil) return;
+    class_addMethod(cls, @selector(updateSurface), (IMP)FnoxGlassUpdateSurface, "v@:");
+    class_addMethod(cls, @selector(viewDidChangeEffectiveAppearance),
+                    (IMP)FnoxGlassDidChangeAppearance, "v@:");
+    class_addMethod(cls, @selector(setStyle:), (IMP)FnoxGlassSetStyle, "v@:q");
+    objc_registerClassPair(cls);
+    glassClass = cls;
+  });
+  return glassClass;
+}
 #endif
 
 void DrawFnoxFocusRing(NSView* view) {
@@ -468,12 +499,13 @@ void InstallApprovalGlass(FnoxApprovalPanel* panel, CGFloat width, CGFloat heigh
   // Keep the panel's standard content view on systems without NSGlassEffectView.
   panel.approvalContent = panel.contentView;
 #if FNOX_HAS_GLASS_SDK
+  Class glassClass = FnoxApprovalGlassViewClass();
+  if (glassClass == Nil) return;
   if (@available(macOS 26.0, *)) {
     panel.styleMask |= NSWindowStyleMaskFullSizeContentView;
     panel.opaque = NO;
     panel.backgroundColor = NSColor.clearColor;
-    FnoxApprovalGlassView* glass =
-        [[FnoxApprovalGlassView alloc] initWithFrame:panel.contentView.bounds];
+    NSGlassEffectView* glass = [[glassClass alloc] initWithFrame:panel.contentView.bounds];
     glass.style = NSGlassEffectViewStyleRegular;
     glass.cornerRadius = 16;
     glass.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
@@ -484,7 +516,7 @@ void InstallApprovalGlass(FnoxApprovalPanel* panel, CGFloat width, CGFloat heigh
     glass.contentView = container;
     panel.contentView = glass;
     panel.approvalContent = content;
-    [glass updateSurface];
+    FnoxGlassUpdateSurface(glass, nullptr);
   }
 #else
   (void)width;
@@ -494,13 +526,14 @@ void InstallApprovalGlass(FnoxApprovalPanel* panel, CGFloat width, CGFloat heigh
 
 void SetApprovalGlassTransition(NSPanel* panel, BOOL transitioning) {
 #if FNOX_HAS_GLASS_SDK
+  Class glassClass = FnoxApprovalGlassViewClass();
   if (@available(macOS 26.0, *)) {
-    if (![panel.contentView isKindOfClass:[NSGlassEffectView class]]) return;
+    if (glassClass == Nil || ![panel.contentView isKindOfClass:glassClass]) return;
     const BOOL reduceEffects =
         NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion ||
         NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceTransparency;
     const BOOL clear = transitioning && !reduceEffects;
-    FnoxApprovalGlassView* glass = (FnoxApprovalGlassView*)panel.contentView;
+    NSGlassEffectView* glass = (NSGlassEffectView*)panel.contentView;
     CALayer* surface = glass.contentView.layer;
     CALayer* visibleSurface = surface.presentationLayer;
     CGColorRef currentColor = (visibleSurface != nil ? visibleSurface : surface).backgroundColor;

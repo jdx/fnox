@@ -64,12 +64,12 @@ jobs:
           token: ${{ secrets.FNOX_GH_TOKEN }}
           persist-credentials: false
       - if: matrix.os == 'macos-latest'
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "26"
           package-manager-cache: false
       - if: matrix.os == 'macos-latest'
-        uses: apple-actions/import-codesign-certs@77ba2a2a8f5cfc8c405ebf3159f767c323e238f9 # v7.1.0
+        uses: apple-actions/import-codesign-certs@288b8ec97b82c66b6f2a6baaf7acc8dfbcbe331c # v7.2.0
         with:
           p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
           p12-password: ${{ secrets.CERTIFICATES_P12_PASS }}
@@ -346,7 +346,7 @@ jobs:
               printf '[[artifact]]\npath = "%s"\nbin = ["Fnox.app/Contents/MacOS/fnox"]\n\n' "$asset"
             done
           } > release-assets/packslip.toml
-      - uses: jdx/packslip@b934a22ba187f1d3928441170b9413c5119360bf # v1.11.2
+      - uses: jdx/packslip@44e50e5f64551234b4a382d991bd7f7f7d021d06 # v1.11.3
         env:
           # Override the workflow's PAT; Packslip only needs this job's token.
           GITHUB_TOKEN: ${{ github.token }}
@@ -375,7 +375,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
         with:
           experimental: true
           cache: false

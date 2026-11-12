@@ -313,7 +313,7 @@ fn hash_fnox_env_vars() -> String {
     use std::hash::{Hash, Hasher};
 
     let mut vars: BTreeMap<String, String> = BTreeMap::new();
-    for (key, value) in std::env::vars() {
+    for (key, value) in crate::env::utf8_vars() {
         if key.starts_with("FNOX_") {
             vars.insert(key, value);
         }

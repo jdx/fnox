@@ -399,7 +399,7 @@ where
     let request = match read_http_request(stream, policy.max_body_bytes).await {
         Ok(request) => request,
         Err(error) => {
-            write_error(stream, 400, &error.to_string()).await?;
+            write_error(stream, error.status(), &error.to_string()).await?;
             return Ok(());
         }
     };
@@ -620,13 +620,14 @@ where
     stream.flush().await.map_err(write_failed)
 }
 
-pub(super) async fn read_http_request<S>(stream: &mut S, max_body: usize) -> Result<HttpRequest>
+pub(super) async fn read_http_request<S>(
+    stream: &mut S,
+    max_body: usize,
+) -> std::result::Result<HttpRequest, HttpReadError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    read_http_request_limited(stream, max_body)
-        .await
-        .map_err(proxy_error)
+    read_http_request_limited(stream, max_body).await
 }
 
 pub(super) fn is_hop_by_hop_header(name: &str) -> bool {
@@ -671,6 +672,8 @@ where
     let reason = match status {
         400 => "Bad Request",
         403 => "Forbidden",
+        413 => "Content Too Large",
+        431 => "Request Header Fields Too Large",
         502 => "Bad Gateway",
         _ => "Error",
     };

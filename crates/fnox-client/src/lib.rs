@@ -14,7 +14,10 @@
 //! use fnox_client::document::EnvScope;
 //! use std::path::Path;
 //!
-//! let env: Vec<(String, String)> = std::env::vars().collect();
+//! let env: Vec<(String, String)> = std::env::vars_os()
+//!     // `std::env::vars` panics on a variable that is not valid UTF-8; skip it.
+//!     .filter_map(|(k, v)| Some((k.into_string().ok()?, v.into_string().ok()?)))
+//!     .collect();
 //! let get = |k: &str| env.iter().find(|(key, _)| key == k).map(|(_, v)| v.clone());
 //! let key = SocketKey::from_cli_env(&CliFlags::default(), &get);
 //! let client = Client::new(key, &RuntimeEnv::from_env(&get));

@@ -89,6 +89,10 @@ impl CiRedactCommand {
             .await
             {
                 Ok(Some(value)) => {
+                    // `sensitive = false` keeps plain configuration readable in the log.
+                    if !secret_config.is_sensitive() {
+                        continue;
+                    }
                     // Output CI-specific mask command
                     mask_fn(key, &value);
                 }
