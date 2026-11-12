@@ -547,9 +547,9 @@ EOF
 	assert_output "bar"
 
 	# The command still gets the variable byte for byte.
-	run env NON_UTF8="$(printf '\377')" "$FNOX_BIN" exec -- sh -c 'printf %s "$FOO "; printf %s "$NON_UTF8" | od -An -tx1'
+	run env NON_UTF8="$(printf '\377')" "$FNOX_BIN" exec -- sh -c 'printf "%s:" "$FOO"; printf %s "$NON_UTF8" | od -An -tx1 | tr -d " \t\n"'
 	assert_success
-	assert_output --regexp '^bar +ff$'
+	assert_output "bar:ff"
 }
 
 @test "daemon started with a non-UTF-8 environment variable serves requests" {
