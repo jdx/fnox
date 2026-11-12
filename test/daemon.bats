@@ -538,3 +538,43 @@ EOF
 	assert_failure
 	assert_output --partial "Secret 'BASE_ONLY' not found"
 }
+
+@test "daemon client tolerates a non-UTF-8 environment variable" {
+	daemon_config
+
+	run env NON_UTF8="$(printf '\377')" "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "bar"
+
+	# The command still gets the variable byte for byte.
+	run env NON_UTF8="$(printf '\377')" "$FNOX_BIN" exec -- sh -c 'printf %s "$FOO "; printf %s "$NON_UTF8" | od -An -tx1'
+	assert_success
+	assert_output --regexp '^bar +ff$'
+}
+
+@test "daemon started with a non-UTF-8 environment variable serves requests" {
+	daemon_config
+
+	run env NON_UTF8="$(printf '\377')" "$FNOX_BIN" daemon start
+	assert_success
+
+	run "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "bar"
+
+	run env NON_UTF8="$(printf '\377')" "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "bar"
+}
+
+@test "hook-env tolerates a non-UTF-8 environment variable" {
+	daemon_config
+
+	run env NON_UTF8="$(printf '\377')" "$FNOX_BIN" hook-env -s bash
+	assert_success
+	assert_output --partial "export FOO=bar"
+
+	run env NON_UTF8="$(printf '\377')" FNOX_DAEMON=off "$FNOX_BIN" hook-env -s bash
+	assert_success
+	assert_output --partial "export FOO=bar"
+}
