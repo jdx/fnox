@@ -5046,6 +5046,18 @@
         "env": "FNOX_NON_INTERACTIVE"
       },
       {
+        "name": "walk-up",
+        "usage": "--walk-up",
+        "help": "Write to the nearest parent config when the current directory has none",
+        "help_long": "Write to the nearest parent config when the current directory has none\n\nApplies to `set`, `remove`, and `import`. Without it, those commands create `fnox.toml` in the current directory when it has no config file. With it, they use the nearest parent directory's config, picked by the same rules, and create `fnox.toml` here only if no parent has one. The global config is never a fallback. `--config` and `--global` take precedence.",
+        "help_first_line": "Write to the nearest parent config when the current directory has none",
+        "short": [],
+        "long": ["walk-up"],
+        "hide": false,
+        "global": true,
+        "env": "FNOX_WALK_UP"
+      },
+      {
         "name": "write-profile",
         "usage": "--write-profile <WRITE_PROFILE>",
         "help": "Profile that write commands modify when several profiles are active",

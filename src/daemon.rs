@@ -2970,6 +2970,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
             no_defaults: false,
             non_interactive: false,
             write_profile: None,
+            walk_up: false,
             command: crate::commands::Commands::Version(crate::commands::version::VersionCommand),
         }
     }

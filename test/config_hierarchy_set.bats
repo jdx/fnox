@@ -335,3 +335,78 @@ EOF
 	refute_output --partial "NEW_STAGING"
 	assert_output --partial "BASE_SECRET"
 }
+
+@test "fnox set --walk-up writes to the nearest parent config" {
+	mkdir -p parent/child/grandchild
+	cat >parent/fnox.toml <<EOF
+[secrets]
+EXISTING = { default = "x" }
+EOF
+
+	cd parent/child/grandchild
+	run "$FNOX_BIN" set --walk-up WALKED "walked-value"
+	assert_success
+
+	assert [ ! -f fnox.toml ]
+	assert [ ! -f ../fnox.toml ]
+	run cat ../../fnox.toml
+	assert_output --partial "EXISTING"
+	assert_output --partial "WALKED"
+}
+
+@test "FNOX_WALK_UP=1 applies to set, import and remove" {
+	mkdir -p parent/child
+	cat >parent/fnox.toml <<EOF
+[providers.plain]
+type = "plain"
+
+[secrets]
+OLD = { default = "x" }
+EOF
+
+	cd parent/child
+	FNOX_WALK_UP=1 run "$FNOX_BIN" set VIA_ENV "v"
+	assert_success
+	assert [ ! -f fnox.toml ]
+
+	printf 'IMPORTED=1\n' >in.env
+	FNOX_WALK_UP=1 run "$FNOX_BIN" import -i in.env --provider plain -f env --force
+	assert_success
+	assert [ ! -f fnox.toml ]
+
+	FNOX_WALK_UP=1 run "$FNOX_BIN" remove OLD
+	assert_success
+	assert [ ! -f fnox.toml ]
+
+	run cat ../fnox.toml
+	assert_output --partial "VIA_ENV"
+	assert_output --partial "IMPORTED"
+	refute_output --partial "OLD"
+}
+
+@test "fnox set --walk-up does not override an explicit --config" {
+	mkdir -p parent/child
+	echo '[secrets]' >parent/fnox.toml
+
+	cd parent/child
+	printf "[providers.plain]\ntype = \"plain\"\n" >explicit.toml
+	run "$FNOX_BIN" set --walk-up -c ./explicit.toml EXPLICIT "v"
+	assert_success
+	assert [ -f explicit.toml ]
+	run cat ../fnox.toml
+	refute_output --partial "EXPLICIT"
+}
+
+@test "fnox set --walk-up leaves the current directory's own config alone" {
+	mkdir -p parent/child
+	echo '[secrets]' >parent/fnox.toml
+	echo '[secrets]' >parent/child/fnox.toml
+
+	cd parent/child
+	run "$FNOX_BIN" set --walk-up LOCAL "v"
+	assert_success
+	run cat fnox.toml
+	assert_output --partial "LOCAL"
+	run cat ../fnox.toml
+	refute_output --partial "LOCAL"
+}

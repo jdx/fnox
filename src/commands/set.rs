@@ -33,10 +33,13 @@ pub(crate) struct Stored {
 ///
 /// `config_arg` is the `--config` value: the default name searches the current
 /// directory for the write profile's file, and any other value is that file.
+/// With `walk_up`, a directory without a config of its own uses the nearest
+/// parent's instead.
 pub(crate) fn local_target_path(
     config_arg: &Path,
     profile: &[String],
     write_profile: Option<&str>,
+    walk_up: bool,
 ) -> Result<PathBuf> {
     let current_dir = std::env::current_dir()
         .map_err(|e| FnoxError::Config(format!("Failed to get current directory: {}", e)))?;
@@ -44,12 +47,20 @@ pub(crate) fn local_target_path(
     // Any other value means the user explicitly chose a config file.
     if config_arg == Path::new(config::DEFAULT_CONFIG_FILENAME) {
         let write_profile = Config::resolve_write_profile(profile, write_profile)?;
-        Ok(config::find_local_config(
-            &current_dir,
-            std::slice::from_ref(&write_profile),
-        ))
+        Ok(find_default_config(&current_dir, &write_profile, walk_up))
     } else {
         Ok(current_dir.join(config_arg))
+    }
+}
+
+/// The config file in `dir` that write commands target for `write_profile`,
+/// searching parent directories too when `walk_up` is set.
+pub(crate) fn find_default_config(dir: &Path, write_profile: &str, walk_up: bool) -> PathBuf {
+    let profiles = [write_profile.to_string()];
+    if walk_up {
+        config::find_local_config_walk_up(dir, &profiles)
+    } else {
+        config::find_local_config(dir, &profiles)
     }
 }
 
@@ -294,7 +305,12 @@ impl SetCommand {
             Config::global_config_path()
         } else {
             let profile = Config::get_profiles(cli.profile.as_slice());
-            local_target_path(&cli.config, &profile, cli.write_profile.as_deref())?
+            local_target_path(
+                &cli.config,
+                &profile,
+                cli.write_profile.as_deref(),
+                cli.walk_up,
+            )?
         };
         self.run_at(cli, config, target_path).await
     }
