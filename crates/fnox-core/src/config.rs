@@ -543,6 +543,12 @@ pub struct ProxyConfig {
     #[serde(default)]
     pub allow_domains: Vec<String>,
 
+    /// Largest request body the proxy accepts, in bytes. Defaults to 10 MiB
+    /// (10485760). Bodies are held in memory, so each concurrent request can
+    /// use up to this much. Must be greater than zero.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_body_bytes: Option<u64>,
+
     /// Non-public networks the proxy may connect to, as IP addresses or CIDR
     /// blocks, each optionally followed by a port (`127.0.0.1:4790`,
     /// `[::1]:4790`) that limits the entry to that port. Loopback, link-local
@@ -581,6 +587,7 @@ impl Default for ProxyConfig {
             audit: true,
             rules: Vec::new(),
             allow_domains: Vec::new(),
+            max_body_bytes: None,
             allow_private: Vec::new(),
             sandbox: false,
             sandbox_allow_write: Vec::new(),

@@ -396,7 +396,7 @@ pub(super) async fn proxy_http_request<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let request = match read_http_request(stream).await {
+    let request = match read_http_request(stream, policy.max_body_bytes).await {
         Ok(request) => request,
         Err(error) => {
             write_error(stream, 400, &error.to_string()).await?;
@@ -620,11 +620,11 @@ where
     stream.flush().await.map_err(write_failed)
 }
 
-pub(super) async fn read_http_request<S>(stream: &mut S) -> Result<HttpRequest>
+pub(super) async fn read_http_request<S>(stream: &mut S, max_body: usize) -> Result<HttpRequest>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    read_http_request_limited(stream, MAX_BODY_BYTES)
+    read_http_request_limited(stream, max_body)
         .await
         .map_err(proxy_error)
 }

@@ -252,7 +252,10 @@ async fn body_bearing_methods_require_content_length() {
         .unwrap();
     drop(client);
 
-    let error = read_http_request(&mut server).await.err().unwrap();
+    let error = read_http_request(&mut server, DEFAULT_MAX_BODY_BYTES)
+        .await
+        .err()
+        .unwrap();
 
     assert!(error.to_string().contains("must include content-length"));
 }
@@ -268,9 +271,40 @@ async fn explicit_empty_request_body_is_allowed() {
         .unwrap();
     drop(client);
 
-    let request = read_http_request(&mut server).await.unwrap();
+    let request = read_http_request(&mut server, DEFAULT_MAX_BODY_BYTES)
+        .await
+        .unwrap();
 
     assert!(request.body.is_empty());
+}
+
+#[tokio::test]
+async fn request_body_limit_is_configurable() {
+    let request = b"POST /upload HTTP/1.1\r\nhost: api.github.com\r\ncontent-length: 20\r\n\r\n01234567890123456789";
+
+    let (mut client, mut server) = tokio::io::duplex(1024);
+    client.write_all(request).await.unwrap();
+    drop(client);
+    let error = read_http_request(&mut server, 10).await.err().unwrap();
+    assert!(
+        error.to_string().contains("exceeded proxy limit"),
+        "{error}"
+    );
+
+    let (mut client, mut server) = tokio::io::duplex(1024);
+    client.write_all(request).await.unwrap();
+    drop(client);
+    let parsed = read_http_request(&mut server, 20).await.unwrap();
+    assert_eq!(parsed.body.len(), 20);
+}
+
+#[test]
+fn rejects_zero_max_body_bytes() {
+    let mut config = config();
+    config.max_body_bytes = Some(0);
+    assert!(validate_config(&config).is_err());
+    config.max_body_bytes = Some(64 * 1024 * 1024);
+    assert!(validate_config(&config).is_ok());
 }
 
 #[test]

@@ -168,7 +168,7 @@ With strict egress, the destination host must also be in `allow_domains`, so lis
 
 - Substitution happens in one HTTP header or one query parameter per rule. Request bodies and the URL path are never rewritten.
 - Matched hosts must use HTTPS on port 443. Plain `http://` requests are refused.
-- Intercepted traffic uses HTTP/1.1. Request bodies need a `Content-Length` (no chunked uploads). Request bodies are capped at 10 MiB. Responses are streamed to the client as they arrive, with secret values redacted on the way, so streaming APIs such as server-sent events work and responses have no size limit.
+- Intercepted traffic uses HTTP/1.1. Request bodies need a `Content-Length` (no chunked uploads). Request bodies are capped at 10 MiB by default; raise or lower the cap with `max_body_bytes` under `[proxy]`. Bodies are held in memory, so each concurrent request can use up to that much. Responses are streamed to the client as they arrive, with secret values redacted on the way, so streaming APIs such as server-sent events work and responses have no size limit.
 - Domains are exact, except for a leading `*.` that matches one subdomain label.
 - The program must honor the standard proxy and CA environment variables.
 

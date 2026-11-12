@@ -25,7 +25,7 @@ use crate::local_http::{
     HttpRequest, MAX_HEADER_BYTES, constant_time_eq, read_http_request_limited, read_line_limited,
 };
 
-const MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
+const DEFAULT_MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
 const DEFAULT_HEADER: &str = "authorization";
 /// Clients such as git first connect without credentials and retry after a
 /// 407 on the same connection; give up after this many unauthenticated tries.

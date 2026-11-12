@@ -109,6 +109,8 @@ impl PreparedRule {
 pub(super) struct ProxyPolicy {
     pub(super) egress: ProxyEgress,
     pub(super) audit: bool,
+    /// Largest request body accepted from a client
+    pub(super) max_body_bytes: usize,
     pub(super) rules: Vec<PreparedRule>,
     pub(super) allow_domains: Vec<String>,
     pub(super) destinations: Arc<DestinationPolicy>,
