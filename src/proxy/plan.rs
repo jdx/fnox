@@ -68,7 +68,7 @@ impl ProxyPlan {
     /// printing them on stderr
     pub fn set_audit_log(&self, path: std::path::PathBuf, profile: Vec<String>) {
         let _ = self.policy.audit_log.set(super::policy::AuditSink {
-            queue: fnox_core::audit::spawn_writer(path),
+            writer: fnox_core::audit::AuditWriter::spawn(path),
             profile,
         });
     }

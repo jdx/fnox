@@ -69,33 +69,80 @@ pub fn request_entry(profile: &[String], request: AuditRequest) -> AuditEntry {
 
 /// Records one proxy request. Failures are logged and swallowed, like
 /// [`record_reads`]. This writes on the calling thread; async callers should
-/// queue entries for a writer thread instead (see [`spawn_writer`]).
+/// queue entries for a writer thread instead (see [`AuditWriter`]).
 pub fn record_request(path: &Path, profile: &[String], request: AuditRequest) {
     if let Err(error) = append(path, &[request_entry(profile, request)]) {
         tracing::warn!("failed to write audit log: {error}");
     }
 }
 
-/// Starts a thread that appends queued entries to `path`, in order, so slow
-/// storage never stalls the caller. The thread ends when every sender is
-/// dropped. A full queue (1024 entries) makes senders wait rather than lose
-/// entries.
-pub fn spawn_writer(path: PathBuf) -> std::sync::mpsc::SyncSender<AuditEntry> {
-    let (tx, rx) = std::sync::mpsc::sync_channel::<AuditEntry>(1024);
-    std::thread::Builder::new()
-        .name("fnox-audit".into())
-        .spawn(move || {
-            while let Ok(first) = rx.recv() {
-                let mut batch = vec![first];
-                batch.extend(rx.try_iter().take(255));
-                if let Err(error) = append(&path, &batch) {
-                    tracing::warn!("failed to write audit log: {error}");
+/// Queue to a thread that appends entries to the log, so slow storage never
+/// stalls the caller. Entries are written in order. A full queue (1024
+/// entries) makes senders wait rather than lose entries; call [`flush`] before
+/// the process exits to wait for what is still queued.
+///
+/// [`flush`]: AuditWriter::flush
+#[derive(Debug)]
+pub struct AuditWriter {
+    queue: std::sync::mpsc::SyncSender<WriterMessage>,
+}
+
+#[derive(Debug)]
+enum WriterMessage {
+    Entry(Box<AuditEntry>),
+    Flush(std::sync::mpsc::SyncSender<()>),
+}
+
+impl AuditWriter {
+    /// Starts the writer thread. It ends when the writer is dropped.
+    pub fn spawn(path: PathBuf) -> Self {
+        let (queue, rx) = std::sync::mpsc::sync_channel::<WriterMessage>(1024);
+        let started = std::thread::Builder::new()
+            .name("fnox-audit".into())
+            .spawn(move || {
+                let mut batch: Vec<AuditEntry> = Vec::new();
+                let write = |batch: &mut Vec<AuditEntry>| {
+                    if batch.is_empty() {
+                        return;
+                    }
+                    if let Err(error) = append(&path, batch) {
+                        tracing::warn!("failed to write audit log: {error}");
+                    }
+                    batch.clear();
+                };
+                while let Ok(message) = rx.recv() {
+                    let mut pending = vec![message];
+                    pending.extend(rx.try_iter().take(255));
+                    for message in pending {
+                        match message {
+                            WriterMessage::Entry(entry) => batch.push(*entry),
+                            WriterMessage::Flush(done) => {
+                                write(&mut batch);
+                                let _ = done.send(());
+                            }
+                        }
+                    }
+                    write(&mut batch);
                 }
-            }
-        })
-        .map(drop)
-        .unwrap_or_else(|error| tracing::warn!("failed to start audit writer: {error}"));
-    tx
+            });
+        if let Err(error) = started {
+            tracing::warn!("failed to start audit writer: {error}");
+        }
+        Self { queue }
+    }
+
+    /// Queues one entry.
+    pub fn send(&self, entry: AuditEntry) {
+        let _ = self.queue.send(WriterMessage::Entry(Box::new(entry)));
+    }
+
+    /// Blocks until every entry queued so far has been written.
+    pub fn flush(&self) {
+        let (done, wait) = std::sync::mpsc::sync_channel(1);
+        if self.queue.send(WriterMessage::Flush(done)).is_ok() {
+            let _ = wait.recv();
+        }
+    }
 }
 
 /// The default log location: `audit.log` in the fnox state directory.

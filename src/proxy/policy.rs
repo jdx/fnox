@@ -108,14 +108,13 @@ impl PreparedRule {
 /// Queue to the thread that appends request records to the audit log
 #[derive(Debug)]
 pub(super) struct AuditSink {
-    pub(super) queue: std::sync::mpsc::SyncSender<fnox_core::audit::AuditEntry>,
+    pub(super) writer: fnox_core::audit::AuditWriter,
     pub(super) profile: Vec<String>,
 }
 
 impl AuditSink {
     fn record(&self, request: fnox_core::audit::AuditRequest) {
-        let _ = self
-            .queue
+        self.writer
             .send(fnox_core::audit::request_entry(&self.profile, request));
     }
 }

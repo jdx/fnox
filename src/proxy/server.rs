@@ -191,6 +191,16 @@ impl RunningProxy {
         }
         let _ = (&mut self.task).await;
         self.policy.leases.revoke_all(&self.policy.values).await;
+        // The caller may `process::exit` next; queued audit records must be on disk
+        if self.policy.audit_log.get().is_some() {
+            let policy = self.policy.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                if let Some(sink) = policy.audit_log.get() {
+                    sink.writer.flush();
+                }
+            })
+            .await;
+        }
     }
 }
 
