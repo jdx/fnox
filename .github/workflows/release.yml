@@ -272,10 +272,19 @@ jobs:
       matrix:
         target: [x86_64-pc-windows-msvc, aarch64-pc-windows-msvc]
     steps:
+      # Only tagged releases may be signed; a manual run from a branch is not a release.
+      - name: Require a release tag
+        if: github.ref_type != 'tag'
+        run: |
+          echo "::error::Windows binaries are signed only from a release tag, but this run is on ${GITHUB_REF}. Dispatch the workflow from the tag."
+          exit 1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: unsigned-binary-${{ matrix.target }}
           path: unsigned
+      # upload-artifact wraps the zip in an outer zip, so the SignPath artifact
+      # configuration must use a zip-file root containing the nested
+      # fnox-*.zip, and sign fnox.exe inside that.
       - name: Upload zip for SignPath
         id: upload-unsigned
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
