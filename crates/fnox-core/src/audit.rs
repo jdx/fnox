@@ -143,8 +143,8 @@ impl AuditWriter {
     /// log's storage has stalled, the entry is dropped, with a warning the first
     /// time, rather than stalling the caller.
     ///
-    /// Returns `false` when the writer was closed, so the caller can report the
-    /// entry another way. A full queue still returns `true`: the drop is warned about.
+    /// Returns `false` when the writer was closed or its thread is gone, so the
+    /// caller can report the entry another way. A full queue still returns `true`: the drop is warned about.
     pub fn send(&self, entry: AuditEntry) -> bool {
         use std::sync::atomic::{AtomicBool, Ordering};
         static WARNED: AtomicBool = AtomicBool::new(false);
@@ -152,13 +152,17 @@ impl AuditWriter {
         if *closed {
             return false;
         }
-        if let Err(std::sync::mpsc::TrySendError::Full(_)) =
-            self.queue.try_send(WriterMessage::Entry(Box::new(entry)))
-            && !WARNED.swap(true, Ordering::Relaxed)
-        {
-            tracing::warn!("audit log is not keeping up; dropping request records");
+        match self.queue.try_send(WriterMessage::Entry(Box::new(entry))) {
+            Ok(()) => true,
+            // The writer thread is gone (it failed to start), so nothing was queued
+            Err(std::sync::mpsc::TrySendError::Disconnected(_)) => false,
+            Err(std::sync::mpsc::TrySendError::Full(_)) => {
+                if !WARNED.swap(true, Ordering::Relaxed) {
+                    tracing::warn!("audit log is not keeping up; dropping request records");
+                }
+                true
+            }
         }
-        true
     }
 
     /// Stops accepting entries, then waits like [`flush`](AuditWriter::flush).
