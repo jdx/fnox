@@ -422,15 +422,15 @@ mod tests {
         let sock = |k: SocketKey| k.socket_path(&rt()).to_string_lossy().into_owned();
         assert_eq!(
             sock(key(&["default"])),
-            format!("{dir}/30f5ae85232fe89d-fnoxd.sock")
+            format!("{dir}/3bab770c82a47b34-fnoxd.sock")
         );
         assert_eq!(
             sock(key(&["dev", "prod"])),
-            format!("{dir}/c67505dfa7de548e-fnoxd.sock")
+            format!("{dir}/e8f9b1b46ed4b028-fnoxd.sock")
         );
         assert_eq!(
             sock(SocketKey::new(&s(&["default"]), true, None, None)),
-            format!("{dir}/e389fccd0be734c1-fnoxd.sock")
+            format!("{dir}/cd53664ed15d1908-fnoxd.sock")
         );
         assert_eq!(
             sock(SocketKey::new(
@@ -439,7 +439,7 @@ mod tests {
                 Some("x".into()),
                 None
             )),
-            format!("{dir}/d6faed40335f6a4a-fnoxd.sock")
+            format!("{dir}/cbb2147c329260f2-fnoxd.sock")
         );
         assert_eq!(
             sock(SocketKey::new(
@@ -448,7 +448,7 @@ mod tests {
                 None,
                 Some("x".into())
             )),
-            format!("{dir}/32317fdd68eebb70-fnoxd.sock")
+            format!("{dir}/1cd715c4c05eea62-fnoxd.sock")
         );
     }
 
@@ -458,7 +458,7 @@ mod tests {
     fn socket_hash_preimage_layout() {
         let mut pre = Vec::new();
         pre.extend_from_slice(b"fnoxd-socket\0");
-        pre.push(7);
+        pre.push(8);
         pre.extend_from_slice(&7u64.to_le_bytes());
         pre.extend_from_slice(b"default");
         pre.extend_from_slice(&1u64.to_le_bytes());
