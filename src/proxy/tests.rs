@@ -1962,7 +1962,12 @@ fn audit_log_receives_proxied_and_refused_requests() {
     policy.audit_refused("POST", "evil.example", Some("/x"), "no rule");
 
     // Shutdown waits for the writer thread, which appends in the background
-    policy.audit_log.get().unwrap().writer.flush();
+    policy
+        .audit_log
+        .get()
+        .unwrap()
+        .writer
+        .flush(std::time::Duration::from_secs(5));
     let entries = fnox_core::audit::tail(&log, 10, |_| true).unwrap();
     assert_eq!(entries.len(), 2);
     let served = entries[0].request.as_ref().unwrap();

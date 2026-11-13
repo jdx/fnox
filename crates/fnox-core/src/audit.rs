@@ -136,12 +136,29 @@ impl AuditWriter {
         let _ = self.queue.send(WriterMessage::Entry(Box::new(entry)));
     }
 
-    /// Blocks until every entry queued so far has been written.
-    pub fn flush(&self) {
+    /// Waits up to `timeout` for every entry queued so far to be written.
+    /// Returns `false` when it gave up, for example because the log sits on
+    /// stalled storage; the entries may then be lost.
+    pub fn flush(&self, timeout: std::time::Duration) -> bool {
+        use std::sync::mpsc::TrySendError;
+        let deadline = std::time::Instant::now() + timeout;
         let (done, wait) = std::sync::mpsc::sync_channel(1);
-        if self.queue.send(WriterMessage::Flush(done)).is_ok() {
-            let _ = wait.recv();
+        let mut message = WriterMessage::Flush(done);
+        loop {
+            match self.queue.try_send(message) {
+                Ok(()) => break,
+                Err(TrySendError::Disconnected(_)) => return false,
+                Err(TrySendError::Full(returned)) => {
+                    if std::time::Instant::now() >= deadline {
+                        return false;
+                    }
+                    message = returned;
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+            }
         }
+        wait.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+            .is_ok()
     }
 }
 

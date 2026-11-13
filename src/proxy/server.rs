@@ -195,8 +195,12 @@ impl RunningProxy {
         if self.policy.audit_log.get().is_some() {
             let policy = self.policy.clone();
             let _ = tokio::task::spawn_blocking(move || {
-                if let Some(sink) = policy.audit_log.get() {
-                    sink.writer.flush();
+                if let Some(sink) = policy.audit_log.get()
+                    && !sink.writer.flush(std::time::Duration::from_secs(3))
+                {
+                    tracing::warn!(
+                        "fnox proxy: could not finish writing the audit log; recent request records may be missing"
+                    );
                 }
             })
             .await;
