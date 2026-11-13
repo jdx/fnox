@@ -549,10 +549,30 @@
           },
           "status": {
             "full_cmd": ["daemon", "status"],
-            "usage": "daemon status",
+            "usage": "daemon status [-v --verbose] [--json]",
             "subcommands": {},
             "args": [],
             "flags": [
+              {
+                "name": "verbose",
+                "usage": "-v --verbose",
+                "help": "List each cached entry (key, profile, purpose, age, and TTL time left) without its value",
+                "help_first_line": "List each cached entry (key, profile, purpose, age, and TTL time left) without its value",
+                "short": ["v"],
+                "long": ["verbose"],
+                "hide": false,
+                "global": false
+              },
+              {
+                "name": "json",
+                "usage": "--json",
+                "help": "Print the status and cached entries as JSON; values are never included",
+                "help_first_line": "Print the status and cached entries as JSON; values are never included",
+                "short": [],
+                "long": ["json"],
+                "hide": false,
+                "global": false
+              },
               {
                 "name": "help",
                 "usage": "-h --help",
@@ -571,7 +591,7 @@
             "hide": false,
             "args_override_self": true,
             "help": "Show whether the daemon is running",
-            "help_long": "Show whether the daemon is running\n\nPrints the daemon's process ID and the number of cached entries, or that it is not running.",
+            "help_long": "Show whether the daemon is running\n\nPrints the daemon's process ID and the number of cached entries, or that it is not running. With `--verbose`, also lists each cached entry with its age and the time left on its `cache_ttl` and `max_cache_ttl`; values are never shown.",
             "name": "status",
             "aliases": [],
             "hidden_aliases": [],
@@ -580,6 +600,18 @@
               {
                 "code": "fnox daemon status",
                 "header": "Show daemon status",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox daemon status --verbose",
+                "header": "List cached entries and the time left on their TTLs",
+                "help": null,
+                "lang": ""
+              },
+              {
+                "code": "fnox daemon status --json",
+                "header": "Print the status and cached entries as JSON",
                 "help": null,
                 "lang": ""
               }

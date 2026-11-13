@@ -162,11 +162,13 @@ vault = "Engineering"
 
 Every provider entry needs a `type`. These fields apply to every type; the rest depend on the type and are listed on each [provider page](/providers/overview).
 
-| Field          | Type    | Default             | Description                                                            |
-| -------------- | ------- | ------------------- | ---------------------------------------------------------------------- |
-| `type`         | string  | required            | Provider type, such as `age`, `1password`, or `aws-sm`.                |
-| `auth_command` | string  | the type's built-in | Command to offer when authentication fails. `""` turns off the prompt. |
-| `daemon_cache` | boolean | `true`              | Set `false` to stop the daemon caching values from this provider.      |
+| Field           | Type     | Default             | Description                                                                            |
+| --------------- | -------- | ------------------- | -------------------------------------------------------------------------------------- |
+| `type`          | string   | required            | Provider type, such as `age`, `1password`, or `aws-sm`.                                |
+| `auth_command`  | string   | the type's built-in | Command to offer when authentication fails. `""` turns off the prompt.                 |
+| `daemon_cache`  | boolean  | `true`              | Set `false` to stop the daemon caching values from this provider.                      |
+| `cache_ttl`     | duration | `[daemon]` value    | Sliding TTL for values cached from this provider. Overrides `[daemon] cache_ttl`.      |
+| `max_cache_ttl` | duration | `[daemon]` value    | Absolute TTL for values cached from this provider. Overrides `[daemon] max_cache_ttl`. |
 
 Provider types: `1password`, `age`, `aws-kms`, `aws-ps`, `aws-sm`, `azure-ac`, `azure-kms`, `azure-sm`, `bitwarden`, `bitwarden-sm`, `doppler`, `enpass`, `fido2`, `foks`, `gcp-kms`, `gcp-sm`, `gopass`, `infisical`, `keepass`, `keeper-sm`, `keychain`, `kubernetes`, `lua`, `password-store`, `passwordstate`, `plain`, `proton-pass`, `vault`, `yubikey`.
 
@@ -204,22 +206,24 @@ DATABASE_URL = { provider = "op", value = "Database/url", description = "Main da
 
 Secret names are environment variable names: they must match `^[A-Za-z_][A-Za-z0-9_]*$`. Every field is optional; `API_KEY = {}` declares a secret that comes from the environment.
 
-| Field          | Type                            | Default            | Description                                                                                        |
-| -------------- | ------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- |
-| `provider`     | string                          | `default_provider` | Provider that holds or decrypts the value.                                                         |
-| `value`        | string                          | none               | Ciphertext for encryption providers, or the item reference for remote providers.                   |
-| `default`      | string                          | none               | Fallback when the provider returns nothing or fails.                                               |
-| `if_missing`   | `"error"`, `"warn"`, `"ignore"` | inherited          | Missing-secret behavior for this secret.                                                           |
-| `env`          | `true`, `"exec"`, `false`       | top-level `env`    | Where the secret is injected as an environment variable.                                           |
-| `as_file`      | boolean                         | `false`            | Inject the path of a temporary file holding the value.                                             |
-| `sensitive`    | boolean                         | `true`             | Set `false` to leave the value readable in redacted output. See [`sensitive`](#sensitive).         |
-| `json_path`    | string                          | none               | Extract a field from a JSON value, with dot notation for nesting.                                  |
-| `line`         | integer, 1 or more              | none               | Extract one line from a multi-line value.                                                          |
-| `description`  | string                          | none               | Shown by `fnox list`.                                                                              |
-| `url`          | string                          | none               | `http(s)` page where a new value is created. Shown by `fnox list`; `fnox set KEY --open` opens it. |
-| `daemon_cache` | boolean                         | `true`             | Set `false` to resolve this secret directly instead of from the daemon cache.                      |
-| `sync`         | table                           | none               | Encrypted cache written by `fnox sync`.                                                            |
-| `push`         | array of strings                | none               | [Push targets](#push-targets) that `fnox push` copies the value into.                              |
+| Field           | Type                            | Default                      | Description                                                                                        |
+| --------------- | ------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| `provider`      | string                          | `default_provider`           | Provider that holds or decrypts the value.                                                         |
+| `value`         | string                          | none                         | Ciphertext for encryption providers, or the item reference for remote providers.                   |
+| `default`       | string                          | none                         | Fallback when the provider returns nothing or fails.                                               |
+| `if_missing`    | `"error"`, `"warn"`, `"ignore"` | inherited                    | Missing-secret behavior for this secret.                                                           |
+| `env`           | `true`, `"exec"`, `false`       | top-level `env`              | Where the secret is injected as an environment variable.                                           |
+| `as_file`       | boolean                         | `false`                      | Inject the path of a temporary file holding the value.                                             |
+| `sensitive`     | boolean                         | `true`                       | Set `false` to leave the value readable in redacted output. See [`sensitive`](#sensitive).         |
+| `json_path`     | string                          | none                         | Extract a field from a JSON value, with dot notation for nesting.                                  |
+| `line`          | integer, 1 or more              | none                         | Extract one line from a multi-line value.                                                          |
+| `description`   | string                          | none                         | Shown by `fnox list`.                                                                              |
+| `url`           | string                          | none                         | `http(s)` page where a new value is created. Shown by `fnox list`; `fnox set KEY --open` opens it. |
+| `daemon_cache`  | boolean                         | `true`                       | Set `false` to resolve this secret directly instead of from the daemon cache.                      |
+| `cache_ttl`     | duration                        | provider or `[daemon]` value | Sliding TTL for this secret in the daemon cache. Overrides the provider and `[daemon]` values.     |
+| `max_cache_ttl` | duration                        | provider or `[daemon]` value | Absolute TTL for this secret in the daemon cache. Overrides the provider and `[daemon]` values.    |
+| `sync`          | table                           | none                         | Encrypted cache written by `fnox sync`.                                                            |
+| `push`          | array of strings                | none                         | [Push targets](#push-targets) that `fnox push` copies the value into.                              |
 
 ### Resolution order
 
@@ -442,12 +446,18 @@ Maps a plugin name to its git source. A source is a git URL, optionally followed
 [daemon]
 enabled = true
 idle_timeout = "8h"
+cache_ttl = "30m"
+max_cache_ttl = "4h"
 ```
 
-| Field          | Type     | Default | Description                                                              |
-| -------------- | -------- | ------- | ------------------------------------------------------------------------ |
-| `enabled`      | boolean  | `false` | Resolve secrets through the per-user daemon. `FNOX_DAEMON` overrides it. |
-| `idle_timeout` | duration | `"8h"`  | How long the daemon runs without requests before it exits.               |
+| Field           | Type     | Default | Description                                                                                          |
+| --------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------- |
+| `enabled`       | boolean  | `false` | Resolve secrets through the per-user daemon. `FNOX_DAEMON` overrides it.                             |
+| `idle_timeout`  | duration | `"8h"`  | How long the daemon runs without requests before it exits.                                           |
+| `cache_ttl`     | duration | unset   | Sliding TTL for each cached secret; each read restarts it. Unset means no expiry from inactivity.    |
+| `max_cache_ttl` | duration | unset   | Absolute TTL for each cached secret, counted from when it was stored. Unset means no absolute limit. |
+
+A secret or provider can override both TTLs; see the tables below.
 
 See [daemon](/guide/daemon).
 

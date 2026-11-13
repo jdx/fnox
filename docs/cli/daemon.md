@@ -34,7 +34,7 @@ FNOX_DAEMON=on fnox get DATABASE_URL
 
 - [`fnox daemon clear [KEYS]…`](/cli/daemon/clear.md)
 - [`fnox daemon start`](/cli/daemon/start.md)
-- [`fnox daemon status`](/cli/daemon/status.md)
+- [`fnox daemon status [-v --verbose] [--json]`](/cli/daemon/status.md)
 - [`fnox daemon stop`](/cli/daemon/stop.md)
 
 ## See also

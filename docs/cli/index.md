@@ -74,7 +74,7 @@ Put fnox options before the `--` that starts a child command, as in `fnox -P pro
 - [`fnox daemon <SUBCOMMAND>`](/cli/daemon.md)
 - [`fnox daemon clear [KEYS]…`](/cli/daemon/clear.md)
 - [`fnox daemon start`](/cli/daemon/start.md)
-- [`fnox daemon status`](/cli/daemon/status.md)
+- [`fnox daemon status [-v --verbose] [--json]`](/cli/daemon/status.md)
 - [`fnox daemon stop`](/cli/daemon/stop.md)
 - [`fnox deactivate`](/cli/deactivate.md)
 - [`fnox doctor`](/cli/doctor.md)

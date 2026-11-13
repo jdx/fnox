@@ -439,6 +439,17 @@ pub struct SecretConfig {
     /// Defaults to true; set false for secrets that should always resolve directly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub daemon_cache: Option<bool>,
+
+    /// Sliding TTL for this secret's daemon cache entry, such as "5m". Each read
+    /// restarts it. Overrides the provider's and `[daemon] cache_ttl`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<String>,
+
+    /// Absolute TTL for this secret's daemon cache entry, counted from when the
+    /// value was stored. Reads never extend it. Overrides the provider's and
+    /// `[daemon] max_cache_ttl`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_cache_ttl: Option<String>,
 }
 
 /// Configuration for a profile
@@ -551,6 +562,16 @@ pub struct DaemonConfig {
     /// Idle timeout before the daemon exits, such as "8h", "30m", or "300s".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idle_timeout: Option<String>,
+
+    /// Sliding TTL for each cached secret, such as "30m". Each read restarts it.
+    /// Unset means entries never expire from inactivity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<String>,
+
+    /// Absolute TTL for each cached secret, counted from when the value was
+    /// stored. Reads never extend it. Unset means no absolute limit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_cache_ttl: Option<String>,
 }
 
 /// Local access audit log configuration
@@ -1447,6 +1468,12 @@ impl Config {
             }
             if overlay_daemon.idle_timeout.is_some() {
                 base_daemon.idle_timeout = overlay_daemon.idle_timeout;
+            }
+            if overlay_daemon.cache_ttl.is_some() {
+                base_daemon.cache_ttl = overlay_daemon.cache_ttl;
+            }
+            if overlay_daemon.max_cache_ttl.is_some() {
+                base_daemon.max_cache_ttl = overlay_daemon.max_cache_ttl;
             }
         }
 
@@ -2780,6 +2807,8 @@ impl SecretConfig {
             source_is_profile: false,
             source_profile: None,
             daemon_cache: None,
+            cache_ttl: None,
+            max_cache_ttl: None,
         }
     }
 
@@ -2862,6 +2891,15 @@ impl SecretConfig {
         if let Some(daemon_cache) = self.daemon_cache {
             inline.insert("daemon_cache", toml_edit::Value::from(daemon_cache));
         }
+        if let Some(cache_ttl) = &self.cache_ttl {
+            inline.insert("cache_ttl", toml_edit::Value::from(cache_ttl.as_str()));
+        }
+        if let Some(max_cache_ttl) = &self.max_cache_ttl {
+            inline.insert(
+                "max_cache_ttl",
+                toml_edit::Value::from(max_cache_ttl.as_str()),
+            );
+        }
 
         inline.fmt();
         inline
@@ -2933,6 +2971,16 @@ impl SecretConfig {
             (!self.push.is_empty()).then(|| push_array(&self.push)),
         );
         set_or_remove(table, "daemon_cache", self.daemon_cache.map(Value::from));
+        set_or_remove(
+            table,
+            "cache_ttl",
+            self.cache_ttl.as_deref().map(Value::from),
+        );
+        set_or_remove(
+            table,
+            "max_cache_ttl",
+            self.max_cache_ttl.as_deref().map(Value::from),
+        );
     }
 
     /// Update a TOML item with this secret config while preserving the
@@ -3208,6 +3256,8 @@ root = true
                 format: crate::providers::OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
         );
         let mut secret = SecretConfig::new();

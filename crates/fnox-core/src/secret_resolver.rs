@@ -1964,6 +1964,8 @@ mod tests {
                 format: crate::providers::OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
         );
 
@@ -2023,6 +2025,8 @@ mod tests {
                 format: crate::providers::OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
         );
 
@@ -2052,6 +2056,8 @@ mod tests {
                 format: crate::providers::OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
         );
 
@@ -2179,6 +2185,8 @@ mod tests {
                 format: crate::providers::OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
         );
 
@@ -2304,6 +2312,8 @@ mod tests {
                 format: crate::providers::OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
         );
         let mut secret = plain_provider_secret("from-provider");
@@ -2472,6 +2482,8 @@ mod tests {
                 token: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
         );
 

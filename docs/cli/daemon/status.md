@@ -6,14 +6,16 @@ description: "Show whether the daemon is running. Usage, flags, and examples for
 
 # `fnox daemon status`
 
-- **Usage:** `fnox daemon status`
+- **Usage:** `fnox daemon status [-v --verbose] [--json]`
 
 Show whether the daemon is running
 
-Prints the daemon's process ID and the number of cached entries, or that it is not running.
+Prints the daemon's process ID and the number of cached entries, or that it is not running. With `--verbose`, also lists each cached entry with its age and the time left on its `cache_ttl` and `max_cache_ttl`; values are never shown.
 
 ## Flags
 
+- **`-v --verbose`** — List each cached entry (key, profile, purpose, age, and TTL time left) without its value
+- **`--json`** — Print the status and cached entries as JSON; values are never included
 - **`-h --help`** — Print help
 
 ## Examples
@@ -22,6 +24,18 @@ Prints the daemon's process ID and the number of cached entries, or that it is n
 
 ```sh
 fnox daemon status
+```
+
+**List cached entries and the time left on their TTLs**
+
+```sh
+fnox daemon status --verbose
+```
+
+**Print the status and cached entries as JSON**
+
+```sh
+fnox daemon status --json
 ```
 
 ## See also

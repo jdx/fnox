@@ -58,12 +58,31 @@ enum DaemonSubcommand {
     /// Show whether the daemon is running
     ///
     /// Prints the daemon's process ID and the number of cached entries, or that
-    /// it is not running.
+    /// it is not running. With `--verbose`, also lists each cached entry with its
+    /// age and the time left on its `cache_ttl` and `max_cache_ttl`; values are
+    /// never shown.
     #[usage(
         example("fnox daemon status", header = "Show daemon status"),
+        example(
+            "fnox daemon status --verbose",
+            header = "List cached entries and the time left on their TTLs"
+        ),
+        example(
+            "fnox daemon status --json",
+            header = "Print the status and cached entries as JSON"
+        ),
         after_long_help = "See also:\n- Daemon: https://fnox.jdx.dev/guide/daemon"
     )]
-    Status,
+    Status {
+        /// List each cached entry (key, profile, purpose, age, and TTL time
+        /// left) without its value
+        #[usage(short, long)]
+        verbose: bool,
+
+        /// Print the status and cached entries as JSON; values are never included
+        #[usage(long)]
+        json: bool,
+    },
     /// Stop the daemon and discard its cache
     ///
     /// While the daemon is still enabled, the next command that reads a secret
@@ -109,12 +128,30 @@ impl DaemonCommand {
                 }
                 Ok(())
             }
-            DaemonSubcommand::Status => {
-                match daemon::status(cli).await? {
-                    Some((pid, cached_entries)) => {
+            DaemonSubcommand::Status { verbose, json } => {
+                let status = daemon::status(cli).await?;
+                if *json {
+                    let value = match &status {
+                        Some(status) => serde_json::json!({
+                            "running": true,
+                            "pid": status.pid,
+                            "cached_entries": status.cached_entries,
+                            "entries": status.entries,
+                        }),
+                        None => serde_json::json!({ "running": false }),
+                    };
+                    println!("{}", serde_json::to_string_pretty(&value)?);
+                    return Ok(());
+                }
+                match status {
+                    Some(status) => {
                         println!("fnox daemon running");
-                        println!("pid: {}", pid);
-                        println!("cached_entries: {}", cached_entries);
+                        println!("pid: {}", status.pid);
+                        println!("cached_entries: {}", status.cached_entries);
+                        if *verbose && !status.entries.is_empty() {
+                            println!();
+                            print!("{}", daemon::format_entries(&status.entries));
+                        }
                     }
                     None => println!("fnox daemon not running"),
                 }

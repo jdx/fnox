@@ -97,6 +97,22 @@ pub struct ResolveBatchRequest {
     pub env: Vec<(String, String)>,
 }
 
+/// One cached secret as `Status` reports it. Never carries the value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CacheEntryInfo {
+    pub key: String,
+    pub profile: Vec<String>,
+    pub purpose: String,
+    /// Seconds since the value was stored.
+    pub age_secs: u64,
+    /// Seconds until the sliding `cache_ttl` expires the entry, if one is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_left_secs: Option<u64>,
+    /// Seconds until the absolute `max_cache_ttl` expires the entry, if one is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_left_secs: Option<u64>,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ResolveOneRequest {
     pub cwd: PathBuf,
@@ -157,6 +173,9 @@ pub enum Response {
     Status {
         pid: u32,
         cached_entries: usize,
+        /// What the daemon holds, without values. Absent from older daemons.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        entries: Vec<CacheEntryInfo>,
     },
     Ok,
     Error {
@@ -306,10 +325,12 @@ impl fmt::Debug for Response {
             Self::Status {
                 pid,
                 cached_entries,
+                entries,
             } => f
                 .debug_struct("Status")
                 .field("pid", pid)
                 .field("cached_entries", cached_entries)
+                .field("entries", entries)
                 .finish(),
             Self::Ok => f.write_str("Ok"),
             Self::Error { message } => f.debug_struct("Error").field("message", message).finish(),
