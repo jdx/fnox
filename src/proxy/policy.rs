@@ -392,13 +392,19 @@ impl ProxyPolicy {
         if !self.audit {
             return;
         }
-        let destination = loggable_target(destination);
-        let logged_path = path.unwrap_or("-");
+        // A path or reason can echo a secret value the client sent unsubstituted
+        let redactions = self.redactions();
+        let redact = |text: &str| redact_string(text, &redactions);
+        let destination = redact(&loggable_target(destination));
+        let reason = redact(reason);
+        let reason = reason.as_str();
+        let path = path.map(redact);
+        let logged_path = path.as_deref().unwrap_or("-");
         if let Some(sink) = self.audit_log.get() {
             sink.record(fnox_core::audit::AuditRequest {
                 method: method.to_string(),
                 domain: destination.to_string(),
-                path: path.map(str::to_string).unwrap_or_default(),
+                path: path.clone().unwrap_or_default(),
                 injected: Vec::new(),
                 refused: Some(reason.to_string()),
             });
@@ -420,6 +426,8 @@ impl ProxyPolicy {
         if !self.audit {
             return;
         }
+        let redactions = self.redactions();
+        let path = &redact_string(path, &redactions);
         if let Some(sink) = self.audit_log.get() {
             sink.record(fnox_core::audit::AuditRequest {
                 method: method.to_string(),

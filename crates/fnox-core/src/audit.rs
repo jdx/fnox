@@ -77,9 +77,9 @@ pub fn record_request(path: &Path, profile: &[String], request: AuditRequest) {
 }
 
 /// Queue to a thread that appends entries to the log, so slow storage never
-/// stalls the caller. Entries are written in order. A full queue (1024
-/// entries) makes senders wait rather than lose entries; call [`flush`] before
-/// the process exits to wait for what is still queued.
+/// stalls the caller. Entries are written in order. When the queue (1024
+/// entries) is full, new entries are dropped rather than blocking; call
+/// [`flush`] before the process exits to wait for what is still queued.
 ///
 /// [`flush`]: AuditWriter::flush
 #[derive(Debug)]
@@ -131,9 +131,18 @@ impl AuditWriter {
         Self { queue }
     }
 
-    /// Queues one entry.
+    /// Queues one entry without blocking. When the queue is full because the
+    /// log's storage has stalled, the entry is dropped, with a warning the first
+    /// time, rather than stalling the caller.
     pub fn send(&self, entry: AuditEntry) {
-        let _ = self.queue.send(WriterMessage::Entry(Box::new(entry)));
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static WARNED: AtomicBool = AtomicBool::new(false);
+        if let Err(std::sync::mpsc::TrySendError::Full(_)) =
+            self.queue.try_send(WriterMessage::Entry(Box::new(entry)))
+            && !WARNED.swap(true, Ordering::Relaxed)
+        {
+            tracing::warn!("audit log is not keeping up; dropping request records");
+        }
     }
 
     /// Waits up to `timeout` for every entry queued so far to be written.

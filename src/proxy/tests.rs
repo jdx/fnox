@@ -1960,6 +1960,13 @@ fn audit_log_receives_proxied_and_refused_requests() {
         &["GITHUB_TOKEN".into()],
     );
     policy.audit_refused("POST", "evil.example", Some("/x"), "no rule");
+    policy.audit_proxied("GET", "api.github.com", "/repos/example/real-token", &[]);
+    policy.audit_refused(
+        "POST",
+        "evil.example",
+        Some("/real-token"),
+        "bad real-token",
+    );
 
     // Shutdown waits for the writer thread, which appends in the background
     policy
@@ -1969,7 +1976,13 @@ fn audit_log_receives_proxied_and_refused_requests() {
         .writer
         .flush(std::time::Duration::from_secs(5));
     let entries = fnox_core::audit::tail(&log, 10, |_| true).unwrap();
-    assert_eq!(entries.len(), 2);
+    assert_eq!(entries.len(), 4);
+    assert!(
+        !std::fs::read_to_string(&log)
+            .unwrap()
+            .contains("real-token"),
+        "known secret values are redacted from paths and reasons"
+    );
     let served = entries[0].request.as_ref().unwrap();
     assert_eq!(served.injected, ["GITHUB_TOKEN"]);
     assert!(served.refused.is_none());
