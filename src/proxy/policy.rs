@@ -113,6 +113,17 @@ pub(super) struct AuditSink {
 }
 
 impl AuditSink {
+    #[cfg(test)]
+    pub(super) fn record_for_test(&self) -> bool {
+        self.record(fnox_core::audit::AuditRequest {
+            method: "GET".into(),
+            domain: "x".into(),
+            path: "/".into(),
+            injected: Vec::new(),
+            refused: None,
+        })
+    }
+
     /// Returns false once the log is closed at shutdown, so the caller
     /// reports the request on stderr instead of queueing it where exit loses it
     fn record(&self, request: fnox_core::audit::AuditRequest) -> bool {

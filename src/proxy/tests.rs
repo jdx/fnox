@@ -2029,3 +2029,36 @@ async fn shutdown_does_not_wait_for_idle_connections_and_keeps_audit_entries() {
     let entries = fnox_core::audit::tail(&log, 10, |_| true).unwrap();
     assert_eq!(entries.len(), 1, "the refusal is on disk after shutdown");
 }
+
+#[tokio::test]
+async fn requests_after_shutdown_are_not_queued_to_the_closed_audit_log() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = dir.path().join("audit.log");
+    let mut plan = policy();
+    let policy_mut = std::sync::Arc::get_mut(&mut plan.policy).unwrap();
+    policy_mut.audit = true;
+    policy_mut
+        .audit_log
+        .set(super::policy::AuditSink {
+            writer: fnox_core::audit::AuditWriter::spawn(log.clone()),
+            profile: vec!["default".to_string()],
+        })
+        .unwrap();
+    let running = RunningProxy::start(plan, ProxyListener::Loopback)
+        .await
+        .unwrap();
+    let policy = running.policy.clone();
+    running.shutdown().await;
+    // A handler that outlived the grace period records after the final flush;
+    // the closed log refuses it, so it is reported on stderr, not queued
+    policy.audit_refused("GET", "api.github.com:443", Some("/late"), "late");
+    policy.audit_proxied("GET", "api.github.com", "/late", &[]);
+    let sink = policy.audit_log.get().unwrap();
+    assert!(!sink.record_for_test());
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    assert!(
+        fnox_core::audit::tail(&log, 10, |_| true)
+            .unwrap()
+            .is_empty()
+    );
+}
