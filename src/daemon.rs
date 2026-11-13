@@ -394,7 +394,13 @@ pub async fn resolve_batch_with_context(
                 batch_request,
                 fingerprint,
                 epoch,
-                values.clone(),
+                // Cache hits keep their stored entry, and with it their
+                // `max_cache_ttl` window; only fresh values are written back.
+                values
+                    .iter()
+                    .filter(|(key, _)| !cached_keys.contains(*key))
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect(),
             )
             .await
             {
@@ -1973,6 +1979,15 @@ fn config_fingerprint(config: &Config, env: &[(String, String)]) -> Result<Strin
             hasher.update(&content);
         }
     }
+    // Entries copy their TTLs when stored, and `[daemon]` may live in a file the
+    // sources above do not cover, such as the global config. Changing a
+    // timer must not leave older entries on the old limits.
+    if let Some(daemon) = &config.daemon {
+        hasher.update(b"cache_ttl");
+        hasher.update(daemon.cache_ttl.as_deref().unwrap_or("").as_bytes());
+        hasher.update(b"max_cache_ttl");
+        hasher.update(daemon.max_cache_ttl.as_deref().unwrap_or("").as_bytes());
+    }
     let mut env = env.to_vec();
     env.sort_by(|a, b| a.0.cmp(&b.0));
     for (key, value) in env {
@@ -2604,6 +2619,21 @@ OWN = { provider = "plain", value = "c", cache_ttl = "5m", max_cache_ttl = "15m"
         .unwrap();
 
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn config_fingerprint_tracks_daemon_cache_ttls() {
+        let mut config = Config::default();
+        let none = config_fingerprint(&config, &[]).unwrap();
+        config.daemon = Some(crate::config::DaemonConfig {
+            cache_ttl: Some("30m".to_string()),
+            ..Default::default()
+        });
+        let ttl = config_fingerprint(&config, &[]).unwrap();
+        config.daemon.as_mut().unwrap().max_cache_ttl = Some("4h".to_string());
+        let both = config_fingerprint(&config, &[]).unwrap();
+        assert_ne!(none, ttl);
+        assert_ne!(ttl, both);
     }
 
     #[test]
