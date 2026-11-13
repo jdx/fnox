@@ -41,7 +41,7 @@ Windows release binaries (`fnox.exe`) are Authenticode-signed. Free code signing
 - **Signing policy:** only binaries built by the [release workflow](https://github.com/jdx/fnox/blob/main/.github/workflows/release.yml) from this repository's tagged releases are submitted for signing, and each signing request is approved by the project maintainer ([@jdx](https://github.com/jdx)).
 - **Privacy:** fnox does not collect telemetry. Network calls include configured secret providers and other user-requested actions, such as plugin downloads and proxied requests. Nothing is sent to the signing service beyond the release binaries submitted for signing.
 
-To check a download, right-click `fnox.exe`, choose Properties, then Digital Signatures, or run `Get-AuthenticodeSignature .\fnox.exe` in PowerShell.
+To check a download, run `Get-AuthenticodeSignature .\fnox.exe` in PowerShell, or open the file's Properties and its Digital Signatures tab. Trust the file only if the status is `Valid` and the signer is **SignPath Foundation**; a valid signature from any other publisher is not a fnox release.
 
 ## Verify
 
