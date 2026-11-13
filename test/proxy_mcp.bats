@@ -183,7 +183,7 @@ PY
 	run "$FNOX_BIN" proxy run -- "$FNOX_BIN" --no-defaults mcp </dev/null
 	assert_failure
 	assert_output --partial "pass --no-defaults to fnox proxy run"
-	run "$FNOX_BIN" proxy run -- "$FNOX_BIN" --walk-up mcp </dev/null
+	run env -u FNOX_WALK_UP "$FNOX_BIN" proxy run -- "$FNOX_BIN" --walk-up mcp </dev/null
 	assert_failure
 	assert_output --partial "pass --walk-up to fnox proxy run"
 }
