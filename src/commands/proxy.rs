@@ -466,6 +466,9 @@ impl ProxyRunCommand {
         )?;
         let session = std::sync::Arc::new(session);
         plan.set_session(session.clone());
+        if fnox_core::audit::is_enabled(&config) {
+            plan.set_audit_log(fnox_core::audit::log_path(&config), profile.clone());
+        }
         // Resolving later (a pending secret, or an MCP tool) must not prompt:
         // the child owns the terminal now
         crate::env::set_non_interactive(true);

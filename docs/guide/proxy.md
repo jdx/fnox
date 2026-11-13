@@ -191,15 +191,16 @@ All of these send the proxy password from `HTTPS_PROXY`. curl, wget, Python, Nod
 
 Not tested: Deno, Bun, the JVM, .NET, Rust programs that bundle their own roots, Node versions that ignore `NODE_USE_ENV_PROXY`, macOS, and Windows. A program that uses its own trust store may ignore the CA variables and fail the TLS handshake. A client that ignores the proxy variables connects directly, and the real server then receives the placeholder instead of the secret (confirmed with Node and the proxy variables removed).
 
-To check a client, run it once and read the audit line:
+To check a client, run it once and read the audit line. With the [audit log](/guide/audit) on (`[audit] enabled = true` or `FNOX_AUDIT=on`), the proxy appends each request there and prints nothing on stderr, so a full-screen child such as a TUI isn't drawn over. Read the entries with `fnox audit --command proxy`. Without it, fnox prints the lines on stderr as shown below.
 
 ```sh
 fnox proxy run -- your-client https://api.example.com/
+fnox audit --command proxy
 ```
 
 `injected=["GITHUB_TOKEN"]` means the placeholder was substituted. `injected=[]` with a `proxied request` line means the request arrived but didn't carry a placeholder in the allowed header or parameter. A `refused request` line gives the `reason`: for example, the destination has no rule, the route or method doesn't match, the address isn't public, or the client didn't send the proxy password (a client that strips credentials from proxy URLs fails this way).
 
-Uninspected tunnels (`allow_domains` and permissive egress) aren't logged. A missing audit line is not proof that the client bypassed the proxy: it is also absent when `audit = false` and when the client rejected the proxy's CA and never sent a request. Check the client's own connection errors first, make sure `audit` is on, and run with `RUST_LOG=fnox::proxy=debug` if you need more detail.
+Uninspected tunnels (`allow_domains` and permissive egress) aren't logged. A missing audit line is not proof that the client bypassed the proxy: it is also absent when `audit = false` and when the client rejected the proxy's CA and never sent a request. Check the client's own connection errors first, make sure `audit` is on, and run with `RUST_LOG=fnox::proxy=debug` if you need more detail (with the audit log on, this also prints the lines on stderr).
 
 ## What it does not protect against
 

@@ -441,16 +441,7 @@ where
         Err(error) => return refuse(stream, &path, &error.to_string()).await,
     };
 
-    if policy.audit {
-        tracing::info!(
-            target: "fnox::proxy",
-            method = %request.method,
-            domain,
-            path = %path,
-            injected = ?injected,
-            "proxied request"
-        );
-    }
+    policy.audit_proxied(&request.method, domain, &path, &injected);
 
     let method = match Method::from_bytes(request.method.as_bytes()) {
         Ok(method) => method,

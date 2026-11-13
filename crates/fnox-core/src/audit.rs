@@ -31,6 +31,44 @@ pub struct AuditEntry {
     pub provider: Option<String>,
     /// Whether the daemon answered from its in-memory cache.
     pub cached: bool,
+    /// Set on entries for requests served or refused by `fnox proxy run`.
+    /// Those entries leave `secret` empty and name what was injected here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request: Option<AuditRequest>,
+}
+
+/// A request the credential proxy served or refused. Never holds headers,
+/// bodies, query strings, or values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuditRequest {
+    pub method: String,
+    /// Destination host, or the stripped target of a refused request.
+    pub domain: String,
+    pub path: String,
+    /// Secrets (or `lease:<name>`) injected into the request.
+    #[serde(default)]
+    pub injected: Vec<String>,
+    /// Why the proxy turned the request away. `None` for a served request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refused: Option<String>,
+}
+
+/// Records one proxy request, if auditing is enabled. Failures are logged and
+/// swallowed, like [`record_reads`].
+pub fn record_request(path: &Path, profile: &[String], request: AuditRequest) {
+    let entry = AuditEntry {
+        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        command: "proxy".to_string(),
+        profile: profile.to_vec(),
+        config: String::new(),
+        secret: String::new(),
+        provider: None,
+        cached: false,
+        request: Some(request),
+    };
+    if let Err(error) = append(path, &[entry]) {
+        tracing::warn!("failed to write audit log: {error}");
+    }
 }
 
 /// The default log location: `audit.log` in the fnox state directory.
@@ -96,6 +134,7 @@ pub fn record_reads(
             secret: name.clone(),
             provider: secret_provider(secret, default_provider.as_deref()),
             cached: cached(name),
+            request: None,
         })
         .collect();
     if let Err(error) = append(&log_path(config), &entries) {
@@ -176,6 +215,7 @@ mod tests {
             secret: secret.into(),
             provider: Some("age".into()),
             cached: false,
+            request: None,
         }
     }
 
@@ -226,6 +266,33 @@ mod tests {
             last.iter().map(|e| e.secret.as_str()).collect::<Vec<_>>(),
             ["C", "D"]
         );
+    }
+
+    #[test]
+    fn request_entries_round_trip_and_old_lines_still_parse() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.log");
+        record_request(
+            &path,
+            &["default".into()],
+            AuditRequest {
+                method: "GET".into(),
+                domain: "api.example.com".into(),
+                path: "/v1".into(),
+                injected: vec!["TOKEN".into()],
+                refused: None,
+            },
+        );
+        let old = r#"{"ts":"t","command":"get","profile":[],"config":"c","secret":"A","provider":null,"cached":false}"#;
+        let mut text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("refused"));
+        text.push_str(old);
+        text.push('\n');
+        std::fs::write(&path, text).unwrap();
+        let read = tail(&path, 10, |_| true).unwrap();
+        assert_eq!(read.len(), 2);
+        assert_eq!(read[0].request.as_ref().unwrap().injected, ["TOKEN"]);
+        assert!(read[1].request.is_none());
     }
 
     #[test]

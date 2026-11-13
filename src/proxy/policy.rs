@@ -109,6 +109,9 @@ impl PreparedRule {
 pub(super) struct ProxyPolicy {
     pub(super) egress: ProxyEgress,
     pub(super) audit: bool,
+    /// Where request records go when the `[audit]` log is on, and the active
+    /// profiles to record with them. Unset, requests are logged through tracing.
+    pub(super) audit_log: std::sync::OnceLock<(std::path::PathBuf, Vec<String>)>,
     /// Largest request body accepted from a client
     pub(super) max_body_bytes: usize,
     pub(super) rules: Vec<PreparedRule>,
@@ -372,15 +375,56 @@ impl ProxyPolicy {
         path: Option<&str>,
         reason: &str,
     ) {
-        if self.audit {
-            tracing::info!(
-                target: "fnox::proxy",
-                method,
-                destination = %loggable_target(destination),
-                path = path.unwrap_or("-"),
-                reason,
-                "refused request"
+        if !self.audit {
+            return;
+        }
+        let destination = loggable_target(destination);
+        let path = path.unwrap_or("-");
+        if let Some((log, profile)) = self.audit_log.get() {
+            fnox_core::audit::record_request(
+                log,
+                profile,
+                fnox_core::audit::AuditRequest {
+                    method: method.to_string(),
+                    domain: destination.to_string(),
+                    path: path.to_string(),
+                    injected: Vec::new(),
+                    refused: Some(reason.to_string()),
+                },
             );
+            tracing::debug!(target: "fnox::proxy", method, destination = %destination, path, reason, "refused request");
+        } else {
+            tracing::info!(target: "fnox::proxy", method, destination = %destination, path, reason, "refused request");
+        }
+    }
+
+    /// Logs a request the proxy is forwarding. With the `[audit]` log on it is
+    /// appended there and kept off stderr, which a full-screen child shares.
+    pub(super) fn audit_proxied(
+        &self,
+        method: &str,
+        domain: &str,
+        path: &str,
+        injected: &[String],
+    ) {
+        if !self.audit {
+            return;
+        }
+        if let Some((log, profile)) = self.audit_log.get() {
+            fnox_core::audit::record_request(
+                log,
+                profile,
+                fnox_core::audit::AuditRequest {
+                    method: method.to_string(),
+                    domain: domain.to_string(),
+                    path: path.to_string(),
+                    injected: injected.to_vec(),
+                    refused: None,
+                },
+            );
+            tracing::debug!(target: "fnox::proxy", method, domain, path, injected = ?injected, "proxied request");
+        } else {
+            tracing::info!(target: "fnox::proxy", method, domain, path, injected = ?injected, "proxied request");
         }
     }
 

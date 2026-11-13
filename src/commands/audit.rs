@@ -57,8 +57,9 @@ impl AuditCommand {
         }
         let limit = self.limit.unwrap_or(20);
         let matched = fnox_core::audit::tail(&path, limit, |e| {
-            self.secret.as_ref().is_none_or(|s| &e.secret == s)
-                && self.command.as_ref().is_none_or(|c| &e.command == c)
+            self.secret.as_ref().is_none_or(|s| {
+                &e.secret == s || e.request.as_ref().is_some_and(|r| r.injected.contains(s))
+            }) && self.command.as_ref().is_none_or(|c| &e.command == c)
                 && self
                     .provider
                     .as_ref()
@@ -83,6 +84,21 @@ impl AuditCommand {
                 println!(
                     "{}",
                     serde_json::to_string(&e).map_err(|e| FnoxError::Config(e.to_string()))?
+                );
+            } else if let Some(r) = &e.request {
+                println!(
+                    "{}  {:<9} {} {}{}  {}  profile={}",
+                    e.ts,
+                    e.command,
+                    r.method,
+                    r.domain,
+                    r.path,
+                    match &r.refused {
+                        Some(reason) => format!("refused: {reason}"),
+                        None if r.injected.is_empty() => "injected=-".to_string(),
+                        None => format!("injected={}", r.injected.join(",")),
+                    },
+                    e.profile.join(",")
                 );
             } else {
                 println!(

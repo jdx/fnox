@@ -1937,3 +1937,33 @@ fn certificates_satisfy_strict_x509_verification() {
         .expect("host certificate authority key identifier");
     assert_eq!(authority_key_id.0, ca_key_id);
 }
+
+#[test]
+fn audit_log_receives_proxied_and_refused_requests() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = dir.path().join("audit.log");
+    let mut plan = policy();
+    // `policy()` hands back a sole owner, so the flag can be flipped in place
+    let policy = std::sync::Arc::get_mut(&mut plan.policy).unwrap();
+    policy.audit = true;
+    policy
+        .audit_log
+        .set((log.clone(), vec!["default".to_string()]))
+        .unwrap();
+    policy.audit_proxied(
+        "GET",
+        "api.github.com",
+        "/repos/example/x",
+        &["GITHUB_TOKEN".into()],
+    );
+    policy.audit_refused("POST", "evil.example", Some("/x"), "no rule");
+
+    let entries = fnox_core::audit::tail(&log, 10, |_| true).unwrap();
+    assert_eq!(entries.len(), 2);
+    let served = entries[0].request.as_ref().unwrap();
+    assert_eq!(served.injected, ["GITHUB_TOKEN"]);
+    assert!(served.refused.is_none());
+    let refused = entries[1].request.as_ref().unwrap();
+    assert_eq!(refused.refused.as_deref(), Some("no rule"));
+    assert_eq!(entries[0].command, "proxy");
+}

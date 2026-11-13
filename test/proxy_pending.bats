@@ -76,3 +76,25 @@ teardown() {
 	assert_failure
 	assert_output --partial "unknown secret 'API_TOKEN'"
 }
+
+@test "proxy run writes requests to the audit log instead of stderr when auditing is on" {
+	export FNOX_STATE_DIR="$TEST_TEMP_DIR/state"
+	export FNOX_AUDIT=on
+	run "$FNOX_BIN" proxy run -- sh -c '
+		curl --noproxy "" -sS -o /dev/null -w "%{http_code}\n" \
+			-H "authorization: Bearer $API_TOKEN" https://127.0.0.1/
+	'
+	assert_success
+	assert_line "403"
+	refute_output --partial "refused request"
+
+	run "$FNOX_BIN" audit --command proxy
+	assert_success
+	assert_output --partial "127.0.0.1"
+	assert_output --partial "refused:"
+
+	run "$FNOX_BIN" audit --command proxy --json
+	assert_success
+	assert_output --partial '"request":'
+	assert_output --partial '"refused":'
+}
