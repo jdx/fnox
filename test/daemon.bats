@@ -578,3 +578,40 @@ EOF
 	assert_success
 	assert_output --partial "export FOO=bar"
 }
+
+@test "daemon cache hits when a top-level env is set" {
+	mkdir -p "$TEST_TEMP_DIR/bin"
+	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF2'
+#!/bin/sh
+printf 'called\n' >>"$PASS_CALLS_FILE"
+printf 'foreground-value\n'
+EOF2
+	chmod +x "$TEST_TEMP_DIR/bin/pass"
+	export PATH="$TEST_TEMP_DIR/bin:$PATH"
+	export PASS_CALLS_FILE="$TEST_TEMP_DIR/pass-calls"
+
+	cat >fnox.toml <<'EOF2'
+root = true
+env = "exec"
+
+[daemon]
+enabled = true
+
+[providers.pass]
+type = "password-store"
+
+[secrets]
+FOO = { provider = "pass", value = "foo" }
+EOF2
+
+	run "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "foreground-value"
+
+	run "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "foreground-value"
+
+	# The second get is served from the daemon cache, not the provider
+	assert_equal "$(wc -l <"$PASS_CALLS_FILE" | tr -d ' ')" "1"
+}

@@ -2225,16 +2225,21 @@ impl Config {
             return Err(FnoxError::ConfigValidationFailed { issues });
         }
 
-        // Secrets that don't set `env` themselves inherit the top-level default
-        if self.env.is_some() {
-            for secret in secrets.values_mut() {
-                if secret.env.is_none() {
-                    secret.env = self.env;
-                }
-            }
+        for secret in secrets.values_mut() {
+            self.apply_env_default(secret);
         }
 
         Ok(secrets)
+    }
+
+    /// Give a secret that doesn't set `env` itself the top-level `env` default.
+    ///
+    /// [`Self::get_secret`] returns the raw config entry (callers such as `set`
+    /// write it back), so code that needs the effective secret must call this.
+    pub fn apply_env_default(&self, secret: &mut SecretConfig) {
+        if secret.env.is_none() {
+            secret.env = self.env;
+        }
     }
 
     /// Look up a single secret by key without cloning the secrets map.
@@ -4229,6 +4234,29 @@ DEV_INHERITED = { provider = "plain", value = "d" }
         // which other tests mutate concurrently.
         let dev_secrets = parsed.get_secrets(&["dev".to_string()]).unwrap();
         assert_eq!(dev_secrets["DEV_INHERITED"].env_mode(), EnvMode::Exec);
+    }
+
+    #[test]
+    fn test_apply_env_default_matches_get_secrets() {
+        let toml_input = r#"
+env = "exec"
+
+[secrets]
+INHERITED = { provider = "plain", value = "a" }
+HIDDEN = { provider = "plain", value = "c", env = false }
+"#;
+        let parsed: Config = toml_edit::de::from_str(toml_input).unwrap();
+        let profiles = ["default".to_string()];
+        let all = parsed.get_secrets(&profiles).unwrap();
+        for key in ["INHERITED", "HIDDEN"] {
+            let mut single = parsed.get_secret(&profiles, key).unwrap().unwrap().clone();
+            parsed.apply_env_default(&mut single);
+            assert_eq!(
+                serde_json::to_string(&single).unwrap(),
+                serde_json::to_string(&all[key]).unwrap(),
+                "{key}"
+            );
+        }
     }
 
     #[test]
