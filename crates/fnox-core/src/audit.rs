@@ -85,6 +85,8 @@ pub fn record_request(path: &Path, profile: &[String], request: AuditRequest) {
 #[derive(Debug)]
 pub struct AuditWriter {
     queue: std::sync::mpsc::SyncSender<WriterMessage>,
+    /// Set by [`AuditWriter::close`]; held while queuing so no entry can slip in after it
+    closed: std::sync::Mutex<bool>,
 }
 
 #[derive(Debug)]
@@ -131,21 +133,41 @@ impl AuditWriter {
         if let Err(error) = started {
             tracing::warn!("failed to start audit writer: {error}");
         }
-        Self { queue }
+        Self {
+            queue,
+            closed: std::sync::Mutex::new(false),
+        }
     }
 
     /// Queues one entry without blocking. When the queue is full because the
     /// log's storage has stalled, the entry is dropped, with a warning the first
     /// time, rather than stalling the caller.
-    pub fn send(&self, entry: AuditEntry) {
+    ///
+    /// Returns `false` when the writer was closed, so the caller can report the
+    /// entry another way. A full queue still returns `true`: the drop is warned about.
+    pub fn send(&self, entry: AuditEntry) -> bool {
         use std::sync::atomic::{AtomicBool, Ordering};
         static WARNED: AtomicBool = AtomicBool::new(false);
+        let closed = self.closed.lock().unwrap_or_else(|e| e.into_inner());
+        if *closed {
+            return false;
+        }
         if let Err(std::sync::mpsc::TrySendError::Full(_)) =
             self.queue.try_send(WriterMessage::Entry(Box::new(entry)))
             && !WARNED.swap(true, Ordering::Relaxed)
         {
             tracing::warn!("audit log is not keeping up; dropping request records");
         }
+        true
+    }
+
+    /// Stops accepting entries, then waits like [`flush`](AuditWriter::flush).
+    /// Every entry accepted before the call is covered by the wait; later ones
+    /// are refused by [`send`](AuditWriter::send) instead of queued where a
+    /// process exit would discard them.
+    pub fn close(&self, timeout: std::time::Duration) -> bool {
+        *self.closed.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        self.flush(timeout)
     }
 
     /// Waits up to `timeout` for every entry queued so far to be written.
@@ -397,6 +419,30 @@ mod tests {
         assert_eq!(read.len(), 2);
         assert_eq!(read[0].request.as_ref().unwrap().injected, ["TOKEN"]);
         assert!(read[1].request.is_none());
+    }
+
+    #[test]
+    fn closed_writer_refuses_entries_but_keeps_earlier_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.log");
+        let writer = AuditWriter::spawn(path.clone());
+        let entry = || {
+            request_entry(
+                &["default".into()],
+                AuditRequest {
+                    method: "GET".into(),
+                    domain: "api.example.com".into(),
+                    path: "/".into(),
+                    injected: Vec::new(),
+                    refused: None,
+                },
+            )
+        };
+        assert!(writer.send(entry()));
+        assert!(writer.close(std::time::Duration::from_secs(5)));
+        // A handler that outlives shutdown cannot queue a record the exit would lose
+        assert!(!writer.send(entry()));
+        assert_eq!(tail(&path, 10, |_| true).unwrap().len(), 1);
     }
 
     #[test]

@@ -113,9 +113,11 @@ pub(super) struct AuditSink {
 }
 
 impl AuditSink {
-    fn record(&self, request: fnox_core::audit::AuditRequest) {
+    /// Returns false once the log is closed at shutdown, so the caller
+    /// reports the request on stderr instead of queueing it where exit loses it
+    fn record(&self, request: fnox_core::audit::AuditRequest) -> bool {
         self.writer
-            .send(fnox_core::audit::request_entry(&self.profile, request));
+            .send(fnox_core::audit::request_entry(&self.profile, request))
     }
 }
 
@@ -400,14 +402,16 @@ impl ProxyPolicy {
         let reason = reason.as_str();
         let path = path.map(redact);
         let logged_path = path.as_deref().unwrap_or("-");
-        if let Some(sink) = self.audit_log.get() {
+        let recorded = self.audit_log.get().is_some_and(|sink| {
             sink.record(fnox_core::audit::AuditRequest {
                 method: method.to_string(),
                 domain: destination.to_string(),
                 path: path.clone().unwrap_or_default(),
                 injected: Vec::new(),
                 refused: Some(reason.to_string()),
-            });
+            })
+        });
+        if recorded {
             tracing::debug!(target: "fnox::proxy", method, destination = %destination, path = logged_path, reason, "refused request");
         } else {
             tracing::info!(target: "fnox::proxy", method, destination = %destination, path = logged_path, reason, "refused request");
@@ -428,14 +432,16 @@ impl ProxyPolicy {
         }
         let redactions = self.redactions();
         let path = &redact_string(path, &redactions);
-        if let Some(sink) = self.audit_log.get() {
+        let recorded = self.audit_log.get().is_some_and(|sink| {
             sink.record(fnox_core::audit::AuditRequest {
                 method: method.to_string(),
                 domain: domain.to_string(),
                 path: path.to_string(),
                 injected: injected.to_vec(),
                 refused: None,
-            });
+            })
+        });
+        if recorded {
             tracing::debug!(target: "fnox::proxy", method, domain, path, injected = ?injected, "proxied request");
         } else {
             tracing::info!(target: "fnox::proxy", method, domain, path, injected = ?injected, "proxied request");
