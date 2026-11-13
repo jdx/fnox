@@ -127,7 +127,8 @@ pub struct Cli {
 
     /// Write to the nearest parent config when the current directory has none
     ///
-    /// Applies to `set`, `remove`, and `import`. Without it, those commands
+    /// Applies to `set`, `remove`, `import`, and secrets entered through
+    /// `fnox mcp` or `fnox proxy`. Without it, those commands
     /// create `fnox.toml` in the current directory when it has no config file.
     /// With it, they use the nearest parent directory's config, picked by the
     /// same rules, and create `fnox.toml` here only if no parent has one. The
@@ -400,6 +401,7 @@ impl Commands {
                     &cli.profile,
                     cli.write_profile.as_deref(),
                     cli.no_defaults,
+                    cli.walk_up,
                 )?;
                 crate::mcp::relay::run().await
             }

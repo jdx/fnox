@@ -93,7 +93,8 @@ impl McpCommand {
             crate::daemon::Purpose::Mcp,
             profile_secrets,
         )
-        .with_write_target(cli.config.clone(), cli.write_profile.clone());
+        .with_write_target(cli.config.clone(), cli.write_profile.clone())
+        .with_walk_up(cli.walk_up);
         let server = FnoxMcpServer::new(std::sync::Arc::new(session), mcp_config);
 
         let service: RunningService<RoleServer, FnoxMcpServer> = server

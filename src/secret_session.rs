@@ -28,6 +28,8 @@ pub enum StorageProvider {
 }
 
 pub struct SecretSession {
+    /// `--walk-up`: a directory without a config writes to the nearest parent's
+    walk_up: bool,
     /// The config the session started with
     config: Config,
     /// `--config` value, for reloading the config and finding the file a new
@@ -78,6 +80,7 @@ impl SecretSession {
         secrets: IndexMap<String, SecretConfig>,
     ) -> Self {
         Self {
+            walk_up: false,
             config,
             config_path: PathBuf::from(config::DEFAULT_CONFIG_FILENAME),
             profile,
@@ -104,6 +107,17 @@ impl SecretSession {
         self.config_path = config_path;
         self.write_profile = write_profile;
         self
+    }
+
+    /// Write to the nearest parent config when the current directory has
+    /// none, as `fnox set --walk-up` does
+    pub fn with_walk_up(mut self, walk_up: bool) -> Self {
+        self.walk_up = walk_up;
+        self
+    }
+
+    pub fn walk_up(&self) -> bool {
+        self.walk_up
     }
 
     pub fn profile(&self) -> &[String] {
@@ -336,7 +350,7 @@ impl SecretSession {
             &self.config_path,
             &self.profile,
             self.write_profile.as_deref(),
-            false,
+            self.walk_up,
         )
     }
 

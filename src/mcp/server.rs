@@ -221,6 +221,15 @@ impl ServerHandler for FnoxMcpServer {
 /// A server with an empty config and no daemon, for tests
 #[cfg(test)]
 pub(super) fn test_server(profile: Vec<String>, write_profile: Option<String>) -> FnoxMcpServer {
+    test_server_with(profile, write_profile, false)
+}
+
+#[cfg(test)]
+pub(super) fn test_server_with(
+    profile: Vec<String>,
+    write_profile: Option<String>,
+    walk_up: bool,
+) -> FnoxMcpServer {
     let context = crate::daemon::ResolveContext {
         config: "fnox.toml".into(),
         profile: profile.clone(),
@@ -237,7 +246,8 @@ pub(super) fn test_server(profile: Vec<String>, write_profile: Option<String>) -
         crate::daemon::Purpose::Mcp,
         IndexMap::new(),
     )
-    .with_write_target("fnox.toml".into(), write_profile);
+    .with_write_target("fnox.toml".into(), write_profile)
+    .with_walk_up(walk_up);
     FnoxMcpServer::new(Arc::new(session), McpConfig::default())
 }
 
