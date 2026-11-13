@@ -391,7 +391,8 @@ impl ProxyRunCommand {
             crate::daemon::Purpose::Proxy,
             all_secrets.clone(),
         )
-        .with_write_target(cli.config.clone(), cli.write_profile.clone());
+        .with_write_target(cli.config.clone(), cli.write_profile.clone())
+        .with_walk_up(cli.walk_up);
         let resolved = session.resolve_now(&requested).await?;
         // A rule secret without a value is pending: the child still gets its
         // placeholder, and the proxy resolves it again when a request needs it
@@ -546,6 +547,10 @@ impl ProxyRunCommand {
         // `fnox mcp` in the child relays to the tools this process serves
         command.env(crate::proxy::MCP_RELAY_ENV, "1");
         command.env(crate::proxy::MCP_RELAY_PROFILE_ENV, profile.join(","));
+        command.env(
+            crate::proxy::MCP_RELAY_WALK_UP_ENV,
+            if cli.walk_up { "1" } else { "0" },
+        );
         for (key, placeholder) in child_env {
             command.env(key, placeholder);
         }

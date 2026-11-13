@@ -1439,11 +1439,15 @@ async fn process_request(
                 req.non_interactive,
             );
             let config = Config::load_smart(&req.config)?;
-            let Some(secret_config) = config.get_secret(&req.profile, &req.key)?.cloned() else {
+            let Some(mut secret_config) = config.get_secret(&req.profile, &req.key)?.cloned()
+            else {
                 return Ok(Response::Resolved {
                     values: [(req.key, None)].into_iter().collect(),
                 });
             };
+            // StoreResolved keys the cache on `get_secrets()`, which applies the
+            // top-level `env` default. Do the same here so the keys match.
+            config.apply_env_default(&mut secret_config);
             let batch_req = ResolveBatchRequest {
                 cwd: req.cwd,
                 config: req.config,

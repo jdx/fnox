@@ -385,6 +385,9 @@ impl FnoxMcpServer {
             command.push("--write-profile".into());
             command.push(crate::shell::posix_quote(write_profile).into_owned());
         }
+        if self.session.walk_up() {
+            command.push("--walk-up".into());
+        }
         command.push("set".into());
         command.push(name.to_string());
         let command = command.join(" ");
@@ -424,6 +427,17 @@ mod tests {
     use crate::mcp::server::test_server;
     use rmcp::ServiceExt;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    #[test]
+    fn terminal_fallback_keeps_walk_up() {
+        let server = crate::mcp::server::test_server_with(vec!["default".into()], None, true);
+        let text = server.terminal_fallback("API_TOKEN");
+        assert!(text.contains("fnox --walk-up set API_TOKEN"), "{text}");
+
+        let server = crate::mcp::server::test_server_with(vec!["default".into()], None, false);
+        let text = server.terminal_fallback("API_TOKEN");
+        assert!(!text.contains("--walk-up"), "{text}");
+    }
 
     #[test]
     fn terminal_fallback_quotes_profile_names() {

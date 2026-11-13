@@ -305,7 +305,7 @@ pub(super) fn is_valid_domain_pattern(domain: &str) -> bool {
 
 /// A placeholder in these would turn the child's `fnox mcp` relay off
 fn check_env_name(rule: &ProxyRule, env_name: &str) -> Result<()> {
-    if [MCP_RELAY_ENV, MCP_RELAY_PROFILE_ENV].contains(&env_name) {
+    if [MCP_RELAY_ENV, MCP_RELAY_PROFILE_ENV, MCP_RELAY_WALK_UP_ENV].contains(&env_name) {
         return Err(proxy_error(format!(
             "rule for '{}' can't use the environment variable '{env_name}', which fnox reserves",
             rule.name()
