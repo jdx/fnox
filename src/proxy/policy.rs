@@ -105,13 +105,28 @@ impl PreparedRule {
     }
 }
 
+/// Queue to the thread that appends request records to the audit log
+#[derive(Debug)]
+pub(super) struct AuditSink {
+    pub(super) queue: std::sync::mpsc::SyncSender<fnox_core::audit::AuditEntry>,
+    pub(super) profile: Vec<String>,
+}
+
+impl AuditSink {
+    fn record(&self, request: fnox_core::audit::AuditRequest) {
+        let _ = self
+            .queue
+            .send(fnox_core::audit::request_entry(&self.profile, request));
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct ProxyPolicy {
     pub(super) egress: ProxyEgress,
     pub(super) audit: bool,
     /// Where request records go when the `[audit]` log is on, and the active
     /// profiles to record with them. Unset, requests are logged through tracing.
-    pub(super) audit_log: std::sync::OnceLock<(std::path::PathBuf, Vec<String>)>,
+    pub(super) audit_log: std::sync::OnceLock<AuditSink>,
     /// Largest request body accepted from a client
     pub(super) max_body_bytes: usize,
     pub(super) rules: Vec<PreparedRule>,
@@ -379,22 +394,18 @@ impl ProxyPolicy {
             return;
         }
         let destination = loggable_target(destination);
-        let path = path.unwrap_or("-");
-        if let Some((log, profile)) = self.audit_log.get() {
-            fnox_core::audit::record_request(
-                log,
-                profile,
-                fnox_core::audit::AuditRequest {
-                    method: method.to_string(),
-                    domain: destination.to_string(),
-                    path: path.to_string(),
-                    injected: Vec::new(),
-                    refused: Some(reason.to_string()),
-                },
-            );
-            tracing::debug!(target: "fnox::proxy", method, destination = %destination, path, reason, "refused request");
+        let logged_path = path.unwrap_or("-");
+        if let Some(sink) = self.audit_log.get() {
+            sink.record(fnox_core::audit::AuditRequest {
+                method: method.to_string(),
+                domain: destination.to_string(),
+                path: path.map(str::to_string).unwrap_or_default(),
+                injected: Vec::new(),
+                refused: Some(reason.to_string()),
+            });
+            tracing::debug!(target: "fnox::proxy", method, destination = %destination, path = logged_path, reason, "refused request");
         } else {
-            tracing::info!(target: "fnox::proxy", method, destination = %destination, path, reason, "refused request");
+            tracing::info!(target: "fnox::proxy", method, destination = %destination, path = logged_path, reason, "refused request");
         }
     }
 
@@ -410,18 +421,14 @@ impl ProxyPolicy {
         if !self.audit {
             return;
         }
-        if let Some((log, profile)) = self.audit_log.get() {
-            fnox_core::audit::record_request(
-                log,
-                profile,
-                fnox_core::audit::AuditRequest {
-                    method: method.to_string(),
-                    domain: domain.to_string(),
-                    path: path.to_string(),
-                    injected: injected.to_vec(),
-                    refused: None,
-                },
-            );
+        if let Some(sink) = self.audit_log.get() {
+            sink.record(fnox_core::audit::AuditRequest {
+                method: method.to_string(),
+                domain: domain.to_string(),
+                path: path.to_string(),
+                injected: injected.to_vec(),
+                refused: None,
+            });
             tracing::debug!(target: "fnox::proxy", method, domain, path, injected = ?injected, "proxied request");
         } else {
             tracing::info!(target: "fnox::proxy", method, domain, path, injected = ?injected, "proxied request");

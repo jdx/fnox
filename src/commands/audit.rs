@@ -90,11 +90,15 @@ impl AuditCommand {
                     "{}  {:<9} {} {}{}  {}  profile={}",
                     e.ts,
                     e.command,
-                    r.method,
-                    r.domain,
-                    r.path,
+                    printable(&r.method),
+                    printable(&r.domain),
+                    if r.path == "-" {
+                        String::new()
+                    } else {
+                        printable(&r.path)
+                    },
                     match &r.refused {
-                        Some(reason) => format!("refused: {reason}"),
+                        Some(reason) => format!("refused: {}", printable(reason)),
                         None if r.injected.is_empty() => "injected=-".to_string(),
                         None => format!("injected={}", r.injected.join(",")),
                     },
@@ -114,4 +118,19 @@ impl AuditCommand {
         }
         Ok(())
     }
+}
+
+/// Escapes control characters so a request a client crafted cannot move the
+/// cursor or rewrite the terminal when the log is read. JSON output is
+/// already escaped.
+fn printable(text: &str) -> String {
+    text.chars()
+        .flat_map(|c| {
+            if c.is_control() {
+                c.escape_default().collect::<Vec<_>>()
+            } else {
+                vec![c]
+            }
+        })
+        .collect()
 }

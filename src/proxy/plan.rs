@@ -67,7 +67,10 @@ impl ProxyPlan {
     /// Append request records to the `[audit]` log at `path` instead of
     /// printing them on stderr
     pub fn set_audit_log(&self, path: std::path::PathBuf, profile: Vec<String>) {
-        let _ = self.policy.audit_log.set((path, profile));
+        let _ = self.policy.audit_log.set(super::policy::AuditSink {
+            queue: fnox_core::audit::spawn_writer(path),
+            profile,
+        });
     }
 
     /// Rule secrets that have no value yet

@@ -1948,7 +1948,10 @@ fn audit_log_receives_proxied_and_refused_requests() {
     policy.audit = true;
     policy
         .audit_log
-        .set((log.clone(), vec!["default".to_string()]))
+        .set(super::policy::AuditSink {
+            queue: fnox_core::audit::spawn_writer(log.clone()),
+            profile: vec!["default".to_string()],
+        })
         .unwrap();
     policy.audit_proxied(
         "GET",
@@ -1958,12 +1961,21 @@ fn audit_log_receives_proxied_and_refused_requests() {
     );
     policy.audit_refused("POST", "evil.example", Some("/x"), "no rule");
 
-    let entries = fnox_core::audit::tail(&log, 10, |_| true).unwrap();
+    // The writer thread appends in the background
+    let mut entries = Vec::new();
+    for _ in 0..100 {
+        entries = fnox_core::audit::tail(&log, 10, |_| true).unwrap();
+        if entries.len() == 2 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
     assert_eq!(entries.len(), 2);
     let served = entries[0].request.as_ref().unwrap();
     assert_eq!(served.injected, ["GITHUB_TOKEN"]);
     assert!(served.refused.is_none());
     let refused = entries[1].request.as_ref().unwrap();
     assert_eq!(refused.refused.as_deref(), Some("no rule"));
+    assert_eq!(refused.path, "/x");
     assert_eq!(entries[0].command, "proxy");
 }

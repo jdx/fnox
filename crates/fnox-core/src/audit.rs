@@ -53,10 +53,9 @@ pub struct AuditRequest {
     pub refused: Option<String>,
 }
 
-/// Records one proxy request, if auditing is enabled. Failures are logged and
-/// swallowed, like [`record_reads`].
-pub fn record_request(path: &Path, profile: &[String], request: AuditRequest) {
-    let entry = AuditEntry {
+/// The log entry for one proxy request.
+pub fn request_entry(profile: &[String], request: AuditRequest) -> AuditEntry {
+    AuditEntry {
         ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
         command: "proxy".to_string(),
         profile: profile.to_vec(),
@@ -65,10 +64,38 @@ pub fn record_request(path: &Path, profile: &[String], request: AuditRequest) {
         provider: None,
         cached: false,
         request: Some(request),
-    };
-    if let Err(error) = append(path, &[entry]) {
+    }
+}
+
+/// Records one proxy request. Failures are logged and swallowed, like
+/// [`record_reads`]. This writes on the calling thread; async callers should
+/// queue entries for a writer thread instead (see [`spawn_writer`]).
+pub fn record_request(path: &Path, profile: &[String], request: AuditRequest) {
+    if let Err(error) = append(path, &[request_entry(profile, request)]) {
         tracing::warn!("failed to write audit log: {error}");
     }
+}
+
+/// Starts a thread that appends queued entries to `path`, in order, so slow
+/// storage never stalls the caller. The thread ends when every sender is
+/// dropped. A full queue (1024 entries) makes senders wait rather than lose
+/// entries.
+pub fn spawn_writer(path: PathBuf) -> std::sync::mpsc::SyncSender<AuditEntry> {
+    let (tx, rx) = std::sync::mpsc::sync_channel::<AuditEntry>(1024);
+    std::thread::Builder::new()
+        .name("fnox-audit".into())
+        .spawn(move || {
+            while let Ok(first) = rx.recv() {
+                let mut batch = vec![first];
+                batch.extend(rx.try_iter().take(255));
+                if let Err(error) = append(&path, &batch) {
+                    tracing::warn!("failed to write audit log: {error}");
+                }
+            }
+        })
+        .map(drop)
+        .unwrap_or_else(|error| tracing::warn!("failed to start audit writer: {error}"));
+    tx
 }
 
 /// The default log location: `audit.log` in the fnox state directory.
