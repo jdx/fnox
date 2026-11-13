@@ -187,6 +187,17 @@ impl DaemonState {
         purpose: &str,
         ttls: CacheTtls,
     ) {
+        // A foreground batch sends its cache hits back with the newly resolved
+        // values. Keep a live entry holding the same value, so only a real
+        // resolve starts a new `max_cache_ttl` window.
+        let now = Instant::now();
+        if let Some(entry) = self.cache.get_mut(&key)
+            && entry.value == value
+            && !entry.expired(now)
+        {
+            entry.ttls = ttls;
+            return;
+        }
         self.cache
             .insert(key, CacheEntry::new(value, profile, purpose, ttls));
     }
@@ -1641,6 +1652,10 @@ async fn foreground_resolution_if_needed(
     let mut cached_values = IndexMap::new();
     let mut keys = Vec::new();
     for (key, secret) in secrets {
+        if secret_is_cacheable(&providers, default_provider, secret, &req.purpose) {
+            // Reject a bad TTL now, not after the user has already been prompted.
+            cache_ttls(config, &providers, default_provider, secret)?;
+        }
         if secret_is_cacheable(&providers, default_provider, secret, &req.purpose)
             && let Some(value) = state.get(&cache_key(
                 &fingerprint,
@@ -2704,6 +2719,56 @@ OWN = { provider = "plain", value = "c", cache_ttl = "5m", max_cache_ttl = "15m"
 
     // A foreground client that read a value before it was cleared must not
     // write that stale value back afterwards.
+    #[tokio::test]
+    async fn foreground_resolution_rejects_invalid_ttls_before_prompting() {
+        let mut config = Config::new();
+        config
+            .providers
+            .insert("plain".to_string(), plain_provider_config(None));
+        let mut secret = plain_secret("api");
+        secret.cache_ttl = Some("0s".to_string());
+        let secrets = IndexMap::from([("API_KEY".to_string(), secret)]);
+        let mut req = test_batch_request();
+        req.non_interactive = false;
+        let state = Arc::new(Mutex::new(DaemonState::default()));
+
+        let err =
+            foreground_resolution_if_needed(&config, &req.profile, &secrets, &req, &state).await;
+        assert!(err.is_err(), "an invalid cache_ttl must fail the request");
+    }
+
+    #[test]
+    fn rewriting_a_live_entry_keeps_its_absolute_deadline() {
+        let config = Config::new();
+        let secret = plain_secret("value");
+        let req = test_batch_request();
+        let fingerprint = config_fingerprint(&config, &req.env).unwrap();
+        let key = cache_key(
+            &fingerprint,
+            &req.profile,
+            "API_KEY",
+            &secret,
+            req.no_defaults,
+            &req.purpose,
+        );
+        let ttls = CacheTtls {
+            ttl: None,
+            max_ttl: Some(secs(100)),
+        };
+        let mut state = DaemonState::default();
+        state.insert(key.clone(), "v".into(), &req.profile, "get", ttls);
+        let stored_at = Instant::now().checked_sub(secs(90)).unwrap();
+        state.cache.get_mut(&key).unwrap().stored_at = stored_at;
+
+        // A foreground batch echoing the cached value must not restart the window.
+        state.insert(key.clone(), "v".into(), &req.profile, "get", ttls);
+        assert_eq!(state.cache[&key].stored_at, stored_at);
+
+        // A different value is a fresh resolve and starts a new window.
+        state.insert(key.clone(), "w".into(), &req.profile, "get", ttls);
+        assert!(state.cache[&key].stored_at > stored_at);
+    }
+
     #[tokio::test]
     async fn foreground_write_back_skips_keys_cleared_meanwhile() {
         let mut config = Config::new();
