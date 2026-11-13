@@ -401,6 +401,7 @@ impl Commands {
                     &cli.profile,
                     cli.write_profile.as_deref(),
                     cli.no_defaults,
+                    cli.walk_up,
                 )?;
                 crate::mcp::relay::run().await
             }

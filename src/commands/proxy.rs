@@ -547,6 +547,10 @@ impl ProxyRunCommand {
         // `fnox mcp` in the child relays to the tools this process serves
         command.env(crate::proxy::MCP_RELAY_ENV, "1");
         command.env(crate::proxy::MCP_RELAY_PROFILE_ENV, profile.join(","));
+        command.env(
+            crate::proxy::MCP_RELAY_WALK_UP_ENV,
+            if cli.walk_up { "1" } else { "0" },
+        );
         for (key, placeholder) in child_env {
             command.env(key, placeholder);
         }

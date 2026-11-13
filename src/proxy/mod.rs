@@ -53,7 +53,8 @@ use policy::*;
 use values::*;
 
 pub use handle::{
-    ClientStream, MCP_HOST, MCP_RELAY_ENV, MCP_RELAY_PROFILE_ENV, McpService, ProxyHandle, RuleInfo,
+    ClientStream, MCP_HOST, MCP_RELAY_ENV, MCP_RELAY_PROFILE_ENV, MCP_RELAY_WALK_UP_ENV,
+    McpService, ProxyHandle, RuleInfo,
 };
 pub use leases::{LeaseSetup, lease_credential};
 pub use plan::{ProxyPlan, deny_inspection, validate_config};

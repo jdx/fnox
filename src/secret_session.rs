@@ -116,6 +116,10 @@ impl SecretSession {
         self
     }
 
+    pub fn walk_up(&self) -> bool {
+        self.walk_up
+    }
+
     pub fn profile(&self) -> &[String] {
         &self.profile
     }

@@ -6,7 +6,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use crate::error::{FnoxError, Result};
-use crate::proxy::{MCP_HOST, MCP_RELAY_ENV as RELAY_ENV, MCP_RELAY_PROFILE_ENV};
+use crate::proxy::{
+    MCP_HOST, MCP_RELAY_ENV as RELAY_ENV, MCP_RELAY_PROFILE_ENV, MCP_RELAY_WALK_UP_ENV,
+};
 
 /// Longest proxy response head the relay reads
 const MAX_RESPONSE_HEAD: usize = 8 * 1024;
@@ -26,6 +28,7 @@ pub fn check_flags(
     profile_flag: &[String],
     write_profile_flag: Option<&str>,
     no_defaults_flag: bool,
+    walk_up_flag: bool,
 ) -> Result<()> {
     if config_arg != std::path::Path::new(crate::config::DEFAULT_CONFIG_FILENAME) {
         return Err(FnoxError::Config(
@@ -42,6 +45,12 @@ pub fn check_flags(
     if no_defaults_flag {
         return Err(FnoxError::Config(
             "fnox mcp under fnox proxy run serves the proxy's secrets; pass --no-defaults to fnox proxy run instead"
+                .into(),
+        ));
+    }
+    if walk_up_flag && crate::env::var(MCP_RELAY_WALK_UP_ENV).ok().as_deref() != Some("1") {
+        return Err(FnoxError::Config(
+            "fnox mcp under fnox proxy run stores values where the proxy decides; pass --walk-up to fnox proxy run instead"
                 .into(),
         ));
     }

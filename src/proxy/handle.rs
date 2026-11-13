@@ -15,6 +15,9 @@ pub const MCP_RELAY_ENV: &str = "FNOX_PROXY_MCP";
 /// The profiles the proxy serves, comma-separated, for the relay to check
 pub const MCP_RELAY_PROFILE_ENV: &str = "FNOX_PROXY_MCP_PROFILE";
 
+/// `1` when the proxy was started with `--walk-up`, for the relay to check
+pub const MCP_RELAY_WALK_UP_ENV: &str = "FNOX_PROXY_MCP_WALK_UP";
+
 /// A client connection handed to the MCP service
 pub trait ClientStream: AsyncRead + AsyncWrite + Send + Unpin {}
 impl<T: AsyncRead + AsyncWrite + Send + Unpin> ClientStream for T {}
