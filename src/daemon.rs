@@ -1875,9 +1875,16 @@ fn cache_ttls(
     default_provider: Option<&str>,
     secret: &SecretConfig,
 ) -> Result<CacheTtls> {
-    let (provider_ttl, provider_max) = secret_provider_name(default_provider, secret)
-        .and_then(|name| providers.get(name))
-        .map_or((None, None), |provider| provider.daemon_cache_ttls());
+    // A synced secret is read through its sync provider, so that provider's
+    // timers come before the source provider's.
+    let ttls_of = |name: Option<&str>| {
+        name.and_then(|name| providers.get(name))
+            .map_or((None, None), |provider| provider.daemon_cache_ttls())
+    };
+    let (sync_ttl, sync_max) = ttls_of(secret.sync.as_ref().map(|sync| sync.provider.as_str()));
+    let (source_ttl, source_max) = ttls_of(secret_provider_name(default_provider, secret));
+    let provider_ttl = sync_ttl.or(source_ttl);
+    let provider_max = sync_max.or(source_max);
     let daemon = config.daemon.as_ref();
     let pick = |name: &str, own: Option<&str>, provider: Option<&str>, global: Option<&str>| {
         own.or(provider)
@@ -2501,6 +2508,36 @@ OWN = { provider = "plain", value = "c", cache_ttl = "5m", max_cache_ttl = "15m"
             CacheTtls {
                 ttl: Some(secs(300)),
                 max_ttl: Some(secs(900)),
+            }
+        );
+    }
+
+    #[test]
+    fn cache_ttls_prefer_the_sync_provider_over_the_source_provider() {
+        let config = env_config(
+            r#"
+[providers.remote]
+type = "plain"
+cache_ttl = "1h"
+max_cache_ttl = "8h"
+
+[providers.local]
+type = "plain"
+cache_ttl = "5m"
+
+[secrets]
+SYNCED = { provider = "remote", value = "a", sync = { provider = "local", value = "b" } }
+"#,
+        );
+        let profile = ["default".to_string()];
+        let secrets = config.get_secrets(&profile).unwrap();
+        let providers = config.get_providers(&profile).unwrap();
+        let ttls = cache_ttls(&config, &providers, None, &secrets["SYNCED"]).unwrap();
+        assert_eq!(
+            ttls,
+            CacheTtls {
+                ttl: Some(secs(300)),
+                max_ttl: Some(secs(28800)),
             }
         );
     }
