@@ -234,14 +234,18 @@ See also:
         long_help #"""
 Show whether the daemon is running
 
-Prints the daemon's process ID and the number of cached entries, or that it is not running.
+Prints the daemon's process ID and the number of cached entries, or that it is not running. With `--verbose`, also lists each cached entry with its age and the time left on its `cache_ttl` and `max_cache_ttl`; values are never shown.
 """#
         after_long_help #"""
 See also:
 - Daemon: https://fnox.jdx.dev/guide/daemon
 """#
+        flag "-v --verbose" help="List each cached entry (key, profile, purpose, age, and TTL time left) without its value"
+        flag --json help="Print the status and cached entries as JSON; values are never included"
         flag "-h --help" help="Print help" action=help builtin=#true
         example "fnox daemon status" header="Show daemon status"
+        example "fnox daemon status --verbose" header="List cached entries and the time left on their TTLs"
+        example "fnox daemon status --json" header="Print the status and cached entries as JSON"
     }
     cmd stop help="Stop the daemon and discard its cache" {
         long_help #"""

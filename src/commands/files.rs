@@ -186,10 +186,12 @@ fn require_entry(config: &Config, profiles: &[String], path: &Path) -> Result<Fi
 /// Settings that only change how fnox authenticates to a store, not which
 /// store or item a key names
 fn is_access_setting(name: &str) -> bool {
-    matches!(name, "auth_command" | "daemon_cache")
-        || ["token", "password", "secret"]
-            .iter()
-            .any(|word| name.contains(word))
+    matches!(
+        name,
+        "auth_command" | "daemon_cache" | "cache_ttl" | "max_cache_ttl"
+    ) || ["token", "password", "secret"]
+        .iter()
+        .any(|word| name.contains(word))
 }
 
 /// Drop the provider's own access settings. Nested values such as
@@ -482,6 +484,8 @@ mod tests {
             "type": "aws-ps",
             "token": "t",
             "daemon_cache": true,
+            "cache_ttl": "5m",
+            "max_cache_ttl": "1h",
             "prefix": { "secret": "PERSONAL_PREFIX" },
         });
         strip_access_settings(&mut provider);

@@ -134,6 +134,8 @@ impl AddCommand {
                 token: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::Aws => crate::config::ProviderConfig::AwsSecretsManager {
                 region: StringOrSecretRef::from("us-east-1"),
@@ -143,6 +145,8 @@ impl AddCommand {
                 endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::Vault => crate::config::ProviderConfig::HashiCorpVault {
                 address: OptionStringOrSecretRef::literal("http://localhost:8200"),
@@ -152,12 +156,16 @@ impl AddCommand {
                 credential_command: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::Gcp => crate::config::ProviderConfig::GoogleSecretManager {
                 project: StringOrSecretRef::from("my-project"),
                 prefix: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::AwsKms => crate::config::ProviderConfig::AwsKms {
                 region: StringOrSecretRef::from("us-east-1"),
@@ -167,6 +175,8 @@ impl AddCommand {
                 endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::AwsParameterStore => crate::config::ProviderConfig::AwsParameterStore {
                 region: StringOrSecretRef::from("us-east-1"),
@@ -176,6 +186,8 @@ impl AddCommand {
                 endpoint: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::AzureAppConfiguration => {
                 crate::config::ProviderConfig::AzureAppConfiguration {
@@ -186,6 +198,8 @@ impl AddCommand {
                     managed_identity_client_id: OptionStringOrSecretRef::none(),
                     auth_command: None,
                     daemon_cache: None,
+                    cache_ttl: None,
+                    max_cache_ttl: None,
                 }
             }
             ProviderType::AzureKms => crate::config::ProviderConfig::AzureKms {
@@ -195,6 +209,8 @@ impl AddCommand {
                 managed_identity_client_id: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::AzureSecretsManager => {
                 crate::config::ProviderConfig::AzureSecretsManager {
@@ -204,6 +220,8 @@ impl AddCommand {
                     managed_identity_client_id: OptionStringOrSecretRef::none(),
                     auth_command: None,
                     daemon_cache: None,
+                    cache_ttl: None,
+                    max_cache_ttl: None,
                 }
             }
             ProviderType::GcpKms => crate::config::ProviderConfig::GcpKms {
@@ -213,6 +231,8 @@ impl AddCommand {
                 key: StringOrSecretRef::from("my-key"),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::Bitwarden => crate::config::ProviderConfig::Bitwarden {
                 collection: OptionStringOrSecretRef::none(),
@@ -222,6 +242,8 @@ impl AddCommand {
                 backend: None,
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::BitwardenSecretsManager => {
                 crate::config::ProviderConfig::BitwardenSecretsManager {
@@ -229,6 +251,8 @@ impl AddCommand {
                     profile: OptionStringOrSecretRef::none(),
                     auth_command: None,
                     daemon_cache: None,
+                    cache_ttl: None,
+                    max_cache_ttl: None,
                 }
             }
             ProviderType::Age => crate::config::ProviderConfig::AgeEncryption {
@@ -239,6 +263,8 @@ impl AddCommand {
                 default_identity: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             #[cfg(not(target_env = "musl"))]
             ProviderType::Fido2 => {
@@ -257,6 +283,8 @@ impl AddCommand {
                     pin: OptionStringOrSecretRef::none(),
                     auth_command: None,
                     daemon_cache: None,
+                    cache_ttl: None,
+                    max_cache_ttl: None,
                 }
             }
             ProviderType::Yubikey => {
@@ -271,6 +299,8 @@ impl AddCommand {
                     slot: StringOrSecretRef::from(slot_str.as_str()),
                     auth_command: None,
                     daemon_cache: None,
+                    cache_ttl: None,
+                    max_cache_ttl: None,
                 }
             }
             ProviderType::Doppler => crate::config::ProviderConfig::Doppler {
@@ -279,6 +309,8 @@ impl AddCommand {
                 token: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::Enpass => crate::config::ProviderConfig::Enpass {
                 vault: StringOrSecretRef::from("~/Documents/Enpass/Vaults/primary"),
@@ -286,6 +318,8 @@ impl AddCommand {
                 password: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::Foks => crate::config::ProviderConfig::Foks {
                 prefix: OptionStringOrSecretRef::literal("/fnox/"),
@@ -295,6 +329,8 @@ impl AddCommand {
                 bot_token: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::Infisical => crate::config::ProviderConfig::Infisical {
                 project_id: OptionStringOrSecretRef::literal("your-project-id"),
@@ -302,6 +338,8 @@ impl AddCommand {
                 path: OptionStringOrSecretRef::literal("/"),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::KeePass => crate::config::ProviderConfig::KeePass {
                 database: StringOrSecretRef::from("~/secrets.kdbx"),
@@ -309,6 +347,8 @@ impl AddCommand {
                 password: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::KeeperSecretsManager => {
                 crate::config::ProviderConfig::KeeperSecretsManager {
@@ -316,6 +356,8 @@ impl AddCommand {
                     token: OptionStringOrSecretRef::none(),
                     auth_command: None,
                     daemon_cache: None,
+                    cache_ttl: None,
+                    max_cache_ttl: None,
                 }
             }
             ProviderType::Keychain => crate::config::ProviderConfig::Keychain {
@@ -324,6 +366,8 @@ impl AddCommand {
                 touch_id: false,
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::Kubernetes => crate::config::ProviderConfig::Kubernetes {
                 context: OptionStringOrSecretRef::none(),
@@ -332,11 +376,15 @@ impl AddCommand {
                 prefix: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::Gopass => crate::config::ProviderConfig::Gopass {
                 mount: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::PasswordStore => crate::config::ProviderConfig::PasswordStore {
                 prefix: OptionStringOrSecretRef::literal("fnox/"),
@@ -344,6 +392,8 @@ impl AddCommand {
                 gpg_opts: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::Passwordstate => crate::config::ProviderConfig::Passwordstate {
                 base_url: StringOrSecretRef::from("https://passwordstate.example.com"),
@@ -352,6 +402,8 @@ impl AddCommand {
                 verify_ssl: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::Lua => crate::config::ProviderConfig::Lua {
                 plugin: StringOrSecretRef::from(
@@ -360,12 +412,16 @@ impl AddCommand {
                 options: Default::default(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::Plain => crate::config::ProviderConfig::Plain {
                 file: crate::providers::OptionStringOrSecretRef::none(),
                 format: crate::providers::OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
             ProviderType::ProtonPass => crate::config::ProviderConfig::ProtonPass {
                 vault: self
@@ -377,6 +433,8 @@ impl AddCommand {
                 agent_reason: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
         };
 

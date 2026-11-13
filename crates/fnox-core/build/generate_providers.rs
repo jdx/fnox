@@ -366,6 +366,14 @@ fn generate_config_variant_fields(provider: &ProviderToml) -> Vec<TokenStream> {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         daemon_cache: Option<bool>
     });
+    fields.push(quote! {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cache_ttl: Option<String>
+    });
+    fields.push(quote! {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_cache_ttl: Option<String>
+    });
 
     fields
 }
@@ -417,6 +425,7 @@ fn generate_provider_methods(
     let mut from_wizard_fields_arms = Vec::new();
     let mut auth_command_arms = Vec::new();
     let mut daemon_cache_arms = Vec::new();
+    let mut cache_ttl_arms = Vec::new();
     let mut env_deps_arms = Vec::new();
     let mut interactive_auth_arms = Vec::new();
 
@@ -468,6 +477,9 @@ fn generate_provider_methods(
             quote! { Self::#variant { daemon_cache, .. } => daemon_cache.unwrap_or(true) }
         };
         daemon_cache_arms.push(daemon_cache_arm);
+        cache_ttl_arms.push(quote! {
+            Self::#variant { cache_ttl, max_cache_ttl, .. } => (cache_ttl.as_deref(), max_cache_ttl.as_deref())
+        });
         env_deps_arms.push(quote! {
             Self::#variant { .. } => #module::env_dependencies()
         });
@@ -610,6 +622,13 @@ fn generate_provider_methods(
                     #(#daemon_cache_arms),*
                 }
             }
+
+            /// The provider's `(cache_ttl, max_cache_ttl)` daemon cache overrides.
+            pub fn daemon_cache_ttls(&self) -> (Option<&str>, Option<&str>) {
+                match self {
+                    #(#cache_ttl_arms),*
+                }
+            }
         }
     };
 
@@ -712,7 +731,7 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
     let variant = Ident::new(&provider.rust_variant, Span::call_site());
 
     if provider.fields.is_empty() {
-        return quote! { Ok(ProviderConfig::#variant { auth_command: None, daemon_cache: None }) };
+        return quote! { Ok(ProviderConfig::#variant { auth_command: None, daemon_cache: None, cache_ttl: None, max_cache_ttl: None }) };
     }
 
     // Special handling for age provider
@@ -733,6 +752,8 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                 default_identity: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             })
         };
     }
@@ -746,6 +767,8 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                 password: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             })
         };
     }
@@ -759,6 +782,8 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                 gpg_opts: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             })
         };
     }
@@ -774,6 +799,8 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
                 backend: None,
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             })
         };
     }
@@ -816,6 +843,8 @@ fn generate_from_wizard_fields_body(provider: &ProviderToml) -> TokenStream {
             #(#field_inits,)*
             auth_command: None,
             daemon_cache: None,
+            cache_ttl: None,
+            max_cache_ttl: None,
         })
     }
 }

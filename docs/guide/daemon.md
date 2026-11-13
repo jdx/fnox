@@ -36,7 +36,42 @@ fnox daemon clear                          # evict everything
 The cache is also dropped automatically when:
 
 - the daemon stops, or exits after `idle_timeout` with no requests;
+- an entry's `cache_ttl` or `max_cache_ttl` runs out (only that entry);
 - a config file, the selected profile, a provider setting, or a relevant `FNOX_*` or provider credential variable (such as `AWS_*`) changes.
+
+## Expire cached secrets
+
+By default a cached value stays until the daemon exits, and every request, including the shell hook's, keeps the daemon running. To make a secret behind a passphrase or hardware key ask again, give entries a time limit. The two timers work like gpg-agent's `default-cache-ttl` and `max-cache-ttl`:
+
+```toml
+[daemon]
+idle_timeout = "8h"   # when the daemon process exits (unchanged)
+cache_ttl = "30m"     # sliding: each read restarts it
+max_cache_ttl = "4h"  # absolute: counted from when the value was stored
+
+[secrets]
+PROD_DB = { provider = "age", value = "...", cache_ttl = "5m", max_cache_ttl = "15m" }
+```
+
+An entry expires when either timer runs out. The next read resolves it again, so any passphrase or PIN prompt comes back. The daemon keeps running with the rest of its cache. A sliding `cache_ttl` alone never expires a value that the shell hook keeps reading, so set `max_cache_ttl` when that matters.
+
+Each timer comes from the secret, else its provider, else `[daemon]`. Durations look like `"30m"` or `"2h30m"`; `"0s"` is an error, so use `daemon_cache = false` to turn caching off.
+
+See what is cached, without the values:
+
+```sh
+fnox daemon status --verbose
+```
+
+```
+KEY      PROFILE  PURPOSE  AGE  IDLE LEFT  MAX LEFT
+PROD_DB  default  get      12m  2m         3m
+FOO      default  exec     2h   28m        2h
+```
+
+`-` means that timer is not set. `--json` prints the same data for scripts.
+
+The timers limit how long a value stays readable by other programs running as you. They don't affect a value that was already read or exported, and they are not rotation.
 
 ## Where the socket lives
 

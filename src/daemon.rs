@@ -8,8 +8,8 @@ use fnox_client::path::{RuntimeEnv, SocketKey};
 use fnox_client::wire::MAX_LINE_BYTES;
 pub use fnox_client::wire::Purpose;
 use fnox_client::wire::{
-    CallError, Request, ResolveBatchRequest, ResolveEnvRequest, ResolveOneRequest, Response,
-    StoreResolvedRequest,
+    CacheEntryInfo, CallError, Request, ResolveBatchRequest, ResolveEnvRequest, ResolveOneRequest,
+    Response, StoreResolvedRequest,
 };
 use fnox_client::{MIN_PROTOCOL, WIRE_VERSION, daemon_env_override, platform_supported};
 use indexmap::IndexMap;
@@ -21,7 +21,7 @@ use std::os::fd::AsRawFd;
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 #[cfg(any(unix, windows))]
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 #[cfg(windows)]
@@ -102,10 +102,60 @@ struct CacheKey {
     hash: String,
 }
 
+/// Effective TTLs for one cached secret. `None` means that timer is not set.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct CacheTtls {
+    /// Sliding: restarts on every read.
+    ttl: Option<Duration>,
+    /// Absolute: counted from when the value was stored; reads never extend it.
+    max_ttl: Option<Duration>,
+}
+
+/// A cached value with the bookkeeping its TTLs need.
+struct CacheEntry {
+    value: String,
+    profile: Vec<String>,
+    purpose: String,
+    stored_at: Instant,
+    last_used: Instant,
+    ttls: CacheTtls,
+}
+
+impl CacheEntry {
+    fn new(value: String, profile: &[String], purpose: &str, ttls: CacheTtls) -> Self {
+        let now = Instant::now();
+        Self {
+            value,
+            profile: profile.to_vec(),
+            purpose: purpose.to_string(),
+            stored_at: now,
+            last_used: now,
+            ttls,
+        }
+    }
+
+    fn idle_left(&self, now: Instant) -> Option<Duration> {
+        self.ttls
+            .ttl
+            .map(|ttl| ttl.saturating_sub(now.saturating_duration_since(self.last_used)))
+    }
+
+    fn max_left(&self, now: Instant) -> Option<Duration> {
+        self.ttls
+            .max_ttl
+            .map(|ttl| ttl.saturating_sub(now.saturating_duration_since(self.stored_at)))
+    }
+
+    fn expired(&self, now: Instant) -> bool {
+        self.idle_left(now).is_some_and(|left| left.is_zero())
+            || self.max_left(now).is_some_and(|left| left.is_zero())
+    }
+}
+
 #[derive(Default)]
 struct DaemonState {
     // Missing values are not cache hits: a provider may recover between requests.
-    cache: HashMap<CacheKey, Option<String>>,
+    cache: HashMap<CacheKey, CacheEntry>,
     /// Incremented on every clear. A foreground resolution records the epoch it
     /// started at so its write-back can be rejected for keys cleared meanwhile.
     epoch: u64,
@@ -116,6 +166,62 @@ struct DaemonState {
 }
 
 impl DaemonState {
+    /// The cached value for `key`, restarting its sliding TTL. An entry whose
+    /// TTL has run out is evicted and counts as a miss.
+    fn get(&mut self, key: &CacheKey) -> Option<String> {
+        let now = Instant::now();
+        let entry = self.cache.get_mut(key)?;
+        if entry.expired(now) {
+            self.cache.remove(key);
+            return None;
+        }
+        entry.last_used = now;
+        Some(entry.value.clone())
+    }
+
+    fn insert(
+        &mut self,
+        key: CacheKey,
+        value: String,
+        profile: &[String],
+        purpose: &str,
+        ttls: CacheTtls,
+    ) {
+        // A foreground batch sends its cache hits back with the newly resolved
+        // values. Keep a live entry holding the same value, so only a real
+        // resolve starts a new `max_cache_ttl` window.
+        let now = Instant::now();
+        if let Some(entry) = self.cache.get_mut(&key)
+            && entry.value == value
+            && !entry.expired(now)
+        {
+            entry.ttls = ttls;
+            return;
+        }
+        self.cache
+            .insert(key, CacheEntry::new(value, profile, purpose, ttls));
+    }
+
+    /// Drop expired entries and describe the rest, without their values.
+    fn entries(&mut self) -> Vec<CacheEntryInfo> {
+        let now = Instant::now();
+        self.cache.retain(|_, entry| !entry.expired(now));
+        let mut entries = self
+            .cache
+            .iter()
+            .map(|(key, entry)| CacheEntryInfo {
+                key: key.secret.clone(),
+                profile: entry.profile.clone(),
+                purpose: entry.purpose.clone(),
+                age_secs: now.saturating_duration_since(entry.stored_at).as_secs(),
+                idle_left_secs: entry.idle_left(now).map(|d| d.as_secs()),
+                max_left_secs: entry.max_left(now).map(|d| d.as_secs()),
+            })
+            .collect::<Vec<_>>();
+        entries.sort_by(|a, b| a.key.cmp(&b.key).then_with(|| a.purpose.cmp(&b.purpose)));
+        entries
+    }
+
     fn clear(&mut self, keys: Vec<String>) {
         self.epoch += 1;
         if keys.is_empty() {
@@ -288,7 +394,13 @@ pub async fn resolve_batch_with_context(
                 batch_request,
                 fingerprint,
                 epoch,
-                values.clone(),
+                // Cache hits keep their stored entry, and with it their
+                // `max_cache_ttl` window; only fresh values are written back.
+                values
+                    .iter()
+                    .filter(|(key, _)| !cached_keys.contains(*key))
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect(),
             )
             .await
             {
@@ -461,16 +573,75 @@ async fn store_foreground_values(
     }
 }
 
-pub async fn status(cli: &Cli) -> Result<Option<(u32, usize)>> {
+/// A running daemon's state, as reported by `fnox daemon status`.
+#[derive(Debug, Clone)]
+pub struct DaemonStatus {
+    pub pid: u32,
+    pub cached_entries: usize,
+    pub entries: Vec<CacheEntryInfo>,
+}
+
+fn format_secs(secs: u64) -> String {
+    match secs {
+        0..60 => format!("{secs}s"),
+        60..3600 => format!("{}m", secs / 60),
+        3600..86400 => format!("{}h", secs / 3600),
+        _ => format!("{}d", secs / 86400),
+    }
+}
+
+/// The `status --verbose` table. `-` means that timer is not set.
+pub fn format_entries(entries: &[CacheEntryInfo]) -> String {
+    let timer = |secs: Option<u64>| secs.map_or_else(|| "-".to_string(), format_secs);
+    let rows = entries
+        .iter()
+        .map(|e| {
+            [
+                e.key.clone(),
+                e.profile.join(","),
+                e.purpose.clone(),
+                format_secs(e.age_secs),
+                timer(e.idle_left_secs),
+                timer(e.max_left_secs),
+            ]
+        })
+        .collect::<Vec<_>>();
+    let header = ["KEY", "PROFILE", "PURPOSE", "AGE", "IDLE LEFT", "MAX LEFT"];
+    let mut widths = header.map(str::len);
+    for row in &rows {
+        for (width, cell) in widths.iter_mut().zip(row) {
+            *width = (*width).max(cell.len());
+        }
+    }
+    let mut out = String::new();
+    for row in std::iter::once(header.map(str::to_string)).chain(rows) {
+        let line = row
+            .iter()
+            .zip(widths)
+            .map(|(cell, width)| format!("{cell:<width$}"))
+            .collect::<Vec<_>>()
+            .join("  ");
+        out.push_str(line.trim_end());
+        out.push('\n');
+    }
+    out
+}
+
+pub async fn status(cli: &Cli) -> Result<Option<DaemonStatus>> {
     status_for_context(&ResolveContext::from_cli(cli)).await
 }
 
-async fn status_for_context(ctx: &ResolveContext) -> Result<Option<(u32, usize)>> {
+async fn status_for_context(ctx: &ResolveContext) -> Result<Option<DaemonStatus>> {
     match call(socket_path_for_context(ctx)?, Request::Status).await {
         Ok(Response::Status {
             pid,
             cached_entries,
-        }) => Ok(Some((pid, cached_entries))),
+            entries,
+        }) => Ok(Some(DaemonStatus {
+            pid,
+            cached_entries,
+            entries,
+        })),
         Ok(Response::Error { message }) => Err(FnoxError::Config(message)),
         Ok(_) => Err(FnoxError::Config(
             "Invalid daemon response for Status".to_string(),
@@ -1153,10 +1324,12 @@ async fn process_request(
             resolve_env_response(&config, &req, env_override, &state).await
         }
         Request::Status => {
-            let state = state.lock().await;
+            let mut state = state.lock().await;
+            let entries = state.entries();
             Ok(Response::Status {
                 pid: std::process::id(),
-                cached_entries: state.cache.len(),
+                cached_entries: entries.len(),
+                entries,
             })
         }
         Request::Clear => {
@@ -1395,7 +1568,7 @@ async fn resolve_env_response(
     let mut resolved = IndexMap::new();
     let mut misses = Vec::new();
     {
-        let state = state.lock().await;
+        let mut state = state.lock().await;
         for key in &sel.roots {
             let cached = secrets.get(key).and_then(|secret| {
                 if !secret_is_cacheable(&providers, default_provider, secret, purpose) {
@@ -1409,7 +1582,7 @@ async fn resolve_env_response(
                     req.no_defaults,
                     purpose,
                 );
-                state.cache.get(&cache_key).cloned().flatten()
+                state.get(&cache_key)
             });
             match cached {
                 Some(value) => {
@@ -1485,12 +1658,16 @@ async fn foreground_resolution_if_needed(
     let fingerprint = config_fingerprint(config, &req.env)?;
     let providers = config.get_providers(profile)?;
     let default_provider = cache_policy_default_provider(config, profile, &providers);
-    let state = state.lock().await;
+    let mut state = state.lock().await;
     let mut cached_values = IndexMap::new();
     let mut keys = Vec::new();
     for (key, secret) in secrets {
+        if secret_is_cacheable(&providers, default_provider, secret, &req.purpose) {
+            // Reject a bad TTL now, not after the user has already been prompted.
+            cache_ttls(config, &providers, default_provider, secret)?;
+        }
         if secret_is_cacheable(&providers, default_provider, secret, &req.purpose)
-            && let Some(Some(value)) = state.cache.get(&cache_key(
+            && let Some(value) = state.get(&cache_key(
                 &fingerprint,
                 profile,
                 key,
@@ -1499,7 +1676,7 @@ async fn foreground_resolution_if_needed(
                 &req.purpose,
             ))
         {
-            cached_values.insert(key.clone(), Some(value.clone()));
+            cached_values.insert(key.clone(), Some(value));
         } else {
             keys.push(key.clone());
         }
@@ -1552,7 +1729,8 @@ async fn store_resolved_values(
                 req.no_defaults,
                 &req.purpose,
             );
-            state.cache.insert(cache_key, Some(value));
+            let ttls = cache_ttls(config, &providers, default_provider, secret)?;
+            state.insert(cache_key, value, profile, &req.purpose, ttls);
         }
     }
     Ok(())
@@ -1607,7 +1785,7 @@ async fn resolve_with_cache_tracking(
     let mut cached_keys = HashSet::new();
 
     {
-        let state = state.lock().await;
+        let mut state = state.lock().await;
         for (key, secret) in &secrets {
             let cacheable = secret_is_cacheable(&providers, default_provider, secret, &req.purpose);
             if cacheable {
@@ -1619,8 +1797,8 @@ async fn resolve_with_cache_tracking(
                     req.no_defaults,
                     &req.purpose,
                 );
-                if let Some(Some(value)) = state.cache.get(&cache_key) {
-                    results.insert(key.clone(), Some(value.clone()));
+                if let Some(value) = state.get(&cache_key) {
+                    results.insert(key.clone(), Some(value));
                     cached_keys.insert(key.clone());
                     continue;
                 }
@@ -1636,9 +1814,11 @@ async fn resolve_with_cache_tracking(
         let mut state = state.lock().await;
         for (key, value) in resolved {
             if let Some(cache_key) = miss_keys.remove(&key)
-                && value.is_some()
+                && let Some(value) = &value
+                && let Some(secret) = secrets.get(&key)
             {
-                state.cache.insert(cache_key, value.clone());
+                let ttls = cache_ttls(config, &providers, default_provider, secret)?;
+                state.insert(cache_key, value.clone(), profile, &req.purpose, ttls);
             }
             results.insert(key, value);
         }
@@ -1678,18 +1858,69 @@ fn cache_policy_default_provider<'a>(
     })
 }
 
-fn provider_daemon_cache_enabled(
-    providers: &IndexMap<String, ProviderConfig>,
-    default_provider: Option<&str>,
-    secret: &SecretConfig,
-) -> bool {
-    let provider_name = if let Some(provider_name) = secret.provider() {
+fn secret_provider_name<'a>(
+    default_provider: Option<&'a str>,
+    secret: &'a SecretConfig,
+) -> Option<&'a str> {
+    if let Some(provider_name) = secret.provider() {
         Some(provider_name)
     } else if secret.value().is_some() {
         default_provider
     } else {
         None
+    }
+}
+
+/// The TTLs for one secret's cache entry. Each timer comes from the secret,
+/// else its provider, else `[daemon]`.
+fn cache_ttls(
+    config: &Config,
+    providers: &IndexMap<String, ProviderConfig>,
+    default_provider: Option<&str>,
+    secret: &SecretConfig,
+) -> Result<CacheTtls> {
+    // A synced secret is read through its sync provider, so that provider's
+    // timers come before the source provider's.
+    let ttls_of = |name: Option<&str>| {
+        name.and_then(|name| providers.get(name))
+            .map_or((None, None), |provider| provider.daemon_cache_ttls())
     };
+    let (sync_ttl, sync_max) = ttls_of(secret.sync.as_ref().map(|sync| sync.provider.as_str()));
+    let (source_ttl, source_max) = ttls_of(secret_provider_name(default_provider, secret));
+    let provider_ttl = sync_ttl.or(source_ttl);
+    let provider_max = sync_max.or(source_max);
+    let daemon = config.daemon.as_ref();
+    let pick = |name: &str, own: Option<&str>, provider: Option<&str>, global: Option<&str>| {
+        own.or(provider)
+            .or(global)
+            .map(|value| {
+                parse_duration(value)
+                    .map_err(|e| FnoxError::Config(format!("invalid {name} \"{value}\": {e}")))
+            })
+            .transpose()
+    };
+    Ok(CacheTtls {
+        ttl: pick(
+            "cache_ttl",
+            secret.cache_ttl.as_deref(),
+            provider_ttl,
+            daemon.and_then(|d| d.cache_ttl.as_deref()),
+        )?,
+        max_ttl: pick(
+            "max_cache_ttl",
+            secret.max_cache_ttl.as_deref(),
+            provider_max,
+            daemon.and_then(|d| d.max_cache_ttl.as_deref()),
+        )?,
+    })
+}
+
+fn provider_daemon_cache_enabled(
+    providers: &IndexMap<String, ProviderConfig>,
+    default_provider: Option<&str>,
+    secret: &SecretConfig,
+) -> bool {
+    let provider_name = secret_provider_name(default_provider, secret);
 
     let source_allows_cache = provider_name
         .and_then(|provider_name| providers.get(provider_name))
@@ -1758,6 +1989,15 @@ fn config_fingerprint(config: &Config, env: &[(String, String)]) -> Result<Strin
         if let Ok(content) = std::fs::read(&path) {
             hasher.update(&content);
         }
+    }
+    // Entries copy their TTLs when stored, and `[daemon]` may live in a file the
+    // sources above do not cover, such as the global config. Changing a
+    // timer must not leave older entries on the old limits.
+    if let Some(daemon) = &config.daemon {
+        hasher.update(b"cache_ttl");
+        hasher.update(daemon.cache_ttl.as_deref().unwrap_or("").as_bytes());
+        hasher.update(b"max_cache_ttl");
+        hasher.update(daemon.max_cache_ttl.as_deref().unwrap_or("").as_bytes());
     }
     let mut env = env.to_vec();
     env.sort_by(|a, b| a.0.cmp(&b.0));
@@ -2078,15 +2318,16 @@ mod tests {
     }
 
     use super::{
-        CacheKey, DaemonState, Purpose, Request, ResolveBatchRequest, ResolveContext,
-        ResolveEnvRequest, Response, cache_key, config_fingerprint,
-        foreground_resolution_if_needed, parse_duration, process_request, resolve_env_response,
-        resolve_with_cache, store_resolved_values,
+        CacheEntry, CacheEntryInfo, CacheKey, CacheTtls, DaemonState, Purpose, Request,
+        ResolveBatchRequest, ResolveContext, ResolveEnvRequest, Response, cache_key, cache_ttls,
+        config_fingerprint, foreground_resolution_if_needed, format_entries, parse_duration,
+        process_request, resolve_env_response, resolve_with_cache, store_resolved_values,
     };
     use fnox_client::document::EnvScope;
     use fnox_client::path::RuntimeEnv;
     use fnox_core::config::{Config, ProviderConfig, SecretConfig};
     use indexmap::IndexMap;
+    use std::time::{Duration, Instant};
     use std::{path::PathBuf, sync::Arc};
     use tokio::sync::Mutex;
 
@@ -2096,13 +2337,264 @@ mod tests {
         assert_eq!(parse_duration("1d2h3m4s").unwrap().as_secs(), 93784);
     }
 
+    fn test_entry(value: &str) -> CacheEntry {
+        CacheEntry::new(
+            value.to_string(),
+            &["default".to_string()],
+            "exec",
+            CacheTtls::default(),
+        )
+    }
+
+    fn secs(n: u64) -> Duration {
+        Duration::from_secs(n)
+    }
+
+    fn entry_with(ttl: Option<u64>, max: Option<u64>, now: Instant) -> CacheEntry {
+        let mut entry = test_entry("v");
+        entry.stored_at = now;
+        entry.last_used = now;
+        entry.ttls = CacheTtls {
+            ttl: ttl.map(secs),
+            max_ttl: max.map(secs),
+        };
+        entry
+    }
+
+    #[test]
+    fn entry_without_ttls_never_expires() {
+        let now = Instant::now();
+        let entry = entry_with(None, None, now);
+        assert!(!entry.expired(now + secs(10 * 365 * 86400)));
+        assert_eq!(entry.idle_left(now), None);
+        assert_eq!(entry.max_left(now), None);
+    }
+
+    #[test]
+    fn sliding_ttl_expires_after_idle_and_restarts_on_use() {
+        let now = Instant::now();
+        let mut entry = entry_with(Some(60), None, now);
+        assert!(!entry.expired(now + secs(59)));
+        assert_eq!(entry.idle_left(now + secs(20)), Some(secs(40)));
+        assert!(entry.expired(now + secs(60)));
+        entry.last_used = now + secs(50);
+        assert!(!entry.expired(now + secs(100)));
+        assert!(entry.expired(now + secs(110)));
+    }
+
+    #[test]
+    fn max_ttl_expires_even_when_the_entry_is_in_use() {
+        let now = Instant::now();
+        let mut entry = entry_with(Some(60), Some(100), now);
+        entry.last_used = now + secs(95);
+        assert!(!entry.expired(now + secs(99)));
+        assert!(entry.expired(now + secs(100)));
+        assert_eq!(entry.max_left(now + secs(40)), Some(secs(60)));
+    }
+
+    #[test]
+    fn state_get_evicts_expired_entries_and_keeps_live_ones() {
+        let config = Config::new();
+        let secret = plain_secret("value");
+        let req = test_batch_request();
+        let fingerprint = config_fingerprint(&config, &req.env).unwrap();
+        let key_for = |name: &str| {
+            cache_key(
+                &fingerprint,
+                &req.profile,
+                name,
+                &secret,
+                req.no_defaults,
+                &req.purpose,
+            )
+        };
+        let mut state = DaemonState::default();
+        let ttls = CacheTtls {
+            ttl: Some(secs(3600)),
+            max_ttl: None,
+        };
+        state.insert(key_for("LIVE"), "a".into(), &req.profile, "exec", ttls);
+        state.insert(key_for("DEAD"), "b".into(), &req.profile, "exec", ttls);
+        state.cache.get_mut(&key_for("DEAD")).unwrap().last_used =
+            Instant::now().checked_sub(secs(7200)).unwrap();
+
+        assert_eq!(state.get(&key_for("LIVE")).as_deref(), Some("a"));
+        assert_eq!(state.get(&key_for("DEAD")), None);
+        assert!(!state.cache.contains_key(&key_for("DEAD")));
+    }
+
+    #[test]
+    fn status_entries_skip_expired_and_omit_values() {
+        let config = Config::new();
+        let secret = plain_secret("value");
+        let req = test_batch_request();
+        let fingerprint = config_fingerprint(&config, &req.env).unwrap();
+        let key = |name: &str| {
+            cache_key(
+                &fingerprint,
+                &req.profile,
+                name,
+                &secret,
+                req.no_defaults,
+                &req.purpose,
+            )
+        };
+        let mut state = DaemonState::default();
+        let ttls = CacheTtls {
+            ttl: Some(secs(1800)),
+            max_ttl: Some(secs(14400)),
+        };
+        state.insert(key("B"), "secret-b".into(), &req.profile, "exec", ttls);
+        state.insert(key("A"), "secret-a".into(), &req.profile, "get", ttls);
+        state.insert(
+            key("GONE"),
+            "x".into(),
+            &req.profile,
+            "get",
+            CacheTtls {
+                ttl: Some(secs(1)),
+                max_ttl: None,
+            },
+        );
+        state.cache.get_mut(&key("GONE")).unwrap().last_used =
+            Instant::now().checked_sub(secs(60)).unwrap();
+
+        let entries = state.entries();
+        assert_eq!(
+            entries.iter().map(|e| e.key.as_str()).collect::<Vec<_>>(),
+            ["A", "B"]
+        );
+        assert_eq!(entries[0].purpose, "get");
+        assert!(entries[0].idle_left_secs.unwrap() <= 1800);
+        assert!(entries[0].max_left_secs.unwrap() <= 14400);
+        assert!(!serde_json::to_string(&entries).unwrap().contains("secret-"));
+    }
+
+    #[test]
+    fn cache_ttls_prefer_secret_then_provider_then_daemon() {
+        let config = env_config(
+            r#"
+[daemon]
+cache_ttl = "30m"
+max_cache_ttl = "4h"
+
+[providers.plain]
+type = "plain"
+cache_ttl = "10m"
+
+[secrets]
+GLOBAL = { provider = "other", value = "a" }
+PROVIDER = { provider = "plain", value = "b" }
+OWN = { provider = "plain", value = "c", cache_ttl = "5m", max_cache_ttl = "15m" }
+"#,
+        );
+        let profile = ["default".to_string()];
+        let secrets = config.get_secrets(&profile).unwrap();
+        let providers = config.get_providers(&profile).unwrap();
+        let ttls = |name: &str| cache_ttls(&config, &providers, None, &secrets[name]).unwrap();
+
+        assert_eq!(
+            ttls("GLOBAL"),
+            CacheTtls {
+                ttl: Some(secs(1800)),
+                max_ttl: Some(secs(14400)),
+            }
+        );
+        assert_eq!(
+            ttls("PROVIDER"),
+            CacheTtls {
+                ttl: Some(secs(600)),
+                max_ttl: Some(secs(14400)),
+            }
+        );
+        assert_eq!(
+            ttls("OWN"),
+            CacheTtls {
+                ttl: Some(secs(300)),
+                max_ttl: Some(secs(900)),
+            }
+        );
+    }
+
+    #[test]
+    fn cache_ttls_prefer_the_sync_provider_over_the_source_provider() {
+        let config = env_config(
+            r#"
+[providers.remote]
+type = "plain"
+cache_ttl = "1h"
+max_cache_ttl = "8h"
+
+[providers.local]
+type = "plain"
+cache_ttl = "5m"
+
+[secrets]
+SYNCED = { provider = "remote", value = "a", sync = { provider = "local", value = "b" } }
+"#,
+        );
+        let profile = ["default".to_string()];
+        let secrets = config.get_secrets(&profile).unwrap();
+        let providers = config.get_providers(&profile).unwrap();
+        let ttls = cache_ttls(&config, &providers, None, &secrets["SYNCED"]).unwrap();
+        assert_eq!(
+            ttls,
+            CacheTtls {
+                ttl: Some(secs(300)),
+                max_ttl: Some(secs(28800)),
+            }
+        );
+    }
+
+    #[test]
+    fn cache_ttls_reject_zero_and_garbage() {
+        let config = Config::new();
+        let providers = IndexMap::new();
+        let mut secret = plain_secret("v");
+        for bad in ["0s", "soon", ""] {
+            secret.cache_ttl = Some(bad.to_string());
+            assert!(
+                cache_ttls(&config, &providers, None, &secret).is_err(),
+                "{bad:?} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn format_entries_renders_a_table_with_unset_timers_as_dashes() {
+        let table = format_entries(&[
+            CacheEntryInfo {
+                key: "PROD_DB".into(),
+                profile: vec!["default".into()],
+                purpose: "get".into(),
+                age_secs: 720,
+                idle_left_secs: Some(120),
+                max_left_secs: Some(180),
+            },
+            CacheEntryInfo {
+                key: "FOO".into(),
+                profile: vec!["default".into()],
+                purpose: "exec".into(),
+                age_secs: 7200,
+                idle_left_secs: None,
+                max_left_secs: None,
+            },
+        ]);
+        assert_eq!(
+            table,
+            "KEY      PROFILE  PURPOSE  AGE  IDLE LEFT  MAX LEFT\n\
+             PROD_DB  default  get      12m  2m         3m\n\
+             FOO      default  exec     2h   -          -\n"
+        );
+    }
+
     #[tokio::test]
     async fn clear_with_keys_evicts_only_matching_entries() {
         let config = Config::new();
         let secret = plain_secret("value");
         let req = test_batch_request();
         let fingerprint = config_fingerprint(&config, &req.env).unwrap();
-        let mut cache = std::collections::HashMap::<CacheKey, Option<String>>::new();
+        let mut cache = std::collections::HashMap::<CacheKey, CacheEntry>::new();
         for key in ["API_KEY", "OTHER_KEY"] {
             cache.insert(
                 cache_key(
@@ -2113,7 +2605,7 @@ mod tests {
                     req.no_defaults,
                     &req.purpose,
                 ),
-                Some("cached".to_string()),
+                test_entry("cached"),
             );
         }
         let state = Arc::new(Mutex::new(DaemonState {
@@ -2171,6 +2663,21 @@ mod tests {
     }
 
     #[test]
+    fn config_fingerprint_tracks_daemon_cache_ttls() {
+        let mut config = Config::default();
+        let none = config_fingerprint(&config, &[]).unwrap();
+        config.daemon = Some(crate::config::DaemonConfig {
+            cache_ttl: Some("30m".to_string()),
+            ..Default::default()
+        });
+        let ttl = config_fingerprint(&config, &[]).unwrap();
+        config.daemon.as_mut().unwrap().max_cache_ttl = Some("4h".to_string());
+        let both = config_fingerprint(&config, &[]).unwrap();
+        assert_ne!(none, ttl);
+        assert_ne!(ttl, both);
+    }
+
+    #[test]
     fn config_fingerprint_tracks_proton_pass_session_env() {
         let config = Config::default();
         let first = config_fingerprint(
@@ -2199,6 +2706,8 @@ mod tests {
             format: crate::providers::OptionStringOrSecretRef::none(),
             auth_command: None,
             daemon_cache,
+            cache_ttl: None,
+            max_cache_ttl: None,
         }
     }
 
@@ -2245,8 +2754,8 @@ mod tests {
             req.no_defaults,
             &req.purpose,
         );
-        let mut cache = std::collections::HashMap::<CacheKey, Option<String>>::new();
-        cache.insert(key, Some("cached".to_string()));
+        let mut cache = std::collections::HashMap::<CacheKey, CacheEntry>::new();
+        cache.insert(key, test_entry("cached"));
         Arc::new(Mutex::new(DaemonState {
             cache,
             ..Default::default()
@@ -2281,6 +2790,56 @@ mod tests {
 
     // A foreground client that read a value before it was cleared must not
     // write that stale value back afterwards.
+    #[tokio::test]
+    async fn foreground_resolution_rejects_invalid_ttls_before_prompting() {
+        let mut config = Config::new();
+        config
+            .providers
+            .insert("plain".to_string(), plain_provider_config(None));
+        let mut secret = plain_secret("api");
+        secret.cache_ttl = Some("0s".to_string());
+        let secrets = IndexMap::from([("API_KEY".to_string(), secret)]);
+        let mut req = test_batch_request();
+        req.non_interactive = false;
+        let state = Arc::new(Mutex::new(DaemonState::default()));
+
+        let err =
+            foreground_resolution_if_needed(&config, &req.profile, &secrets, &req, &state).await;
+        assert!(err.is_err(), "an invalid cache_ttl must fail the request");
+    }
+
+    #[test]
+    fn rewriting_a_live_entry_keeps_its_absolute_deadline() {
+        let config = Config::new();
+        let secret = plain_secret("value");
+        let req = test_batch_request();
+        let fingerprint = config_fingerprint(&config, &req.env).unwrap();
+        let key = cache_key(
+            &fingerprint,
+            &req.profile,
+            "API_KEY",
+            &secret,
+            req.no_defaults,
+            &req.purpose,
+        );
+        let ttls = CacheTtls {
+            ttl: None,
+            max_ttl: Some(secs(100)),
+        };
+        let mut state = DaemonState::default();
+        state.insert(key.clone(), "v".into(), &req.profile, "get", ttls);
+        let stored_at = Instant::now().checked_sub(secs(90)).unwrap();
+        state.cache.get_mut(&key).unwrap().stored_at = stored_at;
+
+        // A foreground batch echoing the cached value must not restart the window.
+        state.insert(key.clone(), "v".into(), &req.profile, "get", ttls);
+        assert_eq!(state.cache[&key].stored_at, stored_at);
+
+        // A different value is a fresh resolve and starts a new window.
+        state.insert(key.clone(), "w".into(), &req.profile, "get", ttls);
+        assert!(state.cache[&key].stored_at > stored_at);
+    }
+
     #[tokio::test]
     async fn foreground_write_back_skips_keys_cleared_meanwhile() {
         let mut config = Config::new();
@@ -2585,7 +3144,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
 
     fn env_request(scope: EnvScope, keys: Option<&[&str]>) -> ResolveEnvRequest {
         ResolveEnvRequest {
-            protocol: 7,
+            protocol: 8,
             cwd: PathBuf::from("."),
             config: PathBuf::from("fnox.toml"),
             profile: vec!["default".to_string()],
@@ -2835,7 +3394,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
                 false,
                 "exec",
             ),
-            Some("nc".to_string()),
+            test_entry("nc"),
         );
         let req = env_request(EnvScope::Exec, Some(&["NOCACHE"]));
         let Response::EnvMiss { keys } = respond(&config, &req, None, &state).await else {
@@ -2914,7 +3473,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
 
     #[tokio::test]
     async fn resolve_env_checks_the_protocol_before_anything_else() {
-        for protocol in [6, 8] {
+        for protocol in [7, 9] {
             let mut req = env_request(EnvScope::Exec, None);
             req.protocol = protocol;
             // The request's cwd and config do not exist; the protocol check comes first.
@@ -2927,7 +3486,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
             .await
             .unwrap();
             assert!(
-                matches!(response, Response::UnsupportedProtocol { min: 7, max: 7 }),
+                matches!(response, Response::UnsupportedProtocol { min: 8, max: 8 }),
                 "{response:?}"
             );
             let response = process_request(
@@ -2939,7 +3498,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
             .unwrap();
             assert!(matches!(
                 response,
-                Response::UnsupportedProtocol { min: 7, max: 7 }
+                Response::UnsupportedProtocol { min: 8, max: 8 }
             ));
         }
     }
@@ -2947,7 +3506,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
     #[tokio::test]
     async fn hello_reports_the_protocol_range_and_pid() {
         let response = process_request(
-            Request::Hello { protocol: 7 },
+            Request::Hello { protocol: 8 },
             empty_state(),
             Arc::new(Mutex::new(())),
         )
@@ -2962,7 +3521,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
         else {
             panic!("expected hello");
         };
-        assert_eq!((protocol, min_protocol), (7, 7));
+        assert_eq!((protocol, min_protocol), (8, 8));
         assert_eq!(fnox_version, env!("CARGO_PKG_VERSION"));
         assert_eq!(pid, std::process::id());
     }

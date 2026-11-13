@@ -45,6 +45,50 @@ EOF
 	assert_output --partial "cached_entries: 1"
 }
 
+@test "daemon status --verbose lists entries with TTL timers and no values" {
+	daemon_config
+	cat >>fnox.toml <<'EOF'
+SHORT = { provider = "plain", value = "short-value", cache_ttl = "5m", max_cache_ttl = "15m" }
+EOF
+
+	run "$FNOX_BIN" get SHORT
+	assert_success
+	assert_output "short-value"
+	run "$FNOX_BIN" get FOO
+	assert_success
+
+	run "$FNOX_BIN" daemon status --verbose
+	assert_success
+	assert_output --partial "IDLE LEFT"
+	assert_output --regexp "SHORT +default +get +[0-9]+s +[0-4]m +1?[0-4]m"
+	assert_output --regexp "FOO +default +get +[0-9]+s +- +-"
+	refute_output --partial "short-value"
+
+	run "$FNOX_BIN" daemon status --json
+	assert_success
+	assert_output --partial "\"max_left_secs\""
+	refute_output --partial "short-value"
+}
+
+@test "daemon cache entry expires after its max_cache_ttl and resolves again" {
+	daemon_config
+	awk '{ print } /^enabled = true/ { print "max_cache_ttl = \"2s\"" }' fnox.toml >fnox.toml.new && mv fnox.toml.new fnox.toml
+
+	run "$FNOX_BIN" get FOO
+	assert_success
+	run "$FNOX_BIN" daemon status
+	assert_output --partial "cached_entries: 1"
+
+	sleep 3
+	run "$FNOX_BIN" daemon status
+	assert_success
+	assert_output --partial "cached_entries: 0"
+
+	run "$FNOX_BIN" get FOO
+	assert_success
+	assert_output "bar"
+}
+
 @test "daemon survives deletion of its spawn directory" {
 	daemon_config
 	mkdir spawn request

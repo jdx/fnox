@@ -108,6 +108,8 @@ mod tests {
             token: OptionStringOrSecretRef::none(),
             auth_command: None,
             daemon_cache: None,
+            cache_ttl: None,
+            max_cache_ttl: None,
         }
     }
 

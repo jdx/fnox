@@ -598,6 +598,8 @@ mod tests {
                 format: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
         );
         profile.provider_sources.insert(
@@ -628,6 +630,8 @@ mod tests {
                 format: OptionStringOrSecretRef::none(),
                 auth_command: None,
                 daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
             },
         );
         config.profiles.insert("prod".to_string(), profile);
@@ -664,6 +668,8 @@ mod tests {
             prefix: OptionStringOrSecretRef::none(),
             auth_command: None,
             daemon_cache: Some(true),
+            cache_ttl: None,
+            max_cache_ttl: None,
         };
 
         assert!(!provider.daemon_cache_enabled());
@@ -677,6 +683,8 @@ mod tests {
             touch_id: true,
             auth_command: None,
             daemon_cache: Some(true),
+            cache_ttl: None,
+            max_cache_ttl: None,
         };
         assert!(protected.requires_interactive_auth());
         assert!(!protected.daemon_cache_enabled());
@@ -687,6 +695,8 @@ mod tests {
             touch_id: false,
             auth_command: None,
             daemon_cache: Some(true),
+            cache_ttl: None,
+            max_cache_ttl: None,
         };
         assert!(!ordinary.requires_interactive_auth());
         assert!(ordinary.daemon_cache_enabled());
