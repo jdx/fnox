@@ -81,9 +81,15 @@ pub(super) fn serve<L: ProxyAccept>(
                 }
             }
         }
-        // The client is gone by now. Handlers record a request before
-        // forwarding it, so stopping them cannot lose an audit entry.
-        connections.shutdown().await;
+        // The client is usually gone by now. Give handlers a moment to finish,
+        // so they can register a minted lease for revocation and record their
+        // audit entry, but never abort one: an abort between creating a lease
+        // and noting it would leave a live credential nobody revokes.
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while connections.join_next().await.is_some() {}
+        })
+        .await;
+        connections.detach_all();
     })
 }
 

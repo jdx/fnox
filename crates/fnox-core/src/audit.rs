@@ -90,7 +90,7 @@ pub struct AuditWriter {
 #[derive(Debug)]
 enum WriterMessage {
     Entry(Box<AuditEntry>),
-    Flush(std::sync::mpsc::SyncSender<()>),
+    Flush(std::sync::mpsc::SyncSender<bool>),
 }
 
 impl AuditWriter {
@@ -101,12 +101,15 @@ impl AuditWriter {
             .name("fnox-audit".into())
             .spawn(move || {
                 let mut batch: Vec<AuditEntry> = Vec::new();
-                let write = |batch: &mut Vec<AuditEntry>| {
+                // Whether a write failed since the last flush acknowledgment
+                let mut failed = false;
+                let write = |batch: &mut Vec<AuditEntry>, failed: &mut bool| {
                     if batch.is_empty() {
                         return;
                     }
                     if let Err(error) = append(&path, batch) {
                         tracing::warn!("failed to write audit log: {error}");
+                        *failed = true;
                     }
                     batch.clear();
                 };
@@ -117,12 +120,12 @@ impl AuditWriter {
                         match message {
                             WriterMessage::Entry(entry) => batch.push(*entry),
                             WriterMessage::Flush(done) => {
-                                write(&mut batch);
-                                let _ = done.send(());
+                                write(&mut batch, &mut failed);
+                                let _ = done.send(!std::mem::take(&mut failed));
                             }
                         }
                     }
-                    write(&mut batch);
+                    write(&mut batch, &mut failed);
                 }
             });
         if let Err(error) = started {
@@ -147,7 +150,8 @@ impl AuditWriter {
 
     /// Waits up to `timeout` for every entry queued so far to be written.
     /// Returns `false` when it gave up, for example because the log sits on
-    /// stalled storage; the entries may then be lost.
+    /// stalled storage, or when a write since the last flush failed; entries
+    /// may then be lost.
     pub fn flush(&self, timeout: std::time::Duration) -> bool {
         use std::sync::mpsc::TrySendError;
         let deadline = std::time::Instant::now() + timeout;
@@ -167,7 +171,7 @@ impl AuditWriter {
             }
         }
         wait.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
-            .is_ok()
+            .unwrap_or(false)
     }
 }
 
@@ -393,6 +397,19 @@ mod tests {
         assert_eq!(read.len(), 2);
         assert_eq!(read[0].request.as_ref().unwrap().injected, ["TOKEN"]);
         assert!(read[1].request.is_none());
+    }
+
+    #[test]
+    fn flush_reports_write_failures() {
+        let dir = tempfile::tempdir().unwrap();
+        // A directory where the log file should be makes every append fail
+        let path = dir.path().join("audit.log");
+        std::fs::create_dir(&path).unwrap();
+        let writer = AuditWriter::spawn(path);
+        writer.send(entry("A", "get"));
+        assert!(!writer.flush(std::time::Duration::from_secs(5)));
+        // The failure is reported once, then the writer is clean again
+        assert!(writer.flush(std::time::Duration::from_secs(5)));
     }
 
     #[test]

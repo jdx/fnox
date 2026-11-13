@@ -1993,7 +1993,7 @@ fn audit_log_receives_proxied_and_refused_requests() {
 }
 
 #[tokio::test]
-async fn shutdown_stops_connection_handlers_before_the_audit_flush() {
+async fn shutdown_does_not_wait_for_idle_connections_and_keeps_audit_entries() {
     let dir = tempfile::tempdir().unwrap();
     let log = dir.path().join("audit.log");
     let mut plan = policy();
