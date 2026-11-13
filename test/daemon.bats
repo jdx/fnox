@@ -72,7 +72,7 @@ EOF
 
 @test "daemon cache entry expires after its max_cache_ttl and resolves again" {
 	daemon_config
-	sed -i "s/^enabled = true/enabled = true\nmax_cache_ttl = \"2s\"/" fnox.toml
+	awk '{ print } /^enabled = true/ { print "max_cache_ttl = \"2s\"" }' fnox.toml >fnox.toml.new && mv fnox.toml.new fnox.toml
 
 	run "$FNOX_BIN" get FOO
 	assert_success
