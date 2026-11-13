@@ -275,6 +275,7 @@ jobs:
       # Only tagged releases may be signed; a manual run from a branch is not a release.
       - name: Require a release tag
         if: github.ref_type != 'tag'
+        shell: bash
         run: |
           echo "::error::Windows binaries are signed only from a release tag, but this run is on ${GITHUB_REF}. Dispatch the workflow from the tag."
           exit 1
