@@ -31,6 +31,174 @@ pub struct AuditEntry {
     pub provider: Option<String>,
     /// Whether the daemon answered from its in-memory cache.
     pub cached: bool,
+    /// Set on entries for requests served or refused by `fnox proxy run`.
+    /// Those entries leave `secret` empty and name what was injected here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request: Option<AuditRequest>,
+}
+
+/// A request the credential proxy served or refused. Never holds headers,
+/// bodies, query strings, or values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuditRequest {
+    pub method: String,
+    /// Destination host, or the stripped target of a refused request.
+    pub domain: String,
+    pub path: String,
+    /// Secrets (or `lease:<name>`) injected into the request.
+    #[serde(default)]
+    pub injected: Vec<String>,
+    /// Why the proxy turned the request away. `None` for a served request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refused: Option<String>,
+}
+
+/// The log entry for one proxy request.
+pub fn request_entry(profile: &[String], request: AuditRequest) -> AuditEntry {
+    AuditEntry {
+        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        command: "proxy".to_string(),
+        profile: profile.to_vec(),
+        config: String::new(),
+        secret: String::new(),
+        provider: None,
+        cached: false,
+        request: Some(request),
+    }
+}
+
+/// Records one proxy request. Failures are logged and swallowed, like
+/// [`record_reads`]. This writes on the calling thread; async callers should
+/// queue entries for a writer thread instead (see [`AuditWriter`]).
+pub fn record_request(path: &Path, profile: &[String], request: AuditRequest) {
+    if let Err(error) = append(path, &[request_entry(profile, request)]) {
+        tracing::warn!("failed to write audit log: {error}");
+    }
+}
+
+/// Queue to a thread that appends entries to the log, so slow storage never
+/// stalls the caller. Entries are written in order. When the queue (1024
+/// entries) is full, new entries are dropped rather than blocking; call
+/// [`flush`] before the process exits to wait for what is still queued.
+///
+/// [`flush`]: AuditWriter::flush
+#[derive(Debug)]
+pub struct AuditWriter {
+    queue: std::sync::mpsc::SyncSender<WriterMessage>,
+    /// Set by [`AuditWriter::close`]; held while queuing so no entry can slip in after it
+    closed: std::sync::Mutex<bool>,
+}
+
+#[derive(Debug)]
+enum WriterMessage {
+    Entry(Box<AuditEntry>),
+    Flush(std::sync::mpsc::SyncSender<bool>),
+}
+
+impl AuditWriter {
+    /// Starts the writer thread. It ends when the writer is dropped.
+    pub fn spawn(path: PathBuf) -> Self {
+        let (queue, rx) = std::sync::mpsc::sync_channel::<WriterMessage>(1024);
+        let started = std::thread::Builder::new()
+            .name("fnox-audit".into())
+            .spawn(move || {
+                let mut batch: Vec<AuditEntry> = Vec::new();
+                // Whether a write failed since the last flush acknowledgment
+                let mut failed = false;
+                let write = |batch: &mut Vec<AuditEntry>, failed: &mut bool| {
+                    if batch.is_empty() {
+                        return;
+                    }
+                    if let Err(error) = append(&path, batch) {
+                        tracing::warn!("failed to write audit log: {error}");
+                        *failed = true;
+                    }
+                    batch.clear();
+                };
+                while let Ok(message) = rx.recv() {
+                    let mut pending = vec![message];
+                    pending.extend(rx.try_iter().take(255));
+                    for message in pending {
+                        match message {
+                            WriterMessage::Entry(entry) => batch.push(*entry),
+                            WriterMessage::Flush(done) => {
+                                write(&mut batch, &mut failed);
+                                let _ = done.send(!std::mem::take(&mut failed));
+                            }
+                        }
+                    }
+                    write(&mut batch, &mut failed);
+                }
+            });
+        if let Err(error) = started {
+            tracing::warn!("failed to start audit writer: {error}");
+        }
+        Self {
+            queue,
+            closed: std::sync::Mutex::new(false),
+        }
+    }
+
+    /// Queues one entry without blocking. When the queue is full because the
+    /// log's storage has stalled, the entry is dropped, with a warning the first
+    /// time, rather than stalling the caller.
+    ///
+    /// Returns `false` when the writer was closed or its thread is gone, so the
+    /// caller can report the entry another way. A full queue still returns `true`: the drop is warned about.
+    pub fn send(&self, entry: AuditEntry) -> bool {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static WARNED: AtomicBool = AtomicBool::new(false);
+        let closed = self.closed.lock().unwrap_or_else(|e| e.into_inner());
+        if *closed {
+            return false;
+        }
+        match self.queue.try_send(WriterMessage::Entry(Box::new(entry))) {
+            Ok(()) => true,
+            // The writer thread is gone (it failed to start), so nothing was queued
+            Err(std::sync::mpsc::TrySendError::Disconnected(_)) => false,
+            Err(std::sync::mpsc::TrySendError::Full(_)) => {
+                if !WARNED.swap(true, Ordering::Relaxed) {
+                    tracing::warn!("audit log is not keeping up; dropping request records");
+                }
+                true
+            }
+        }
+    }
+
+    /// Stops accepting entries, then waits like [`flush`](AuditWriter::flush).
+    /// Every entry accepted before the call is covered by the wait; later ones
+    /// are refused by [`send`](AuditWriter::send) instead of queued where a
+    /// process exit would discard them.
+    pub fn close(&self, timeout: std::time::Duration) -> bool {
+        *self.closed.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        self.flush(timeout)
+    }
+
+    /// Waits up to `timeout` for every entry queued so far to be written.
+    /// Returns `false` when it gave up, for example because the log sits on
+    /// stalled storage, or when a write since the last flush failed; entries
+    /// may then be lost.
+    pub fn flush(&self, timeout: std::time::Duration) -> bool {
+        use std::sync::mpsc::TrySendError;
+        let deadline = std::time::Instant::now() + timeout;
+        let (done, wait) = std::sync::mpsc::sync_channel(1);
+        let mut message = WriterMessage::Flush(done);
+        loop {
+            match self.queue.try_send(message) {
+                Ok(()) => break,
+                Err(TrySendError::Disconnected(_)) => return false,
+                Err(TrySendError::Full(returned)) => {
+                    if std::time::Instant::now() >= deadline {
+                        return false;
+                    }
+                    message = returned;
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+            }
+        }
+        wait.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+            .unwrap_or(false)
+    }
 }
 
 /// The default log location: `audit.log` in the fnox state directory.
@@ -96,6 +264,7 @@ pub fn record_reads(
             secret: name.clone(),
             provider: secret_provider(secret, default_provider.as_deref()),
             cached: cached(name),
+            request: None,
         })
         .collect();
     if let Err(error) = append(&log_path(config), &entries) {
@@ -176,6 +345,7 @@ mod tests {
             secret: secret.into(),
             provider: Some("age".into()),
             cached: false,
+            request: None,
         }
     }
 
@@ -226,6 +396,70 @@ mod tests {
             last.iter().map(|e| e.secret.as_str()).collect::<Vec<_>>(),
             ["C", "D"]
         );
+    }
+
+    #[test]
+    fn request_entries_round_trip_and_old_lines_still_parse() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.log");
+        record_request(
+            &path,
+            &["default".into()],
+            AuditRequest {
+                method: "GET".into(),
+                domain: "api.example.com".into(),
+                path: "/v1".into(),
+                injected: vec!["TOKEN".into()],
+                refused: None,
+            },
+        );
+        let old = r#"{"ts":"t","command":"get","profile":[],"config":"c","secret":"A","provider":null,"cached":false}"#;
+        let mut text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("refused"));
+        text.push_str(old);
+        text.push('\n');
+        std::fs::write(&path, text).unwrap();
+        let read = tail(&path, 10, |_| true).unwrap();
+        assert_eq!(read.len(), 2);
+        assert_eq!(read[0].request.as_ref().unwrap().injected, ["TOKEN"]);
+        assert!(read[1].request.is_none());
+    }
+
+    #[test]
+    fn closed_writer_refuses_entries_but_keeps_earlier_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.log");
+        let writer = AuditWriter::spawn(path.clone());
+        let entry = || {
+            request_entry(
+                &["default".into()],
+                AuditRequest {
+                    method: "GET".into(),
+                    domain: "api.example.com".into(),
+                    path: "/".into(),
+                    injected: Vec::new(),
+                    refused: None,
+                },
+            )
+        };
+        assert!(writer.send(entry()));
+        assert!(writer.close(std::time::Duration::from_secs(5)));
+        // A handler that outlives shutdown cannot queue a record the exit would lose
+        assert!(!writer.send(entry()));
+        assert_eq!(tail(&path, 10, |_| true).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn flush_reports_write_failures() {
+        let dir = tempfile::tempdir().unwrap();
+        // A directory where the log file should be makes every append fail
+        let path = dir.path().join("audit.log");
+        std::fs::create_dir(&path).unwrap();
+        let writer = AuditWriter::spawn(path);
+        writer.send(entry("A", "get"));
+        assert!(!writer.flush(std::time::Duration::from_secs(5)));
+        // The failure is reported once, then the writer is clean again
+        assert!(writer.flush(std::time::Duration::from_secs(5)));
     }
 
     #[test]

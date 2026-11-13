@@ -52,9 +52,14 @@ pub(super) fn serve<L: ProxyAccept>(
     mut shutdown: oneshot::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        // Connection handlers live here so shutdown can stop them and wait
+        // for them before the audit log is flushed
+        let mut connections = tokio::task::JoinSet::new();
         loop {
             tokio::select! {
                 _ = &mut shutdown => break,
+                // Reap finished handlers so the set does not grow
+                Some(_) = connections.join_next(), if !connections.is_empty() => {}
                 accepted = listener.accept_client() => {
                     let stream = match accepted {
                         Ok(Some(stream)) => stream,
@@ -68,7 +73,7 @@ pub(super) fn serve<L: ProxyAccept>(
                     };
                     let policy = policy.clone();
                     let authority = authority.clone();
-                    tokio::spawn(async move {
+                    connections.spawn(async move {
                         if let Err(error) = handle_connection(stream, policy, authority).await {
                             tracing::debug!("proxy connection failed: {error}");
                         }
@@ -76,6 +81,15 @@ pub(super) fn serve<L: ProxyAccept>(
                 }
             }
         }
+        // The client is usually gone by now. Give handlers a moment to finish,
+        // so they can register a minted lease for revocation and record their
+        // audit entry, but never abort one: an abort between creating a lease
+        // and noting it would leave a live credential nobody revokes.
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while connections.join_next().await.is_some() {}
+        })
+        .await;
+        connections.detach_all();
     })
 }
 
@@ -191,6 +205,20 @@ impl RunningProxy {
         }
         let _ = (&mut self.task).await;
         self.policy.leases.revoke_all(&self.policy.values).await;
+        // The caller may `process::exit` next; queued audit records must be on disk
+        if self.policy.audit_log.get().is_some() {
+            let policy = self.policy.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                if let Some(sink) = policy.audit_log.get()
+                    && !sink.writer.close(std::time::Duration::from_secs(3))
+                {
+                    tracing::warn!(
+                        "fnox proxy: could not finish writing the audit log; recent request records may be missing"
+                    );
+                }
+            })
+            .await;
+        }
     }
 }
 
@@ -441,16 +469,7 @@ where
         Err(error) => return refuse(stream, &path, &error.to_string()).await,
     };
 
-    if policy.audit {
-        tracing::info!(
-            target: "fnox::proxy",
-            method = %request.method,
-            domain,
-            path = %path,
-            injected = ?injected,
-            "proxied request"
-        );
-    }
+    policy.audit_proxied(&request.method, domain, &path, &injected);
 
     let method = match Method::from_bytes(request.method.as_bytes()) {
         Ok(method) => method,

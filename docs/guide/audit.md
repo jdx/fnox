@@ -41,6 +41,14 @@ The audit covers `fnox exec`, `get`, `export`, `env --json`, `list --values`, `c
 | `provider` | The provider it is read through, or `null` for a default or environment value.       |
 | `cached`   | `true` when the daemon answered from memory without calling the provider.            |
 
+While `fnox proxy run` is active, each request it serves or refuses is also appended, with a `request` object in place of `secret`:
+
+```json
+{"ts":"2026-10-23T18:21:07.412Z","command":"proxy","profile":["default"],"config":"","secret":"","provider":null,"cached":false,"request":{"method":"GET","domain":"api.github.com","path":"/repos/me/app","injected":["GITHUB_TOKEN"]}}
+```
+
+A refused request has `"refused": "<reason>"` and an empty `injected`. `request` never holds headers, bodies, query strings, or values. `fnox audit --command proxy` lists these entries, and `--secret NAME` matches a request that injected `NAME`.
+
 A failure to write the log is reported as a warning and never fails the read.
 
 ## Read it

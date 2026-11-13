@@ -64,6 +64,15 @@ impl ProxyPlan {
         self.policy.values.set_session(session);
     }
 
+    /// Append request records to the `[audit]` log at `path` instead of
+    /// printing them on stderr
+    pub fn set_audit_log(&self, path: std::path::PathBuf, profile: Vec<String>) {
+        let _ = self.policy.audit_log.set(super::policy::AuditSink {
+            writer: fnox_core::audit::AuditWriter::spawn(path),
+            profile,
+        });
+    }
+
     /// Rule secrets that have no value yet
     pub fn pending(&self) -> Vec<String> {
         self.policy.values.pending()
@@ -252,6 +261,7 @@ impl ProxyPlan {
             policy: Arc::new(ProxyPolicy {
                 egress: config.egress,
                 audit: config.audit,
+                audit_log: std::sync::OnceLock::new(),
                 max_body_bytes: config
                     .max_body_bytes
                     .map_or(super::DEFAULT_MAX_BODY_BYTES, |bytes| {

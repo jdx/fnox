@@ -1937,3 +1937,128 @@ fn certificates_satisfy_strict_x509_verification() {
         .expect("host certificate authority key identifier");
     assert_eq!(authority_key_id.0, ca_key_id);
 }
+
+#[test]
+fn audit_log_receives_proxied_and_refused_requests() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = dir.path().join("audit.log");
+    let mut plan = policy();
+    // `policy()` hands back a sole owner, so the flag can be flipped in place
+    let policy = std::sync::Arc::get_mut(&mut plan.policy).unwrap();
+    policy.audit = true;
+    policy
+        .audit_log
+        .set(super::policy::AuditSink {
+            writer: fnox_core::audit::AuditWriter::spawn(log.clone()),
+            profile: vec!["default".to_string()],
+        })
+        .unwrap();
+    policy.audit_proxied(
+        "GET",
+        "api.github.com",
+        "/repos/example/x",
+        &["GITHUB_TOKEN".into()],
+    );
+    policy.audit_refused("POST", "evil.example", Some("/x"), "no rule");
+    policy.audit_proxied("GET", "api.github.com", "/repos/example/real-token", &[]);
+    policy.audit_refused(
+        "POST",
+        "evil.example",
+        Some("/real-token"),
+        "bad real-token",
+    );
+
+    // Shutdown waits for the writer thread, which appends in the background
+    policy
+        .audit_log
+        .get()
+        .unwrap()
+        .writer
+        .flush(std::time::Duration::from_secs(5));
+    let entries = fnox_core::audit::tail(&log, 10, |_| true).unwrap();
+    assert_eq!(entries.len(), 4);
+    assert!(
+        !std::fs::read_to_string(&log)
+            .unwrap()
+            .contains("real-token"),
+        "known secret values are redacted from paths and reasons"
+    );
+    let served = entries[0].request.as_ref().unwrap();
+    assert_eq!(served.injected, ["GITHUB_TOKEN"]);
+    assert!(served.refused.is_none());
+    let refused = entries[1].request.as_ref().unwrap();
+    assert_eq!(refused.refused.as_deref(), Some("no rule"));
+    assert_eq!(refused.path, "/x");
+    assert_eq!(entries[0].command, "proxy");
+}
+
+#[tokio::test]
+async fn shutdown_does_not_wait_for_idle_connections_and_keeps_audit_entries() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = dir.path().join("audit.log");
+    let mut plan = policy();
+    let policy_mut = std::sync::Arc::get_mut(&mut plan.policy).unwrap();
+    policy_mut.audit = true;
+    policy_mut
+        .audit_log
+        .set(super::policy::AuditSink {
+            writer: fnox_core::audit::AuditWriter::spawn(log.clone()),
+            profile: vec!["default".to_string()],
+        })
+        .unwrap();
+    let running = RunningProxy::start(plan, ProxyListener::Loopback)
+        .await
+        .unwrap();
+    let address = running.address.unwrap();
+    // One client sits idle with its handler waiting for a request line...
+    let _idle = tokio::net::TcpStream::connect(address).await.unwrap();
+    // ...and another is refused for bad credentials, which is audited at once
+    let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+    tokio::io::AsyncWriteExt::write_all(
+        &mut client,
+        b"CONNECT api.github.com:443 HTTP/1.1\r\nProxy-Authorization: Basic d3Jvbmc6d3Jvbmc=\r\n\r\n",
+    )
+    .await
+    .unwrap();
+    let mut response = [0u8; 12];
+    client.read_exact(&mut response).await.unwrap();
+
+    tokio::time::timeout(std::time::Duration::from_secs(10), running.shutdown())
+        .await
+        .expect("shutdown must not wait for open client connections");
+    let entries = fnox_core::audit::tail(&log, 10, |_| true).unwrap();
+    assert_eq!(entries.len(), 1, "the refusal is on disk after shutdown");
+}
+
+#[tokio::test]
+async fn requests_after_shutdown_are_not_queued_to_the_closed_audit_log() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = dir.path().join("audit.log");
+    let mut plan = policy();
+    let policy_mut = std::sync::Arc::get_mut(&mut plan.policy).unwrap();
+    policy_mut.audit = true;
+    policy_mut
+        .audit_log
+        .set(super::policy::AuditSink {
+            writer: fnox_core::audit::AuditWriter::spawn(log.clone()),
+            profile: vec!["default".to_string()],
+        })
+        .unwrap();
+    let running = RunningProxy::start(plan, ProxyListener::Loopback)
+        .await
+        .unwrap();
+    let policy = running.policy.clone();
+    running.shutdown().await;
+    // A handler that outlived the grace period records after the final flush;
+    // the closed log refuses it, so it is reported on stderr, not queued
+    policy.audit_refused("GET", "api.github.com:443", Some("/late"), "late");
+    policy.audit_proxied("GET", "api.github.com", "/late", &[]);
+    let sink = policy.audit_log.get().unwrap();
+    assert!(!sink.record_for_test());
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    assert!(
+        fnox_core::audit::tail(&log, 10, |_| true)
+            .unwrap()
+            .is_empty()
+    );
+}

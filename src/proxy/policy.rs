@@ -105,10 +105,40 @@ impl PreparedRule {
     }
 }
 
+/// Queue to the thread that appends request records to the audit log
+#[derive(Debug)]
+pub(super) struct AuditSink {
+    pub(super) writer: fnox_core::audit::AuditWriter,
+    pub(super) profile: Vec<String>,
+}
+
+impl AuditSink {
+    #[cfg(test)]
+    pub(super) fn record_for_test(&self) -> bool {
+        self.record(fnox_core::audit::AuditRequest {
+            method: "GET".into(),
+            domain: "x".into(),
+            path: "/".into(),
+            injected: Vec::new(),
+            refused: None,
+        })
+    }
+
+    /// Returns false once the log is closed at shutdown, so the caller
+    /// reports the request on stderr instead of queueing it where exit loses it
+    fn record(&self, request: fnox_core::audit::AuditRequest) -> bool {
+        self.writer
+            .send(fnox_core::audit::request_entry(&self.profile, request))
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct ProxyPolicy {
     pub(super) egress: ProxyEgress,
     pub(super) audit: bool,
+    /// Where request records go when the `[audit]` log is on, and the active
+    /// profiles to record with them. Unset, requests are logged through tracing.
+    pub(super) audit_log: std::sync::OnceLock<AuditSink>,
     /// Largest request body accepted from a client
     pub(super) max_body_bytes: usize,
     pub(super) rules: Vec<PreparedRule>,
@@ -372,15 +402,60 @@ impl ProxyPolicy {
         path: Option<&str>,
         reason: &str,
     ) {
-        if self.audit {
-            tracing::info!(
-                target: "fnox::proxy",
-                method,
-                destination = %loggable_target(destination),
-                path = path.unwrap_or("-"),
-                reason,
-                "refused request"
-            );
+        if !self.audit {
+            return;
+        }
+        // A path or reason can echo a secret value the client sent unsubstituted
+        let redactions = self.redactions();
+        let redact = |text: &str| redact_string(text, &redactions);
+        let destination = redact(&loggable_target(destination));
+        let reason = redact(reason);
+        let reason = reason.as_str();
+        let path = path.map(redact);
+        let logged_path = path.as_deref().unwrap_or("-");
+        let recorded = self.audit_log.get().is_some_and(|sink| {
+            sink.record(fnox_core::audit::AuditRequest {
+                method: method.to_string(),
+                domain: destination.to_string(),
+                path: path.clone().unwrap_or_default(),
+                injected: Vec::new(),
+                refused: Some(reason.to_string()),
+            })
+        });
+        if recorded {
+            tracing::debug!(target: "fnox::proxy", method, destination = %destination, path = logged_path, reason, "refused request");
+        } else {
+            tracing::info!(target: "fnox::proxy", method, destination = %destination, path = logged_path, reason, "refused request");
+        }
+    }
+
+    /// Logs a request the proxy is forwarding. With the `[audit]` log on it is
+    /// appended there and kept off stderr, which a full-screen child shares.
+    pub(super) fn audit_proxied(
+        &self,
+        method: &str,
+        domain: &str,
+        path: &str,
+        injected: &[String],
+    ) {
+        if !self.audit {
+            return;
+        }
+        let redactions = self.redactions();
+        let path = &redact_string(path, &redactions);
+        let recorded = self.audit_log.get().is_some_and(|sink| {
+            sink.record(fnox_core::audit::AuditRequest {
+                method: method.to_string(),
+                domain: domain.to_string(),
+                path: path.to_string(),
+                injected: injected.to_vec(),
+                refused: None,
+            })
+        });
+        if recorded {
+            tracing::debug!(target: "fnox::proxy", method, domain, path, injected = ?injected, "proxied request");
+        } else {
+            tracing::info!(target: "fnox::proxy", method, domain, path, injected = ?injected, "proxied request");
         }
     }
 

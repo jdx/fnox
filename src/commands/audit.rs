@@ -57,8 +57,9 @@ impl AuditCommand {
         }
         let limit = self.limit.unwrap_or(20);
         let matched = fnox_core::audit::tail(&path, limit, |e| {
-            self.secret.as_ref().is_none_or(|s| &e.secret == s)
-                && self.command.as_ref().is_none_or(|c| &e.command == c)
+            self.secret.as_ref().is_none_or(|s| {
+                &e.secret == s || e.request.as_ref().is_some_and(|r| r.injected.contains(s))
+            }) && self.command.as_ref().is_none_or(|c| &e.command == c)
                 && self
                     .provider
                     .as_ref()
@@ -84,6 +85,25 @@ impl AuditCommand {
                     "{}",
                     serde_json::to_string(&e).map_err(|e| FnoxError::Config(e.to_string()))?
                 );
+            } else if let Some(r) = &e.request {
+                println!(
+                    "{}  {:<9} {} {}{}  {}  profile={}",
+                    e.ts,
+                    e.command,
+                    printable(&r.method),
+                    printable(&r.domain),
+                    if r.path == "-" {
+                        String::new()
+                    } else {
+                        printable(&r.path)
+                    },
+                    match &r.refused {
+                        Some(reason) => format!("refused: {}", printable(reason)),
+                        None if r.injected.is_empty() => "injected=-".to_string(),
+                        None => format!("injected={}", r.injected.join(",")),
+                    },
+                    e.profile.join(",")
+                );
             } else {
                 println!(
                     "{}  {:<9} {}  provider={}  profile={}{}",
@@ -98,4 +118,19 @@ impl AuditCommand {
         }
         Ok(())
     }
+}
+
+/// Escapes control characters so a request a client crafted cannot move the
+/// cursor or rewrite the terminal when the log is read. JSON output is
+/// already escaped.
+fn printable(text: &str) -> String {
+    text.chars()
+        .flat_map(|c| {
+            if c.is_control() {
+                c.escape_default().collect::<Vec<_>>()
+            } else {
+                vec![c]
+            }
+        })
+        .collect()
 }
