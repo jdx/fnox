@@ -233,6 +233,7 @@ jobs:
             exit 1
           fi
       - name: Upload binary artifact
+        if: runner.os != 'Windows'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binary-${{ matrix.target }}
@@ -242,9 +243,79 @@ jobs:
             fnox-*.zip
             fnox-touch-id-*.zip
           retention-days: 1
+      # Windows zips are not releasable until sign-windows has signed fnox.exe
+      # inside them, which then publishes them as binary-<target>.
+      - name: Upload unsigned Windows binary artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-binary-${{ matrix.target }}
+          path: fnox-*.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  # Authenticode-signs fnox.exe with SignPath Foundation so Windows 11 Smart App
+  # Control and SmartScreen accept it. SignPath rejects a run if any of its jobs
+  # ran on a non-GitHub-hosted runner, so every job in this workflow must stay on
+  # GitHub-hosted runners.
+  sign-windows:
+    needs: [build-binaries]
+    name: sign-windows-${{ matrix.target }}
+    runs-on: windows-latest
+    # The production signing policy may wait on a manual approval in SignPath.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64-pc-windows-msvc, aarch64-pc-windows-msvc]
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: unsigned-binary-${{ matrix.target }}
+          path: unsigned
+      - name: Upload zip for SignPath
+        id: upload-unsigned
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signpath-unsigned-${{ matrix.target }}
+          path: unsigned/fnox-*.zip
+          if-no-files-found: error
+          retention-days: 1
+      - name: Sign with SignPath
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: fnox
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY || 'release-signing' }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed
+      # Fail the release rather than ship an unsigned or tampered fnox.exe.
+      - name: Verify the Authenticode signature
+        shell: pwsh
+        run: |
+          $zips = @(Get-ChildItem signed -Filter 'fnox-*.zip')
+          if ($zips.Count -ne 1) { throw "expected one signed zip, found $($zips.Count)" }
+          Expand-Archive -LiteralPath $zips[0].FullName -DestinationPath verify
+          $exe = Get-ChildItem verify -Recurse -Filter fnox.exe | Select-Object -First 1
+          if (-not $exe) { throw 'fnox.exe not found in the signed zip' }
+          $sig = Get-AuthenticodeSignature -LiteralPath $exe.FullName
+          Write-Host "Status: $($sig.Status); signer: $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') { throw "fnox.exe signature is $($sig.Status)" }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: binary-${{ matrix.target }}
+          path: signed/fnox-*.zip
+          if-no-files-found: error
+          retention-days: 1
 
   create-release:
-    needs: [build-binaries]
+    needs: [build-binaries, sign-windows]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
