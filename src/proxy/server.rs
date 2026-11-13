@@ -52,9 +52,14 @@ pub(super) fn serve<L: ProxyAccept>(
     mut shutdown: oneshot::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        // Connection handlers live here so shutdown can stop them and wait
+        // for them before the audit log is flushed
+        let mut connections = tokio::task::JoinSet::new();
         loop {
             tokio::select! {
                 _ = &mut shutdown => break,
+                // Reap finished handlers so the set does not grow
+                Some(_) = connections.join_next(), if !connections.is_empty() => {}
                 accepted = listener.accept_client() => {
                     let stream = match accepted {
                         Ok(Some(stream)) => stream,
@@ -68,7 +73,7 @@ pub(super) fn serve<L: ProxyAccept>(
                     };
                     let policy = policy.clone();
                     let authority = authority.clone();
-                    tokio::spawn(async move {
+                    connections.spawn(async move {
                         if let Err(error) = handle_connection(stream, policy, authority).await {
                             tracing::debug!("proxy connection failed: {error}");
                         }
@@ -76,6 +81,9 @@ pub(super) fn serve<L: ProxyAccept>(
                 }
             }
         }
+        // The client is gone by now. Handlers record a request before
+        // forwarding it, so stopping them cannot lose an audit entry.
+        connections.shutdown().await;
     })
 }
 
