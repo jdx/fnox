@@ -121,6 +121,21 @@ TOML
 	assert_file_not_exists "$STUB_LOG"
 }
 
+@test "push --target ignores targets the secret lists but the profile lacks" {
+	cat >>fnox.toml <<'TOML'
+MULTI = { provider = "plain", value = "m", push = ["gh", "elsewhere"] }
+TOML
+	run "$FNOX_BIN" push --force --target gh MULTI
+	assert_success
+	run cat "$STUB_LOG"
+	assert_output "gh secret set MULTI --repo jdx/fnox|m"
+
+	# Without --target, every name is still checked
+	run "$FNOX_BIN" push --force MULTI
+	assert_failure
+	assert_output --partial "secret 'MULTI' pushes to unknown target 'elsewhere'"
+}
+
 @test "push --dry-run rejects an invalid target config" {
 	single_target 'type = "github-actions"
 repo = "jdx/fnox"
