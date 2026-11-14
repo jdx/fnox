@@ -38,7 +38,7 @@ jobs:
     # and someone runs `mise run render` by hand — visible, not silent. Adding
     # a system-packages input to the shared workflow would let this be
     # automated too.
-    uses: jdx/renovate-config/.github/workflows/mise-lock.yml@d0f85cba63adc5a26194009e76eebcf5bc1ee823 # v1.0.2
+    uses: jdx/renovate-config/.github/workflows/mise-lock.yml@f29cd6d5584e3acad48f18cc6eba09604a5bc6bf # v1.2.0
     secrets:
       # Optional. With them the lockfile commit is pushed with a short-lived
       # GitHub App token, so the Renovate PR's checks re-run on the fixed
@@ -46,5 +46,5 @@ jobs:
       # the lockfile is still repaired, but GitHub's recursion guard suppresses
       # the workflow re-run, so the PR's failed checks have to be re-run by
       # hand. aube-lock.yml uses the same pattern with AUBE_LOCK_APP_*.
-      MISE_LOCK_APP_ID: ${{ secrets.MISE_LOCK_APP_ID }}
+      MISE_LOCK_APP_CLIENT_ID: Iv23ct0esfAqqzDuwjhI
       MISE_LOCK_APP_PRIVATE_KEY: ${{ secrets.MISE_LOCK_APP_PRIVATE_KEY }}
