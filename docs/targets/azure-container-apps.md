@@ -43,7 +43,7 @@ fnox push --target api --force
 
 ## Authentication
 
-The same credential chain as the [`azure-sm`](/providers/azure-sm) and [`azure-ac`](/providers/azure-ac) providers: a service principal from `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET`, otherwise the `az` or `azd` login, or the host's managed identity with `auth = "managed-identity"`. The identity needs permission to update the app, such as the Contributor role on it. Values go to the API over HTTPS, not onto a command line.
+The same credential chain as the [`azure-sm`](/providers/azure-sm) and [`azure-ac`](/providers/azure-ac) providers: a service principal from `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET`, then workload identity from `AZURE_FEDERATED_TOKEN_FILE`, otherwise the `az` or `azd` login, or the host's managed identity with `auth = "managed-identity"`. The identity needs permission to update the app, such as the Contributor role on it. Values go to the API over HTTPS, not onto a command line.
 
 ## Notes
 

@@ -42,7 +42,7 @@ fnox exec -- npm start
 
 ## Authentication
 
-By default (`auth` unset or `"default"`), fnox uses a service principal from `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, and `AZURE_CLIENT_SECRET` when all three are set. Otherwise it uses your Azure CLI or Azure Developer CLI login.
+By default (`auth` unset or `"default"`), fnox uses a service principal from `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, and `AZURE_CLIENT_SECRET` when all three are set. Otherwise, when `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, and `AZURE_FEDERATED_TOKEN_FILE` are all set, it signs in with workload identity, exchanging the OIDC token in that file (for example a CI job ID token) through a federated credential. Failing that it uses your Azure CLI or Azure Developer CLI login.
 
 ### Local development
 

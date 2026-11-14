@@ -3,21 +3,29 @@ use crate::error::{FnoxError, Result};
 use azure_core::credentials::TokenCredential;
 use azure_identity::{
     ClientSecretCredential, DeveloperToolsCredential, ManagedIdentityCredential,
-    ManagedIdentityCredentialOptions, UserAssignedId,
+    ManagedIdentityCredentialOptions, UserAssignedId, WorkloadIdentityCredential,
+    WorkloadIdentityCredentialOptions,
 };
 use std::sync::Arc;
 
-/// The service principal variables [`build_credential`] reads in the default mode.
-pub const SERVICE_PRINCIPAL_ENV_VARS: &[&str] =
-    &["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET"];
+/// The service principal and workload identity variables [`build_credential`]
+/// reads in the default mode.
+pub const SERVICE_PRINCIPAL_ENV_VARS: &[&str] = &[
+    "AZURE_TENANT_ID",
+    "AZURE_CLIENT_ID",
+    "AZURE_CLIENT_SECRET",
+    "AZURE_FEDERATED_TOKEN_FILE",
+];
 
 /// How an Azure provider authenticates, from its `auth` and
 /// `managed_identity_client_id` settings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AzureAuth {
     /// A service principal from `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and
-    /// `AZURE_CLIENT_SECRET` when all three are set, otherwise the Azure CLI
-    /// or Azure Developer CLI login.
+    /// `AZURE_CLIENT_SECRET` when all three are set, then workload identity
+    /// from `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_FEDERATED_TOKEN_FILE`
+    /// when all three are set, otherwise the Azure CLI or Azure Developer CLI
+    /// login.
     Default,
     /// The managed identity of the Azure host. `client_id` selects a
     /// user-assigned identity; without it the system-assigned identity is used.
@@ -51,7 +59,7 @@ impl AzureAuth {
     pub fn hint(&self) -> &'static str {
         match self {
             Self::Default => {
-                "Run 'az login' or set AZURE_TENANT_ID, AZURE_CLIENT_ID and AZURE_CLIENT_SECRET"
+                "Run 'az login', or set AZURE_TENANT_ID, AZURE_CLIENT_ID and AZURE_CLIENT_SECRET (or AZURE_FEDERATED_TOKEN_FILE for workload identity)"
             }
             Self::ManagedIdentity { .. } => {
                 "Check that this host has a managed identity with access to the resource"
@@ -88,6 +96,18 @@ impl AzureAuth {
                     )
                     .map_err(auth_failed)?);
                 }
+                if let Some([tenant_id, client_id, token_file]) = workload_identity_env() {
+                    tracing::debug!(
+                        "{provider}: using workload identity from AZURE_FEDERATED_TOKEN_FILE"
+                    );
+                    let options = WorkloadIdentityCredentialOptions {
+                        tenant_id: Some(tenant_id),
+                        client_id: Some(client_id),
+                        token_file_path: Some(token_file.into()),
+                        ..Default::default()
+                    };
+                    return Ok(WorkloadIdentityCredential::new(Some(options)).map_err(auth_failed)?);
+                }
                 tracing::debug!("{provider}: using Azure CLI / Azure Developer CLI credential");
                 Ok(DeveloperToolsCredential::new(None).map_err(auth_failed)?)
             }
@@ -105,9 +125,24 @@ pub fn service_principal_env() -> Option<[String; 3]> {
     ])
 }
 
+/// `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_FEDERATED_TOKEN_FILE`, when all are set.
+pub fn workload_identity_env() -> Option<[String; 3]> {
+    let get = |name| env::var(name).ok().filter(|v: &String| !v.is_empty());
+    Some([
+        get("AZURE_TENANT_ID")?,
+        get("AZURE_CLIENT_ID")?,
+        get("AZURE_FEDERATED_TOKEN_FILE")?,
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_default_mode_tracks_workload_identity_vars() {
+        assert!(SERVICE_PRINCIPAL_ENV_VARS.contains(&"AZURE_FEDERATED_TOKEN_FILE"));
+    }
 
     #[test]
     fn test_from_config_default() {

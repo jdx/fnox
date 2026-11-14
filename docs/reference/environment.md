@@ -68,25 +68,25 @@ Directory for installed [Lua plugins](/providers/lua), one subdirectory per plug
 
 Most providers read credentials from the environment, usually under both their own name and a `FNOX_`-prefixed name. Provider config can override them. Each page gives the precedence.
 
-| Provider                  | Variables                                                                                      | Details                                                           |
-| ------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| AWS                       | `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | [AWS credentials](/providers/aws-sm#configure-aws-credentials)    |
-| Azure                     | `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_AUTHORITY_HOST`            | [Azure authentication](/providers/azure-sm#authentication)        |
-| Google Cloud              | `GOOGLE_APPLICATION_CREDENTIALS`                                                               | [Google Cloud authentication](/providers/gcp-sm#authentication)   |
-| Kubernetes                | `FNOX_K8S_CONTEXT`, `KUBECONFIG`                                                               | [Kubernetes](/providers/kubernetes#configuration)                 |
-| 1Password                 | `FNOX_OP_SERVICE_ACCOUNT_TOKEN`, `OP_SERVICE_ACCOUNT_TOKEN`                                    | [1Password](/providers/1password#authentication)                  |
-| Bitwarden                 | `FNOX_BW_SESSION`, `BW_SESSION`                                                                | [Bitwarden](/providers/bitwarden)                                 |
-| Bitwarden Secrets Manager | `FNOX_BWS_ACCESS_TOKEN`, `BWS_ACCESS_TOKEN`, `BWS_PROJECT_ID`                                  | [Bitwarden SM](/providers/bitwarden-sm#environment-variables)     |
-| Doppler                   | `FNOX_DOPPLER_TOKEN`, `DOPPLER_TOKEN`                                                          | [Doppler](/providers/doppler#token-management)                    |
-| Enpass                    | `FNOX_ENPASS_PASSWORD`, `ENPASS_PASSWORD`                                                      | [Enpass](/providers/enpass#authentication)                        |
-| FOKS                      | `FOKS_BOT_TOKEN`, `FOKS_HOST`, `FOKS_HOME`, and `FNOX_` equivalents                            | [FOKS](/providers/foks#cicd)                                      |
-| Infisical                 | `INFISICAL_TOKEN`, `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET`, and `FNOX_` equivalents   | [Infisical](/providers/infisical)                                 |
-| KeePass                   | `FNOX_KEEPASS_PASSWORD`, `KEEPASS_PASSWORD`                                                    | [KeePass](/providers/keepass#authentication)                      |
-| Keeper Secrets Manager    | `FNOX_KEEPER_CONFIG`, `KSM_CONFIG`, `FNOX_KEEPER_TOKEN`, `KSM_TOKEN`                           | [Keeper SM](/providers/keeper-sm#authentication)                  |
-| Passwordstate             | `FNOX_PASSWORDSTATE_API_KEY`, `PASSWORDSTATE_API_KEY`                                          | [Passwordstate](/providers/passwordstate)                         |
-| password-store            | `PASSWORD_STORE_DIR`, `PASSWORD_STORE_GPG_OPTS`, and `FNOX_` equivalents                       | [password-store](/providers/password-store#environment-variables) |
-| Proton Pass               | `PROTON_PASS_PERSONAL_ACCESS_TOKEN`, `PROTON_PASS_AGENT_REASON`, and `FNOX_` equivalents       | [Proton Pass](/providers/proton-pass#session-and-key-storage)     |
-| Vault                     | `VAULT_ADDR`, `VAULT_TOKEN`, `VAULT_NAMESPACE`, and `FNOX_` equivalents                        | [Vault](/providers/vault)                                         |
+| Provider                  | Variables                                                                                                         | Details                                                           |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| AWS                       | `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION`                    | [AWS credentials](/providers/aws-sm#configure-aws-credentials)    |
+| Azure                     | `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_FEDERATED_TOKEN_FILE`, `AZURE_TENANT_ID`, `AZURE_AUTHORITY_HOST` | [Azure authentication](/providers/azure-sm#authentication)        |
+| Google Cloud              | `GOOGLE_APPLICATION_CREDENTIALS`                                                                                  | [Google Cloud authentication](/providers/gcp-sm#authentication)   |
+| Kubernetes                | `FNOX_K8S_CONTEXT`, `KUBECONFIG`                                                                                  | [Kubernetes](/providers/kubernetes#configuration)                 |
+| 1Password                 | `FNOX_OP_SERVICE_ACCOUNT_TOKEN`, `OP_SERVICE_ACCOUNT_TOKEN`                                                       | [1Password](/providers/1password#authentication)                  |
+| Bitwarden                 | `FNOX_BW_SESSION`, `BW_SESSION`                                                                                   | [Bitwarden](/providers/bitwarden)                                 |
+| Bitwarden Secrets Manager | `FNOX_BWS_ACCESS_TOKEN`, `BWS_ACCESS_TOKEN`, `BWS_PROJECT_ID`                                                     | [Bitwarden SM](/providers/bitwarden-sm#environment-variables)     |
+| Doppler                   | `FNOX_DOPPLER_TOKEN`, `DOPPLER_TOKEN`                                                                             | [Doppler](/providers/doppler#token-management)                    |
+| Enpass                    | `FNOX_ENPASS_PASSWORD`, `ENPASS_PASSWORD`                                                                         | [Enpass](/providers/enpass#authentication)                        |
+| FOKS                      | `FOKS_BOT_TOKEN`, `FOKS_HOST`, `FOKS_HOME`, and `FNOX_` equivalents                                               | [FOKS](/providers/foks#cicd)                                      |
+| Infisical                 | `INFISICAL_TOKEN`, `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET`, and `FNOX_` equivalents                      | [Infisical](/providers/infisical)                                 |
+| KeePass                   | `FNOX_KEEPASS_PASSWORD`, `KEEPASS_PASSWORD`                                                                       | [KeePass](/providers/keepass#authentication)                      |
+| Keeper Secrets Manager    | `FNOX_KEEPER_CONFIG`, `KSM_CONFIG`, `FNOX_KEEPER_TOKEN`, `KSM_TOKEN`                                              | [Keeper SM](/providers/keeper-sm#authentication)                  |
+| Passwordstate             | `FNOX_PASSWORDSTATE_API_KEY`, `PASSWORDSTATE_API_KEY`                                                             | [Passwordstate](/providers/passwordstate)                         |
+| password-store            | `PASSWORD_STORE_DIR`, `PASSWORD_STORE_GPG_OPTS`, and `FNOX_` equivalents                                          | [password-store](/providers/password-store#environment-variables) |
+| Proton Pass               | `PROTON_PASS_PERSONAL_ACCESS_TOKEN`, `PROTON_PASS_AGENT_REASON`, and `FNOX_` equivalents                          | [Proton Pass](/providers/proton-pass#session-and-key-storage)     |
+| Vault                     | `VAULT_ADDR`, `VAULT_TOKEN`, `VAULT_NAMESPACE`, and `FNOX_` equivalents                                           | [Vault](/providers/vault)                                         |
 
 Lease backends read the same cloud credentials, plus backend-specific inputs such as `FNOX_GITHUB_APP_PRIVATE_KEY` for [`github-app`](/leases/github-app). See [credential leases](/guide/leases).
 

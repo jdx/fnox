@@ -35,7 +35,8 @@ Tools must read the token from the variable you configure; setting `AZURE_ACCESS
 fnox uses the first source available:
 
 1. A service principal, when `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` are all set and non-empty.
-2. The Azure CLI or Azure Developer CLI login. Before creating a lease, fnox checks that `az` is on `PATH`.
+2. Workload identity, when `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_FEDERATED_TOKEN_FILE` are all set and non-empty. The file holds an OIDC token, such as a CI job ID token, that Entra ID exchanges through a federated credential.
+3. The Azure CLI or Azure Developer CLI login. Before creating a lease, fnox checks that `az` is on `PATH`.
 
 To use the managed identity of the Azure host instead (for example a CI runner or VM), opt in with `auth = "managed-identity"`. fnox never tries it automatically, and skips the `az` check:
 
@@ -94,7 +95,7 @@ env_var = "GRAPH_TOKEN"
 
 ### Azure credentials not found
 
-No complete service principal is set and `az` is not on `PATH`. Run `az login`, or set all three `AZURE_*` variables. Under `fnox exec`, the lease is skipped with this warning unless a cached lease is still valid.
+No complete service principal or workload identity is set and `az` is not on `PATH`. Run `az login`, or set all three `AZURE_*` variables. Under `fnox exec`, the lease is skipped with this warning unless a cached lease is still valid.
 
 ### Failed to acquire Azure token
 
