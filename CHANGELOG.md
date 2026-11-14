@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.49.0](https://github.com/jdx/fnox/compare/v1.48.0..v1.49.0) - 2026-11-14
+
+### 🚀 Features
+
+- **(config)** add sensitive = false to keep plain config readable in redacted output by [@jdx](https://github.com/jdx) in [#1148](https://github.com/jdx/fnox/pull/1148)
+- **(config)** make the proxy request body limit configurable by [@jdx](https://github.com/jdx) in [#1171](https://github.com/jdx/fnox/pull/1171)
+- **(daemon)** expire cached secrets with sliding and absolute TTLs by [@jdx](https://github.com/jdx) in [#1177](https://github.com/jdx/fnox/pull/1177)
+- **(mcp)** honor --walk-up when request_secret stores a value by [@jdx](https://github.com/jdx) in [#1174](https://github.com/jdx/fnox/pull/1174)
+- **(proxy)** record proxied requests in the audit log instead of stderr by [@jdx](https://github.com/jdx) in [#1179](https://github.com/jdx/fnox/pull/1179)
+- **(set)** add --walk-up to write to the nearest parent config by [@jdx](https://github.com/jdx) in [#1172](https://github.com/jdx/fnox/pull/1172)
+
+### 🐛 Bug Fixes
+
+- **(daemon)** stop panicking on non-UTF-8 environment variables by [@jdx](https://github.com/jdx) in [#1164](https://github.com/jdx/fnox/pull/1164)
+- **(get)** hit the daemon cache when a top-level env is set by [@jdx](https://github.com/jdx) in [#1175](https://github.com/jdx/fnox/pull/1175)
+- **(keychain)** launch on macOS before 26 by loading the approval glass view at runtime by [@jdx](https://github.com/jdx) in [#1158](https://github.com/jdx/fnox/pull/1158)
+- **(proxy)** make proxy certificates pass Python 3.13+ strict TLS verification by [@jdx](https://github.com/jdx) in [#1162](https://github.com/jdx/fnox/pull/1162)
+- **(proxy)** answer 413 when the request body exceeds the size limit by [@jdx](https://github.com/jdx) in [#1168](https://github.com/jdx/fnox/pull/1168)
+
+### 📚 Documentation
+
+- only accept bug reports from real use by [@jdx](https://github.com/jdx) in [81a06cc](https://github.com/jdx/fnox/commit/81a06cc574e9efc57b403ffc41b434c3215114d5)
+
+### 🛡️ Security
+
+- **(deps)** update github actions by [@renovate[bot]](https://github.com/renovate[bot]) in [#1152](https://github.com/jdx/fnox/pull/1152)
+- **(keychain)** fix the dead link that fails the docs build by [@jdx](https://github.com/jdx) in [#1165](https://github.com/jdx/fnox/pull/1165)
+
+### 🔍 Other Changes
+
+- **(ci)** migrate lock workflows to GitHub App client IDs by [@jdx](https://github.com/jdx) in [#1181](https://github.com/jdx/fnox/pull/1181)
+- email when the docs build fails on the default branch by [@jdx](https://github.com/jdx) in [#1166](https://github.com/jdx/fnox/pull/1166)
+- sign Windows release executables with SignPath by [@jdx](https://github.com/jdx) in [#1180](https://github.com/jdx/fnox/pull/1180)
+
+### 📦️ Dependency Updates
+
+- update rust crate demand to v2.4.2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1149](https://github.com/jdx/fnox/pull/1149)
+- update actions/setup-node action to v7 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1153](https://github.com/jdx/fnox/pull/1153)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1154](https://github.com/jdx/fnox/pull/1154)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1159](https://github.com/jdx/fnox/pull/1159)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1161](https://github.com/jdx/fnox/pull/1161)
+
 ## [1.48.0](https://github.com/jdx/fnox/compare/v1.47.0..v1.48.0) - 2026-11-09
 
 ### 🚀 Features
