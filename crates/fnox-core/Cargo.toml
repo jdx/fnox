@@ -9,21 +9,46 @@ rust-version.workspace = true
 description = "Provider library and core types for fnox"
 readme = "../../README.md"
 
+[features]
+# Every provider is built by default. Each feature below adds a provider family
+# whose SDK is large or needs a system library; turn them off with
+# `--no-default-features` and add back the ones you use. Provider and lease
+# types stay known in every build, so a config that names a left-out one still
+# loads, and using it fails with an error that names the missing feature.
+default = ["aws", "azure", "enpass", "fido2", "gcp", "keeper", "kubernetes"]
+# aws-kms, aws-ps and aws-sm providers, aws-sts lease backend
+aws = ["dep:aws-config", "dep:aws-sdk-kms", "dep:aws-sdk-secretsmanager", "dep:aws-sdk-ssm", "dep:aws-sdk-sts"]
+# azure-ac, azure-kms and azure-sm providers, azure-token lease backend,
+# azure-container-apps push target
+azure = ["dep:azure_core", "dep:azure_identity", "dep:azure_security_keyvault_keys", "dep:azure_security_keyvault_secrets"]
+# enpass provider (SQLCipher and a vendored OpenSSL, compiled from C)
+enpass = ["dep:rusqlite", "dep:openssl-sys"]
+# fido2 provider. Needs libudev on Linux at build and run time, and is never
+# built for Linux musl targets.
+fido2 = ["dep:ctap-hid-fido2"]
+# gcp-kms and gcp-sm providers, gcp-iam lease backend (pulls in a vendored
+# OpenSSL on Linux)
+gcp = ["dep:gcp_auth", "dep:google-cloud-kms", "dep:google-cloud-secretmanager-v1", "dep:openssl-sys"]
+# keeper-sm provider
+keeper = ["dep:keeper-secrets-manager-core"]
+# kubernetes provider and lease backend
+kubernetes = ["dep:k8s-openapi", "dep:kube"]
+
 [dependencies]
 aes-gcm = { workspace = true }
 age = { workspace = true }
 arc-swap = { workspace = true }
 async-trait = { workspace = true }
 atty = { workspace = true }
-aws-config = { workspace = true }
-aws-sdk-kms = { workspace = true }
-aws-sdk-secretsmanager = { workspace = true }
-aws-sdk-ssm = { workspace = true }
-aws-sdk-sts = { workspace = true }
-azure_core = { workspace = true }
-azure_identity = { workspace = true }
-azure_security_keyvault_keys = { workspace = true }
-azure_security_keyvault_secrets = { workspace = true }
+aws-config = { workspace = true, optional = true }
+aws-sdk-kms = { workspace = true, optional = true }
+aws-sdk-secretsmanager = { workspace = true, optional = true }
+aws-sdk-ssm = { workspace = true, optional = true }
+aws-sdk-sts = { workspace = true, optional = true }
+azure_core = { workspace = true, optional = true }
+azure_identity = { workspace = true, optional = true }
+azure_security_keyvault_keys = { workspace = true, optional = true }
+azure_security_keyvault_secrets = { workspace = true, optional = true }
 base64 = { workspace = true }
 blake3 = { workspace = true }
 bytes = { workspace = true }
@@ -33,19 +58,19 @@ demand = { workspace = true }
 dirs = { workspace = true }
 fnox-client = { workspace = true }
 futures = { workspace = true }
-gcp_auth = { workspace = true }
-google-cloud-kms = { workspace = true }
-google-cloud-secretmanager-v1 = { workspace = true }
+gcp_auth = { workspace = true, optional = true }
+google-cloud-kms = { workspace = true, optional = true }
+google-cloud-secretmanager-v1 = { workspace = true, optional = true }
 hex = { workspace = true }
 hkdf = { workspace = true }
 hmac = { workspace = true }
 indexmap = { workspace = true }
 jsonwebtoken = { workspace = true }
-k8s-openapi = { workspace = true }
+k8s-openapi = { workspace = true, optional = true }
 keepass = { workspace = true }
-keeper-secrets-manager-core = { workspace = true }
+keeper-secrets-manager-core = { workspace = true, optional = true }
 keyring-core = { workspace = true }
-kube = { workspace = true }
+kube = { workspace = true, optional = true }
 libloading = { workspace = true }
 mlua = { workspace = true }
 miette = { workspace = true }
@@ -55,7 +80,7 @@ regex = { workspace = true }
 reqwest = { workspace = true }
 rpassword = { workspace = true }
 rust-embed = { workspace = true }
-rusqlite = { workspace = true }
+rusqlite = { workspace = true, optional = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -78,14 +103,15 @@ which = { workspace = true }
 xx = { workspace = true }
 
 # ctap-hid-fido2 → hidapi → libudev cannot be statically linked on musl,
-# so the FIDO2 provider is excluded from musl builds.
+# so the FIDO2 provider is excluded from musl builds even with the `fido2`
+# feature on.
 [target.'cfg(not(target_env = "musl"))'.dependencies]
-ctap-hid-fido2 = { workspace = true }
+ctap-hid-fido2 = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = { workspace = true }
 dbus-secret-service-keyring-store = { workspace = true }
-openssl-sys = { workspace = true }
+openssl-sys = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { workspace = true }

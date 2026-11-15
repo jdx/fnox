@@ -4,31 +4,45 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 // Provider implementation modules
+// Modules behind a Cargo feature are listed with `feature` in their
+// providers/*.toml, which gates the generated code that uses them.
 pub mod age;
+#[cfg(feature = "aws")]
 pub mod aws_kms;
+#[cfg(feature = "aws")]
 pub mod aws_ps;
+#[cfg(feature = "aws")]
 mod aws_shared;
+#[cfg(feature = "aws")]
 pub mod aws_sm;
+#[cfg(feature = "azure")]
 pub mod azure_ac;
+#[cfg(feature = "azure")]
 pub mod azure_kms;
 pub(crate) mod azure_shared;
+#[cfg(feature = "azure")]
 pub mod azure_sm;
 pub mod bitwarden;
 pub mod bitwarden_sm;
 pub mod discovery;
 pub mod doppler;
+#[cfg(feature = "enpass")]
 pub mod enpass;
-#[cfg(not(target_env = "musl"))]
+#[cfg(all(feature = "fido2", not(target_env = "musl")))]
 pub mod fido2;
 pub mod foks;
+#[cfg(feature = "gcp")]
 pub mod gcp_kms;
+#[cfg(feature = "gcp")]
 pub mod gcp_sm;
 pub mod gopass;
 pub mod hw_encrypt;
 pub mod infisical;
 pub mod keepass;
+#[cfg(feature = "keeper")]
 pub mod keeper_sm;
 pub mod keychain;
+#[cfg(feature = "kubernetes")]
 pub mod kubernetes;
 pub mod lua;
 pub mod onepassword;
@@ -43,6 +57,11 @@ pub mod string_list;
 pub mod vault;
 pub mod yubikey;
 pub mod yubikey_usb;
+
+/// Variables that hold the Enpass master password. Defined here rather than
+/// in the `enpass` module so that builds without the `enpass` feature still
+/// keep them out of child environments.
+pub const ENPASS_PASSWORD_ENV_VARS: &[&str] = &["ENPASS_PASSWORD", "FNOX_ENPASS_PASSWORD"];
 
 pub use bitwarden::BitwardenBackend;
 pub use resolver::resolve_provider_config;
@@ -159,15 +178,6 @@ mod generated {
         include!(concat!(env!("OUT_DIR"), "/generated/providers_methods.rs"));
     }
     pub(super) mod providers_instantiate {
-        // Need to import provider modules for instantiation
-        #[cfg(not(target_env = "musl"))]
-        use super::super::fido2;
-        use super::super::{
-            age, aws_kms, aws_ps, aws_sm, azure_ac, azure_kms, azure_sm, bitwarden, bitwarden_sm,
-            doppler, enpass, foks, gcp_kms, gcp_sm, gopass, infisical, keepass, keeper_sm,
-            keychain, kubernetes, lua, onepassword, password_store, passwordstate, plain,
-            proton_pass, vault, yubikey,
-        };
         include!(concat!(
             env!("OUT_DIR"),
             "/generated/providers_instantiate.rs"
@@ -582,6 +592,25 @@ mod tests {
     use super::*;
     use crate::config::{Config, ProfileConfig, ProviderConfig};
 
+    /// A provider type left out of the build still parses, and only using it
+    /// fails, naming the feature it needs.
+    #[test]
+    #[cfg(not(feature = "aws"))]
+    fn left_out_provider_parses_and_names_its_feature() {
+        let config: ProviderConfig =
+            toml_edit::de::from_str("type = \"aws-sm\"\nregion = \"us-east-1\"").unwrap();
+        let resolved = config.try_to_resolved().unwrap();
+        let err = get_provider_from_resolved("sm", &resolved).err().unwrap();
+        assert!(
+            matches!(
+                &err,
+                crate::error::FnoxError::NotInBuild { kind: "Provider", name, help }
+                    if name == "aws-sm" && help.contains("`aws` Cargo feature")
+            ),
+            "{err:?}"
+        );
+    }
+
     #[test]
     fn provider_source_path_prefers_profile_provider_source() {
         let mut config = Config::new();
@@ -715,6 +744,7 @@ mod tests {
         assert!(touch_id);
     }
 
+    #[cfg(feature = "keeper")]
     #[test]
     fn keeper_config_file_resolves_relative_to_provider_source() {
         let mut config = Config::new();

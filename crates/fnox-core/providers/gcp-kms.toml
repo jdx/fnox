@@ -2,6 +2,7 @@
 display_name = "GCP KMS"
 serde_rename = "gcp-kms"
 rust_variant = "GcpKms"
+feature = "gcp"
 category = "CloudKms"
 description = "Google Cloud Key Management Service"
 default_name = "gcp-kms"

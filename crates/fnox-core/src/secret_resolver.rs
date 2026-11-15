@@ -2730,6 +2730,7 @@ DB = { provider = "op", value = "item/field" }
         );
     }
 
+    #[cfg(feature = "kubernetes")]
     #[test]
     fn dependency_closure_pulls_kubernetes_client_selection() {
         let (config, secrets) = closure_config(

@@ -2,6 +2,7 @@
 display_name = "GCP Secret Manager"
 serde_rename = "gcp-sm"
 rust_variant = "GoogleSecretManager"
+feature = "gcp"
 category = "CloudSecretsManager"
 description = "Google Cloud Secret Manager"
 default_name = "gcp-sm"

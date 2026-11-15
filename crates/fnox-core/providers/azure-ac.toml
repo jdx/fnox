@@ -2,6 +2,7 @@
 display_name = "Azure App Configuration"
 serde_rename = "azure-ac"
 rust_variant = "AzureAppConfiguration"
+feature = "azure"
 category = "CloudSecretsManager"
 description = "Azure App Configuration key-values"
 default_name = "azure-ac"

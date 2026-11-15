@@ -2,6 +2,7 @@
 display_name = "Kubernetes Secrets"
 serde_rename = "kubernetes"
 rust_variant = "Kubernetes"
+feature = "kubernetes"
 category = "CloudSecretsManager"
 description = "Read named Kubernetes Secrets with native Kubernetes authentication"
 default_name = "kubernetes"

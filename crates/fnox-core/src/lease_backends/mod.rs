@@ -530,6 +530,7 @@ impl LeaseBackendConfig {
         duration_override: Option<&str>,
     ) -> Result<Box<dyn LeaseBackend>> {
         match self {
+            #[cfg(feature = "aws")]
             LeaseBackendConfig::AwsSts {
                 region,
                 profile,
@@ -542,6 +543,13 @@ impl LeaseBackendConfig {
                 role_arn.clone(),
                 endpoint.clone(),
             ))),
+            #[cfg(not(feature = "aws"))]
+            LeaseBackendConfig::AwsSts { .. } => Err(crate::error::FnoxError::not_in_build(
+                "Lease backend",
+                "aws-sts",
+                "aws",
+            )),
+            #[cfg(feature = "gcp")]
             LeaseBackendConfig::GcpIam {
                 service_account_email,
                 scopes,
@@ -552,6 +560,12 @@ impl LeaseBackendConfig {
                 scopes.clone(),
                 env_var.clone(),
             ))),
+            #[cfg(not(feature = "gcp"))]
+            LeaseBackendConfig::GcpIam { .. } => Err(crate::error::FnoxError::not_in_build(
+                "Lease backend",
+                "gcp-iam",
+                "gcp",
+            )),
             LeaseBackendConfig::Vault {
                 address,
                 token,
@@ -572,6 +586,7 @@ impl LeaseBackendConfig {
                 method.clone(),
                 duration_override.is_some() || duration.is_some(),
             )?)),
+            #[cfg(feature = "azure")]
             LeaseBackendConfig::AzureToken {
                 scope,
                 env_var,
@@ -584,6 +599,12 @@ impl LeaseBackendConfig {
                 auth.as_deref(),
                 managed_identity_client_id.clone(),
             )?)),
+            #[cfg(not(feature = "azure"))]
+            LeaseBackendConfig::AzureToken { .. } => Err(crate::error::FnoxError::not_in_build(
+                "Lease backend",
+                "azure-token",
+                "azure",
+            )),
             LeaseBackendConfig::Cloudflare {
                 token_type,
                 account_id,
@@ -650,6 +671,7 @@ impl LeaseBackendConfig {
                 access_level,
                 env_var.clone(),
             )?)),
+            #[cfg(feature = "kubernetes")]
             LeaseBackendConfig::Kubernetes {
                 service_account,
                 namespace,
@@ -666,6 +688,12 @@ impl LeaseBackendConfig {
                 kubeconfig.clone(),
                 env_var.clone(),
             ))),
+            #[cfg(not(feature = "kubernetes"))]
+            LeaseBackendConfig::Kubernetes { .. } => Err(crate::error::FnoxError::not_in_build(
+                "Lease backend",
+                "kubernetes",
+                "kubernetes",
+            )),
             LeaseBackendConfig::Oauth2ClientCredentials {
                 token_url,
                 client_id,

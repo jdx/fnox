@@ -238,6 +238,20 @@ pub enum FnoxError {
         suggestion: Option<String>,
     },
 
+    /// A provider, lease backend or push target type that this build of fnox
+    /// was compiled without. See [`FnoxError::not_in_build`].
+    #[error("{kind} type '{name}' is not included in this build of fnox")]
+    #[diagnostic(
+        code(fnox::not_in_build),
+        url("https://fnox.jdx.dev/guide/installation")
+    )]
+    NotInBuild {
+        kind: &'static str,
+        name: String,
+        #[help]
+        help: String,
+    },
+
     /// Provider not configured error with source code context showing where the provider is referenced.
     #[error("Provider '{provider}' not configured in profile '{profile}'")]
     #[diagnostic(
@@ -766,6 +780,27 @@ impl From<miette::ErrReport> for FnoxError {
 }
 
 impl FnoxError {
+    /// The error for using a `kind` (such as "provider") of type `name` whose
+    /// code sits behind the Cargo feature `feature`, which this build lacks.
+    pub fn not_in_build(kind: &'static str, name: &str, feature: &'static str) -> Self {
+        let help = if feature == "fido2" && cfg!(target_env = "musl") {
+            "FIDO2 needs libudev, which Linux musl builds cannot link. Use a glibc \
+             (linux-gnu) build of fnox for FIDO2."
+                .to_string()
+        } else {
+            format!(
+                "This build was compiled without the `{feature}` Cargo feature. Use a \
+                 full release build of fnox, or rebuild with \
+                 `cargo install fnox --locked --features {feature}`."
+            )
+        };
+        FnoxError::NotInBuild {
+            kind,
+            name: name.to_string(),
+            help,
+        }
+    }
+
     /// Returns true if this error represents a provider authentication failure.
     pub fn is_auth_error(&self) -> bool {
         matches!(self, FnoxError::ProviderAuthFailed { .. })

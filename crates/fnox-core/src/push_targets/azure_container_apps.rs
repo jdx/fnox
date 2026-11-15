@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 
 const TARGET_TYPE: &str = "azure-container-apps";
 const ARM: &str = "https://management.azure.com";
+#[cfg(feature = "azure")]
 const SCOPE: &str = "https://management.azure.com/.default";
 const API_VERSION: &str = "2024-03-01";
 /// How long to follow a long-running update before giving up
@@ -77,6 +78,13 @@ impl AzureContainerApps {
         }
     }
 
+    #[cfg(not(feature = "azure"))]
+    async fn token(&self) -> Result<String> {
+        self.auth()?;
+        Err(FnoxError::not_in_build("Push target", TARGET_TYPE, "azure"))
+    }
+
+    #[cfg(feature = "azure")]
     async fn token(&self) -> Result<String> {
         let auth = self.auth()?;
         let url = super::docs_url(TARGET_TYPE);

@@ -2,6 +2,9 @@
 display_name = "FIDO2"
 serde_rename = "fido2"
 rust_variant = "Fido2"
+feature = "fido2"
+# ctap-hid-fido2 → hidapi → libudev cannot be statically linked on musl
+target_cfg = 'not(target_env = "musl")'
 module = "fido2"
 struct_name = "Fido2Provider"
 pass_provider_name = true

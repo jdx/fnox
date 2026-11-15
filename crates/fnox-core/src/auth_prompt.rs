@@ -72,6 +72,7 @@ pub fn prompt_and_run_auth(
 }
 
 /// Quote an argument for the shell `run_auth_command` uses.
+#[cfg_attr(not(feature = "aws"), allow(dead_code))] // only AWS builds auth commands
 pub(crate) fn quote_arg(arg: &str) -> Option<Cow<'_, str>> {
     if cfg!(target_os = "windows") {
         arg.chars()
@@ -142,6 +143,7 @@ mod tests {
         assert!(!result.unwrap());
     }
 
+    #[cfg(feature = "aws")]
     fn aws_provider(extra: serde_json::Value) -> ProviderConfig {
         let mut value = serde_json::json!({"type": "aws-ps", "region": "eu-central-1"});
         value
@@ -151,6 +153,7 @@ mod tests {
         serde_json::from_value(value).unwrap()
     }
 
+    #[cfg(feature = "aws")]
     /// The auth command offered for an AWS provider resolved for `fnox_profiles`.
     async fn aws_auth_command(
         config: &Config,
@@ -172,6 +175,7 @@ mod tests {
             .map(str::to_string)
     }
 
+    #[cfg(feature = "aws")]
     #[tokio::test]
     async fn aws_auth_command_uses_resolved_profile() {
         let mut config = Config::new();
@@ -215,7 +219,7 @@ mod tests {
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(all(feature = "aws", not(target_os = "windows")))]
     #[tokio::test]
     async fn aws_auth_command_quotes_profile() {
         assert_eq!(

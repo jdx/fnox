@@ -2,6 +2,7 @@
 display_name = "AWS Secrets Manager"
 serde_rename = "aws-sm"
 rust_variant = "AwsSecretsManager"
+feature = "aws"
 category = "CloudSecretsManager"
 description = "AWS Secrets Manager"
 default_name = "sm"

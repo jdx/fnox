@@ -397,12 +397,53 @@ jobs:
       # transitively covers fnox-core and fnox-client because the binary depends on them.
       - run: cargo msrv verify
 
+  no-default-features:
+    runs-on: ${{ !inputs.trusted && 'ubuntu-latest' || 'namespace-profile-endev-linux-amd64;overrides.cache-tag=cache' }}
+    timeout-minutes: 20
+    env:
+      # A separate target dir: a build without default features shares no
+      # artifacts with the other jobs, and the Namespace cache volume is shared.
+      CARGO_TARGET_DIR: target-lite
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        with:
+          cache: false
+      - name: Mount the cargo registry and lite target dir on the Namespace cache volume
+        if: inputs.trusted
+        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/.global-cache
+            target-lite
+      # No libudev-dev here on purpose: a build without default features must
+      # not need it.
+      - name: Install Rust components
+        run: rustup component add clippy
+      - name: Run clippy without default features
+        run: cargo clippy -p fnox -p fnox-core --no-default-features --all-targets -- -D warnings
+      - name: Run tests without default features
+        run: cargo test -p fnox-core -p fnox --no-default-features
+      - name: Check the binary does not link libudev
+        run: |
+          ldd target-lite/debug/fnox
+          if ldd target-lite/debug/fnox | grep -q libudev; then
+            echo "fnox built without default features links libudev" >&2
+            exit 1
+          fi
+
   final:
     permissions: {}
     needs:
       - ci-bats
       - ci-other
       - msrv
+      - no-default-features
       - windows-check
     runs-on: ubuntu-latest
     timeout-minutes: 1
@@ -415,6 +456,7 @@ jobs:
           needs.ci-bats.result != 'success' ||
           needs.ci-other.result != 'success' ||
           needs.msrv.result != 'success' ||
+          needs.no-default-features.result != 'success' ||
           needs.windows-check.result != 'success'
         run: exit 1
       - run: echo "All CI jobs completed successfully"

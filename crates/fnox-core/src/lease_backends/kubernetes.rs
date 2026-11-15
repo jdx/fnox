@@ -1,10 +1,18 @@
+// Without the `kubernetes` feature only the config helpers are compiled;
+// `create_backend` reports the backend as not included in this build.
+#![cfg_attr(not(feature = "kubernetes"), allow(dead_code, unused_imports))]
+
 use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
 use async_trait::async_trait;
 use indexmap::IndexMap;
+#[cfg(feature = "kubernetes")]
 use k8s_openapi::api::authentication::v1::{TokenRequest, TokenRequestSpec};
+#[cfg(feature = "kubernetes")]
 use k8s_openapi::api::core::v1::ServiceAccount;
+#[cfg(feature = "kubernetes")]
 use kube::Api;
+#[cfg(feature = "kubernetes")]
 use kube::api::PostParams;
 use std::time::Duration;
 
@@ -56,6 +64,7 @@ impl KubernetesBackend {
         }
     }
 
+    #[cfg(feature = "kubernetes")]
     fn api_error(&self, namespace: &str, error: kube::Error) -> FnoxError {
         match error {
             kube::Error::Api(response) if matches!(response.code, 401 | 403) => {
@@ -96,6 +105,7 @@ impl KubernetesBackend {
     }
 }
 
+#[cfg(feature = "kubernetes")]
 #[async_trait]
 impl LeaseBackend for KubernetesBackend {
     async fn create_lease(&self, duration: Duration, _label: &str) -> Result<Lease> {
@@ -172,6 +182,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[cfg(feature = "kubernetes")]
     async fn rejects_durations_the_api_server_would_refuse() {
         let backend = KubernetesBackend::new(
             "deployer".to_string(),

@@ -617,7 +617,7 @@ fn replicate_error(e: &FnoxError) -> FnoxError {
 }
 
 pub fn env_dependencies() -> &'static [&'static str] {
-    &["ENPASS_PASSWORD", "FNOX_ENPASS_PASSWORD"]
+    super::ENPASS_PASSWORD_ENV_VARS
 }
 
 fn enpass_password() -> Option<String> {

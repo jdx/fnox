@@ -82,7 +82,7 @@ quote = "1"
 rand = "0.10"
 ratatui = "0.30"
 regex = "1"
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "form", "query"] }
 rpassword = "7"
 rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
 rmcp = { version = "3", features = ["server", "transport-io", "macros", "elicitation"] }
@@ -135,9 +135,21 @@ readme = "README.md"
 name = "fnox"
 path = "src/main.rs"
 
+# Provider families that can be left out of a build. See the [features] table
+# in crates/fnox-core/Cargo.toml for what each one adds.
+[features]
+default = ["aws", "azure", "enpass", "fido2", "gcp", "keeper", "kubernetes"]
+aws = ["fnox-core/aws"]
+azure = ["fnox-core/azure"]
+enpass = ["fnox-core/enpass"]
+fido2 = ["fnox-core/fido2"]
+gcp = ["fnox-core/gcp"]
+keeper = ["fnox-core/keeper"]
+kubernetes = ["fnox-core/kubernetes"]
+
 [dependencies]
 fnox-client = { workspace = true }
-fnox-core = { path = "crates/fnox-core", version = "1" }
+fnox-core = { path = "crates/fnox-core", version = "1", default-features = false }
 
 # Direct dependencies of the CLI binary (commands, MCP server, TUI, hook-env,
 # shell integration). Provider/config/secret-resolver crates are pulled in

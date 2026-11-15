@@ -1,11 +1,19 @@
+//! Azure sign-in settings shared by the Azure providers, the `azure-token`
+//! lease backend and the `azure-container-apps` push target. Parsing the
+//! settings needs no Azure SDK, so it is compiled into every build; building a
+//! credential needs the `azure` feature.
+
 use crate::env;
 use crate::error::{FnoxError, Result};
+#[cfg(feature = "azure")]
 use azure_core::credentials::TokenCredential;
+#[cfg(feature = "azure")]
 use azure_identity::{
     ClientSecretCredential, DeveloperToolsCredential, ManagedIdentityCredential,
     ManagedIdentityCredentialOptions, UserAssignedId, WorkloadIdentityCredential,
     WorkloadIdentityCredentialOptions,
 };
+#[cfg(feature = "azure")]
 use std::sync::Arc;
 
 /// The service principal and workload identity variables [`build_credential`]
@@ -68,6 +76,7 @@ impl AzureAuth {
     }
 
     /// Build the credential for this mode.
+    #[cfg(feature = "azure")]
     pub fn build_credential(&self, provider: &str, url: &str) -> Result<Arc<dyn TokenCredential>> {
         let auth_failed = |e: azure_core::Error| FnoxError::ProviderAuthFailed {
             provider: provider.to_string(),
@@ -114,6 +123,7 @@ impl AzureAuth {
     }
 }
 
+#[cfg(feature = "azure")]
 fn workload_identity_credential(
     tenant_id: String,
     client_id: String,
@@ -244,6 +254,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "azure")]
     fn test_workload_identity_credential_reads_token_file() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("token");
