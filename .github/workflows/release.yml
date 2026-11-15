@@ -52,6 +52,25 @@ jobs:
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             build-tool: cross
+          # Lite builds leave out the provider families behind Cargo features
+          # (cloud SDKs, Kubernetes, Keeper, Enpass, FIDO2), so the glibc
+          # build no longer needs libudev. Published as fnox-lite-<target>.
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            build-tool: cross
+            variant: lite
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            build-tool: cross
+            variant: lite
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            build-tool: cross
+            variant: lite
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            build-tool: cross
+            variant: lite
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             build-tool: cargo
@@ -86,6 +105,8 @@ jobs:
           bin: fnox
           target: ${{ matrix.target }}
           build-tool: ${{ matrix.build-tool }}
+          no-default-features: ${{ matrix.variant == 'lite' }}
+          archive: ${{ matrix.variant == 'lite' && '$bin-lite-$target' || '$bin-$target' }}
           token: ${{ secrets.FNOX_GH_TOKEN }}
           codesign: "Developer ID Application: Jeffrey Dickey (4993Y37DX6)"
           codesign_prefix: dev.jdx.
@@ -232,11 +253,22 @@ jobs:
             echo "::error::$BINARY is not linked non-PIE; FNOX_NO_PIE did not reach build.rs"
             exit 1
           fi
+      - name: Check the lite Linux GNU binary does not need libudev
+        if: matrix.variant == 'lite' && contains(matrix.target, '-linux-gnu')
+        shell: bash
+        env:
+          BINARY: target/${{ matrix.target }}/release/fnox
+        run: |
+          readelf -d "$BINARY" | grep NEEDED
+          if readelf -d "$BINARY" | grep -q 'NEEDED.*libudev'; then
+            echo "::error::$BINARY needs libudev; the lite build should not"
+            exit 1
+          fi
       - name: Upload binary artifact
         if: runner.os != 'Windows'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: binary-${{ matrix.target }}
+          name: binary-${{ matrix.variant && format('{0}-', matrix.variant) || '' }}${{ matrix.target }}
           path: |
             fnox-*.tar.gz
             fnox-*.tar.xz
@@ -436,6 +468,13 @@ jobs:
           artifacts: release-assets/fnox-*.tar.gz release-assets/fnox-*.tar.xz release-assets/fnox-*.zip release-assets/fnox-touch-id-*.zip
           bin: fnox
           manifest: release-assets/packslip.toml
+          # Lite archives share a platform with the full ones. Installers pick
+          # the full build unless asked for the `lite` variant.
+          variants: >-
+            fnox-lite-x86_64-unknown-linux-gnu.tar.gz=lite
+            fnox-lite-aarch64-unknown-linux-gnu.tar.gz=lite
+            fnox-lite-x86_64-unknown-linux-musl.tar.gz=lite
+            fnox-lite-aarch64-unknown-linux-musl.tar.gz=lite
           resources: |
             skill/fnox=repo:skills/fnox
             cli-spec/usage=asset:fnox.usage.kdl
