@@ -2,6 +2,7 @@ use crate::config::{Config, ProviderConfig, SecretConfig};
 use crate::error::Result;
 use crate::secret_resolver;
 use indexmap::IndexMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::commands::Cli;
 
@@ -16,9 +17,15 @@ use crate::commands::Cli;
 /// and `FNOX_IF_MISSING` do not apply to it, so an environment-only secret that
 /// is unset can still pass.
 ///
+/// A provider whose own settings do not resolve, such as an `endpoint` that takes
+/// its value from an unset secret, is reported whatever the secret's `if_missing`.
+/// It is an error when the secret's `if_missing` is `error` and a warning
+/// otherwise.
+///
 /// `--all` also resolves secrets whose `if_missing` is `warn` or `ignore`; their
-/// failures are reported as warnings, or not at all for `ignore`. Problems go to
-/// stderr, and fnox exits 1 when any error is found.
+/// failures are reported as warnings, or not at all for `ignore`. `--strict`
+/// reports every warning as an error. Problems go to stderr, and fnox exits 1
+/// when any error is found.
 #[derive(Debug, usage_rs::Args)]
 #[usage(alias = "c")]
 #[usage(
@@ -30,6 +37,10 @@ use crate::commands::Cli;
         "fnox check --if-missing error",
         header = "Treat every provider-backed secret as required"
     ),
+    example(
+        "fnox check --strict",
+        header = "Fail on warnings, such as a provider that cannot be configured"
+    ),
     example("fnox -P production check --all", header = "Check another profile"),
     after_long_help = "See also:\n- Troubleshooting: https://fnox.jdx.dev/guide/troubleshooting\n- Missing secrets: https://fnox.jdx.dev/guide/missing-secrets"
 )]
@@ -37,6 +48,10 @@ pub struct CheckCommand {
     /// Also resolve secrets whose `if_missing` is `warn` or `ignore`
     #[usage(short = 'a', long)]
     all: bool,
+
+    /// Treat warnings as errors and exit 1
+    #[usage(long)]
+    strict: bool,
 }
 
 impl CheckCommand {
@@ -64,6 +79,9 @@ impl CheckCommand {
                 let providers = config.get_providers(&profile)?;
                 let mut age_batches: IndexMap<String, IndexMap<String, SecretConfig>> =
                     IndexMap::new();
+                // Whether each provider's own settings resolve, checked once per provider
+                let mut provider_config_errors: HashMap<String, Option<String>> = HashMap::new();
+                let mut reported_providers: HashSet<String> = HashSet::new();
 
                 for (name, secret_config) in secrets {
                     // Check if secret has a value source
@@ -86,17 +104,48 @@ impl CheckCommand {
 
                     // Check provider configuration
                     if let Some(provider) = secret_config.provider() {
+                        // Determine if we should check this secret
+                        let if_missing =
+                            secret_resolver::resolve_if_missing_behavior(&secret_config, &config);
+
                         if !providers.contains_key(provider) {
-                            warnings.push(format!(
+                            let message = format!(
                                 "Secret '{}' references unknown provider '{}'",
                                 name, provider
-                            ));
-                        } else {
-                            // Determine if we should check this secret
-                            let if_missing = secret_resolver::resolve_if_missing_behavior(
-                                &secret_config,
-                                &config,
                             );
+                            if matches!(if_missing, crate::config::IfMissing::Error) {
+                                issues.push(message);
+                            } else {
+                                warnings.push(message);
+                            }
+                        } else {
+                            // A provider whose own settings don't resolve can't serve
+                            // any of its secrets, so report it whatever their
+                            // `if_missing` is. Secrets that must resolve report the
+                            // same failure below.
+                            if !provider_config_errors.contains_key(provider) {
+                                let error = crate::providers::resolve_provider_config(
+                                    &config,
+                                    &profile,
+                                    provider,
+                                    &providers[provider],
+                                )
+                                .await
+                                .err()
+                                .map(|err| err.to_string());
+                                provider_config_errors.insert(provider.to_string(), error);
+                            }
+                            if let Some(error) = &provider_config_errors[provider]
+                                && !matches!(if_missing, crate::config::IfMissing::Error)
+                            {
+                                if reported_providers.insert(provider.to_string()) {
+                                    warnings.push(format!(
+                                        "Provider '{}' could not be configured (used by secret '{}'): {}",
+                                        provider, name, error
+                                    ));
+                                }
+                                continue;
+                            }
 
                             // Skip checking if not --all and if_missing is not Error
                             if !self.all
@@ -252,6 +301,10 @@ impl CheckCommand {
             warnings.push("No providers configured".to_string());
         } else {
             println!("Found {} provider(s) in profile", providers.len());
+        }
+
+        if self.strict {
+            issues.append(&mut warnings);
         }
 
         // Report results

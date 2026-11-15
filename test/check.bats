@@ -205,3 +205,76 @@ EOF
 	assert_equal "$(grep -c '^first-age-key$' "$PASS_CALLS_FILE")" "1"
 	assert_equal "$(grep -c '^second-age-key$' "$PASS_CALLS_FILE")" "1"
 }
+
+@test "fnox check fails with unknown provider when the secret is required" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+
+[providers.real]
+type = "plain"
+
+[secrets.bad_secret]
+provider = "unknown"
+value = "test"
+if_missing = "error"
+EOF2
+
+	assert_fnox_failure check
+	assert_output --partial "unknown provider 'unknown'"
+}
+
+# A provider whose own settings take their value from an unset secret
+_create_unresolvable_provider_config() {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+
+[providers.appcfg]
+type = "azure-ac"
+endpoint = { secret = "FNOX_TEST_UNSET_ENDPOINT" }
+
+[secrets]
+API_URL = { provider = "appcfg", value = "API_URL", if_missing = "$1" }
+EOF2
+}
+
+@test "fnox check reports a provider that cannot be configured when if_missing is ignore" {
+	_create_unresolvable_provider_config ignore
+
+	assert_fnox_success check
+	assert_output --partial "Provider 'appcfg' could not be configured"
+	assert_output --partial "FNOX_TEST_UNSET_ENDPOINT"
+	refute_output --partial "Configuration is healthy"
+}
+
+@test "fnox check reports a provider that cannot be configured when if_missing is warn" {
+	_create_unresolvable_provider_config warn
+
+	assert_fnox_success check
+	assert_output --partial "Provider 'appcfg' could not be configured"
+}
+
+@test "fnox check fails on a provider that cannot be configured when if_missing is error" {
+	_create_unresolvable_provider_config error
+
+	assert_fnox_failure check
+	assert_output --partial "FNOX_TEST_UNSET_ENDPOINT"
+}
+
+@test "fnox check passes once the provider's settings resolve" {
+	_create_unresolvable_provider_config ignore
+
+	FNOX_TEST_UNSET_ENDPOINT="https://example.azconfig.io" assert_fnox_success check --all
+	refute_output --partial "could not be configured"
+}
+
+@test "fnox check --strict fails on warnings" {
+	_create_unresolvable_provider_config ignore
+
+	assert_fnox_failure check --strict
+	assert_output --partial "Provider 'appcfg' could not be configured"
+}
+
+@test "fnox check --strict passes with a healthy config" {
+	create_test_config
+	assert_fnox_success check --strict
+}
