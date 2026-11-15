@@ -23,14 +23,19 @@ pub fn check_prerequisites(
         Err(_) => return None,
         Ok(AzureAuth::Default) => {}
     }
-    if azure_shared::service_principal_env().is_some() {
-        return None;
-    }
-    let has_az = which::which("az").is_ok();
-    if has_az {
+    default_mode_prerequisite(
+        azure_shared::has_env_credentials(),
+        which::which("az").is_ok(),
+    )
+}
+
+/// The default mode needs an env credential (service principal or workload
+/// identity) or `az` on `PATH`.
+fn default_mode_prerequisite(has_env_credentials: bool, has_az: bool) -> Option<String> {
+    if has_env_credentials || has_az {
         None
     } else {
-        Some("Azure credentials not found. Run 'az login' or set AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID.".to_string())
+        Some("Azure credentials not found. Run 'az login' or set AZURE_TENANT_ID and AZURE_CLIENT_ID with AZURE_CLIENT_SECRET or AZURE_FEDERATED_TOKEN_FILE.".to_string())
     }
 }
 
@@ -152,6 +157,13 @@ impl LeaseBackend for AzureTokenBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_mode_prerequisite_accepts_env_credentials_without_az() {
+        assert!(default_mode_prerequisite(true, false).is_none());
+        assert!(default_mode_prerequisite(false, true).is_none());
+        assert!(default_mode_prerequisite(false, false).is_some());
+    }
 
     #[test]
     fn managed_identity_skips_prerequisites() {

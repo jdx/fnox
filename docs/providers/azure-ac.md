@@ -44,6 +44,7 @@ fnox exec -- ./start-server.sh
 The provider authenticates the same way as [Azure Key Vault Secrets](/providers/azure-sm#authentication):
 
 - A service principal when `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` are all set.
+- Workload identity when `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_FEDERATED_TOKEN_FILE` (a file holding an OIDC token, such as a CI job ID token) are all set and no client secret is.
 - Otherwise your Azure CLI (`az login`) or Azure Developer CLI (`azd auth login`) session.
 - With `auth = "managed-identity"`, the managed identity of the Azure host. Add `managed_identity_client_id` for a user-assigned identity.
 
@@ -56,13 +57,13 @@ auth = "managed-identity"
 
 ## Configuration
 
-| Field                        | Required | Default   | Description                                                                                     |
-| ---------------------------- | -------- | --------- | ----------------------------------------------------------------------------------------------- |
-| `endpoint`                   | Yes      |           | Store endpoint, such as `https://myapp-config.azconfig.io`.                                     |
-| `label`                      | No       | No label  | Label to select. Without it, fnox reads the key-value that has no label.                        |
-| `prefix`                     | No       |           | Prepended to every key.                                                                         |
-| `auth`                       | No       | `default` | `default` (service principal variables, then Azure CLI or Developer CLI) or `managed-identity`. |
-| `managed_identity_client_id` | No       |           | Client ID of a user-assigned managed identity. Requires `auth = "managed-identity"`.            |
+| Field                        | Required | Default   | Description                                                                                                          |
+| ---------------------------- | -------- | --------- | -------------------------------------------------------------------------------------------------------------------- |
+| `endpoint`                   | Yes      |           | Store endpoint, such as `https://myapp-config.azconfig.io`.                                                          |
+| `label`                      | No       | No label  | Label to select. Without it, fnox reads the key-value that has no label.                                             |
+| `prefix`                     | No       |           | Prepended to every key.                                                                                              |
+| `auth`                       | No       | `default` | `default` (service principal or workload identity variables, then Azure CLI or Developer CLI) or `managed-identity`. |
+| `managed_identity_client_id` | No       |           | Client ID of a user-assigned managed identity. Requires `auth = "managed-identity"`.                                 |
 
 Every field accepts `{ secret = "NAME" }` to take its value from another fnox secret. The options shared by all providers, `auth_command` and `daemon_cache`, are in the [configuration reference](/reference/configuration#provider-configuration).
 

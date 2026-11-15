@@ -43,7 +43,7 @@ fnox exec -- ./start-server.sh
 
 ## Authentication
 
-By default, fnox uses a service principal when `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` are all set, and otherwise uses your Azure CLI or Azure Developer CLI login:
+By default, fnox uses a service principal when `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` are all set, then workload identity when `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_FEDERATED_TOKEN_FILE` are all set, and otherwise uses your Azure CLI or Azure Developer CLI login:
 
 ```sh
 # Local development
@@ -53,7 +53,14 @@ az login          # or: azd auth login
 export AZURE_TENANT_ID="..."
 export AZURE_CLIENT_ID="..."
 export AZURE_CLIENT_SECRET="..."
+
+# CI with an OIDC ID token and a federated credential, no client secret
+export AZURE_TENANT_ID="..."
+export AZURE_CLIENT_ID="..."
+export AZURE_FEDERATED_TOKEN_FILE="/path/to/oidc-token"
 ```
+
+`AZURE_FEDERATED_TOKEN_FILE` names a file containing the job's OIDC token. The Entra ID app or managed identity named by `AZURE_CLIENT_ID` must have a federated credential that trusts that token's issuer and subject.
 
 The three service principal variables can also be fnox secrets stored with another provider. `fnox exec` resolves them before it uses the Azure provider. For a single `fnox get`, export them in the environment first.
 
@@ -81,12 +88,12 @@ The same `auth` and `managed_identity_client_id` settings apply to the [Azure Ke
 
 ## Configuration
 
-| Field                        | Required | Default   | Description                                                                                     |
-| ---------------------------- | -------- | --------- | ----------------------------------------------------------------------------------------------- |
-| `vault_url`                  | Yes      |           | Key Vault URL, such as `https://myapp-vault.vault.azure.net/`.                                  |
-| `prefix`                     | No       |           | Prepended to every secret name, for reads and for `fnox set`.                                   |
-| `auth`                       | No       | `default` | `default` (service principal variables, then Azure CLI or Developer CLI) or `managed-identity`. |
-| `managed_identity_client_id` | No       |           | Client ID of a user-assigned managed identity. Requires `auth = "managed-identity"`.            |
+| Field                        | Required | Default   | Description                                                                                                          |
+| ---------------------------- | -------- | --------- | -------------------------------------------------------------------------------------------------------------------- |
+| `vault_url`                  | Yes      |           | Key Vault URL, such as `https://myapp-vault.vault.azure.net/`.                                                       |
+| `prefix`                     | No       |           | Prepended to every secret name, for reads and for `fnox set`.                                                        |
+| `auth`                       | No       | `default` | `default` (service principal or workload identity variables, then Azure CLI or Developer CLI) or `managed-identity`. |
+| `managed_identity_client_id` | No       |           | Client ID of a user-assigned managed identity. Requires `auth = "managed-identity"`.                                 |
 
 Every field accepts `{ secret = "NAME" }` to take its value from another fnox secret. The options shared by all providers, `auth_command` and `daemon_cache`, are in the [configuration reference](/reference/configuration#provider-configuration).
 
