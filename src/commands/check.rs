@@ -77,6 +77,7 @@ impl CheckCommand {
             } else {
                 println!("Found {} secret(s) in profile(s)", secrets.len());
                 let providers = config.get_providers(&profile)?;
+                let default_provider = config.get_default_provider(&profile)?;
                 let mut age_batches: IndexMap<String, IndexMap<String, SecretConfig>> =
                     IndexMap::new();
                 // Whether each provider's own settings resolve, checked once per provider
@@ -104,7 +105,26 @@ impl CheckCommand {
                     }
 
                     // Check provider configuration
-                    if let Some(provider) = secret_config.provider() {
+                    //
+                    // The provider is the one resolution uses: the secret's own, else
+                    // the sync cache's, else the default provider for a secret that
+                    // has a value.
+                    let serving_provider = secret_config
+                        .provider()
+                        .map(str::to_string)
+                        .or_else(|| {
+                            secret_config
+                                .sync
+                                .as_ref()
+                                .map(|sync| sync.provider.clone())
+                        })
+                        .or_else(|| {
+                            secret_config
+                                .value()
+                                .and(default_provider.as_ref())
+                                .cloned()
+                        });
+                    if let Some(provider) = serving_provider.as_deref() {
                         // Determine if we should check this secret
                         let if_missing =
                             secret_resolver::resolve_if_missing_behavior(&secret_config, &config);

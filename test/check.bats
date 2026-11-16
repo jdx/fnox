@@ -329,3 +329,40 @@ EOF2
 
 	assert_fnox_failure check --strict
 }
+
+@test "fnox check covers secrets served by the default provider" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+default_provider = "appcfg"
+
+[providers.appcfg]
+type = "azure-ac"
+endpoint = { secret = "FNOX_TEST_UNSET_ENDPOINT" }
+
+[secrets]
+API_URL = { value = "API_URL", if_missing = "ignore" }
+EOF2
+
+	assert_fnox_success check
+	assert_output --partial "Provider 'appcfg' could not be configured"
+
+	sed -i.bak 's/if_missing = "ignore"/if_missing = "error"/' "${FNOX_CONFIG_FILE:-fnox.toml}"
+	assert_fnox_failure check
+	assert_output --partial "FNOX_TEST_UNSET_ENDPOINT"
+}
+
+@test "fnox check reports an unknown sync provider for a secret that uses the default provider" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+default_provider = "real"
+
+[providers.real]
+type = "plain"
+
+[secrets]
+OPTIONAL = { value = "x", if_missing = "ignore", sync = { provider = "missing", value = "x" } }
+EOF2
+
+	assert_fnox_success check
+	assert_output --partial "unknown provider 'missing'"
+}
