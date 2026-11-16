@@ -312,3 +312,20 @@ EOF2
 	assert_fnox_success check
 	assert_output --partial "Found 1 warning(s)"
 }
+
+@test "fnox check reports an unknown sync provider whatever the secret's if_missing" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+
+[providers.real]
+type = "plain"
+
+[secrets]
+OPTIONAL = { provider = "real", value = "x", if_missing = "ignore", sync = { provider = "missing", value = "x" } }
+EOF2
+
+	assert_fnox_success check
+	assert_output --partial "unknown sync provider 'missing'"
+
+	assert_fnox_failure check --strict
+}

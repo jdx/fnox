@@ -126,6 +126,21 @@ impl CheckCommand {
                                 .map(|sync| sync.provider.as_str())
                                 .unwrap_or(provider);
 
+                            // The sync provider serves the secret at run time, so a
+                            // missing one is reported like a missing `provider`.
+                            if !providers.contains_key(resolution_provider) {
+                                let message = format!(
+                                    "Secret '{}' references unknown sync provider '{}'",
+                                    name, resolution_provider
+                                );
+                                if matches!(if_missing, crate::config::IfMissing::Error) {
+                                    issues.push(message);
+                                } else {
+                                    warnings.push(message);
+                                }
+                                continue;
+                            }
+
                             // A provider whose own settings don't resolve can't serve
                             // its secrets, so report it whatever their `if_missing` is
                             // and without relying on resolving the secret, which a
