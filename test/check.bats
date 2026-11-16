@@ -366,3 +366,17 @@ EOF2
 	assert_fnox_success check
 	assert_output --partial "unknown provider 'missing'"
 }
+
+@test "fnox check keeps a default-only secret working when providers are only defined in a profile" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+[secrets]
+LOCAL = { default = "ok" }
+
+[profiles.prod.providers.p]
+type = "plain"
+EOF2
+
+	# An explicit path skips the parent directories, so the config stays non-root
+	assert_fnox_success -c "$FNOX_CONFIG_FILE" check
+	assert_output --partial "No providers configured"
+}
