@@ -333,6 +333,13 @@ impl GetCommand {
             return self.extract_key_from_creds(name, entry.credentials.clone(), all_secrets);
         }
 
+        // Only an encrypted cache entry is left to stand in for a backend left
+        // out of this build; without one, name the missing feature before any
+        // consumed secret is resolved.
+        if cached_entry.is_none() {
+            lease_config.ensure_in_build()?;
+        }
+
         // Resolve consumed secrets and inject them as env vars so that:
         // 1. The encryption provider can initialize (e.g. VAULT_TOKEN)
         // 2. The backend SDK can authenticate for fresh lease creation

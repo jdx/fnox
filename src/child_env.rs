@@ -471,6 +471,14 @@ pub async fn plan(
     let leases = config.get_leases(profile)?;
     let sel =
         select(&secrets, &leases, scope, roots).map_err(|rejection| rejection_error(&rejection))?;
+    // Before any input is resolved: a left-out backend with nothing cached
+    // fails with its missing feature, not with an error from its inputs.
+    if !sel.leases.is_empty() {
+        let project_dir = lease::project_dir_from_config(config, &cli.config);
+        for (name, lease_config) in leases.iter().filter(|(name, _)| sel.leases.contains(name)) {
+            lease::ensure_lease_usable(name, lease_config, &project_dir)?;
+        }
+    }
     let set = resolve_set(config, profile, &secrets, &leases, &sel)?;
 
     let resolved = if set.is_empty() {
