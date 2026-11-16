@@ -754,6 +754,9 @@ pub async fn resolve_lease(
         }
     }
 
+    // Cached credentials need no backend, but anything past here does: name
+    // a missing feature before asking for credentials it could not use.
+    lease_config.ensure_in_build()?;
     if let Some(missing) = prereq_missing {
         return Err(FnoxError::Config(format!(
             "Lease '{}': no usable cached credentials and \
@@ -847,5 +850,59 @@ mod tests {
         assert!(parse_duration("").is_err());
         assert!(parse_duration("0m").is_err());
         assert!(parse_duration("abc").is_err());
+    }
+
+    /// A cached lease needs no backend, so a build without the backend's
+    /// feature still reuses it, and names the feature once nothing is cached.
+    #[cfg(not(feature = "aws"))]
+    #[tokio::test]
+    async fn left_out_backend_reuses_cached_lease() {
+        let lease_config: crate::lease_backends::LeaseBackendConfig = toml_edit::de::from_str(
+            "type = \"aws-sts\"\nregion = \"us-east-1\"\nrole_arn = \"arn:aws:iam::1:role/r\"",
+        )
+        .unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let project_dir = project.path();
+        let ledger_path = LeaseLedger::ledger_path(project_dir);
+        let config = Config::new();
+        let resolve = || {
+            resolve_lease(
+                "aws",
+                &lease_config,
+                &config,
+                &[],
+                project_dir,
+                Some("AWS credentials not found"),
+                "test",
+                false,
+            )
+        };
+
+        let err = resolve().await.unwrap_err();
+        assert!(
+            matches!(&err, FnoxError::NotInBuild { name, .. } if name == "aws-sts"),
+            "{err:?}"
+        );
+
+        let creds = IndexMap::from([("AWS_ACCESS_KEY_ID".to_string(), "cached".to_string())]);
+        let mut ledger = LeaseLedger::default();
+        ledger.add(LeaseRecord {
+            lease_id: "lease-1".to_string(),
+            backend_name: "aws".to_string(),
+            label: "fnox-test-aws".to_string(),
+            created_at: Utc::now(),
+            expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
+            revoked: false,
+            cached_credentials: Some(creds.clone()),
+            encryption_provider: None,
+            revoke_credentials: None,
+            config_hash: Some(lease_config.config_hash()),
+        });
+        ledger.save(project_dir).unwrap();
+        let reused = resolve().await;
+
+        let _ = std::fs::remove_file(&ledger_path);
+        let _ = std::fs::remove_file(ledger_path.with_extension("lock"));
+        assert_eq!(reused.unwrap(), creds);
     }
 }

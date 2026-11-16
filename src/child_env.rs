@@ -495,9 +495,14 @@ pub async fn plan(
         )?);
         let project_dir = lease::project_dir_from_config(config, &cli.config);
         for (name, lease_config) in leases.iter().filter(|(name, _)| sel.leases.contains(name)) {
-            lease_config.ensure_in_build()?;
-            let prereq_missing = lease_config.check_prerequisites();
-            if let Some(ref missing) = prereq_missing {
+            // A left-out backend can still serve cached credentials, so its
+            // missing feature only matters when there are none to reuse.
+            let not_in_build = lease_config.ensure_in_build().err();
+            let prereq_missing = match not_in_build {
+                Some(_) => None,
+                None => lease_config.check_prerequisites(),
+            };
+            if not_in_build.is_some() || prereq_missing.is_some() {
                 let has_cache = {
                     let _lock = LeaseLedger::lock(&project_dir)?;
                     let ledger = LeaseLedger::load(&project_dir)?;
@@ -507,10 +512,13 @@ pub async fn plan(
                         .is_some_and(|r| r.cached_credentials.is_some())
                 };
                 if !has_cache {
+                    if let Some(error) = not_in_build {
+                        return Err(error);
+                    }
                     tracing::warn!(
                         "Skipping lease '{}': {}\nRun 'fnox lease create -i {}' to set up credentials interactively.",
                         name,
-                        missing,
+                        prereq_missing.as_deref().unwrap_or_default(),
                         name
                     );
                     continue;
