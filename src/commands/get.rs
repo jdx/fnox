@@ -391,6 +391,7 @@ impl GetCommand {
         // profile secrets (e.g. AWS_ACCESS_KEY_ID) are already injected into the
         // process env, so prerequisites that are met via profile secrets will pass.
         // This matches exec.rs behaviour.
+        lease_config.ensure_in_build()?;
         let prereq_missing = lease_config.check_prerequisites();
 
         // skip_cache: true — we already performed the full cache lookup and

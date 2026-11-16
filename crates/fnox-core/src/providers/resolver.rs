@@ -105,6 +105,10 @@ pub fn resolve_provider_config_with_context<'a>(
             });
         }
 
+        // A provider left out of this build can't use its settings, so don't
+        // resolve them (which may prompt or fail for unrelated reasons).
+        provider_config.ensure_in_build()?;
+
         // Push onto resolution stack
         ctx.push(provider_name);
 
@@ -249,11 +253,9 @@ pub fn resolve_provider_ref_with_identity_cycle_guard<'a>(
             });
         };
 
-        if env::is_non_interactive() && provider_config.requires_interactive_auth() {
-            return Err(FnoxError::Provider(format!(
-                "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
-                provider_ref.provider
-            )));
+        if let Some(error) = super::unusable_provider_error(&provider_ref.provider, provider_config)
+        {
+            return Err(error);
         }
 
         let resolved_provider = resolve_provider_config_with_context(
@@ -301,13 +303,10 @@ fn resolve_secret_ref<'a>(
                 // This secret uses a provider - need to resolve that provider first
                 let providers = config.get_providers(profile)?;
                 if let Some(secret_provider_config) = providers.get(secret_provider_name) {
-                    if env::is_non_interactive()
-                        && secret_provider_config.requires_interactive_auth()
+                    if let Some(error) =
+                        super::unusable_provider_error(secret_provider_name, secret_provider_config)
                     {
-                        return Err(FnoxError::Provider(format!(
-                            "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
-                            secret_provider_name
-                        )));
+                        return Err(error);
                     }
 
                     // Recursively resolve the provider's config
@@ -374,6 +373,7 @@ fn resolve_secret_ref<'a>(
 mod tests {
     use super::*;
 
+    #[cfg(feature = "aws")]
     #[tokio::test]
     async fn aws_prefix_renders_template() {
         let provider_config: ProviderConfig = serde_json::from_value(serde_json::json!({

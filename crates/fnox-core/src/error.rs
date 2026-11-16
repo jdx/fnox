@@ -811,6 +811,7 @@ impl FnoxError {
     /// Returns `None` for non-provider error variants.
     pub fn clone_provider_error(&self) -> Option<FnoxError> {
         Some(match self {
+            FnoxError::NotInBuild { .. } => return self.clone_not_in_build(),
             FnoxError::ProviderAuthFailed {
                 provider,
                 details,
@@ -879,6 +880,19 @@ impl FnoxError {
         })
     }
 
+    /// Clone a `NotInBuild` error, keeping its help text. Returns `None` for any
+    /// other variant.
+    pub fn clone_not_in_build(&self) -> Option<FnoxError> {
+        match self {
+            FnoxError::NotInBuild { kind, name, help } => Some(FnoxError::NotInBuild {
+                kind,
+                name: name.clone(),
+                help: help.clone(),
+            }),
+            _ => None,
+        }
+    }
+
     /// Map a batch-level error to a per-secret error, preserving structured variants.
     ///
     /// If the error is `ProviderSecretNotFound`, the secret name is replaced with the given name.
@@ -932,6 +946,29 @@ fn env_keys_rejected_summary(unknown: &[String], not_injectable: &[String]) -> S
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batch_errors_keep_not_in_build_help() {
+        let err = FnoxError::not_in_build("Provider", "aws-sm", "aws");
+        let FnoxError::NotInBuild { help, .. } = &err else {
+            unreachable!()
+        };
+        for copy in [
+            err.clone_not_in_build().unwrap(),
+            err.clone_provider_error().unwrap(),
+            err.map_batch_error("DB", "sm", "hint", "https://example.com"),
+        ] {
+            assert!(
+                matches!(&copy, FnoxError::NotInBuild { kind: "Provider", name, help: h } if name == "aws-sm" && h == help),
+                "{copy:?}"
+            );
+        }
+        assert!(
+            FnoxError::Provider("x".into())
+                .clone_not_in_build()
+                .is_none()
+        );
+    }
 
     #[test]
     fn is_auth_error_returns_true_for_provider_auth_failed() {
