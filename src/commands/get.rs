@@ -372,11 +372,14 @@ impl GetCommand {
         } else {
             config.get_secrets(profile)?
         };
-        let needed_secrets: indexmap::IndexMap<_, _> = all_secrets
-            .iter()
-            .filter(|(k, _)| consumed.contains(k.as_str()))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
+        // Include what those secrets reference, as `fnox exec` does, so a
+        // `default = "${OTHER}"` input still resolves.
+        let roots: Vec<String> = consumed.iter().map(|k| k.to_string()).collect();
+        let needed_secrets = if roots.is_empty() {
+            Default::default()
+        } else {
+            crate::secret_resolver::dependency_closure(config, profile, &all_secrets, &roots)?
+        };
         let resolved_secrets =
             crate::secret_resolver::resolve_secrets_batch(config, profile, &needed_secrets).await?;
 
