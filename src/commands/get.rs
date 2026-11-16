@@ -372,11 +372,21 @@ impl GetCommand {
         } else {
             config.get_secrets(profile)?
         };
-        let needed_secrets: indexmap::IndexMap<_, _> = all_secrets
+        let consumed_secrets: indexmap::IndexMap<_, _> = all_secrets
             .iter()
             .filter(|(k, _)| consumed.contains(k.as_str()))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
+        // Add what those secrets must read: a `default` that is the secret's
+        // only source (such as `default = "${BASE_TOKEN}"`) and its provider's
+        // credentials. A fallback behind a provider is left out, so an unused
+        // backup cannot block the read.
+        let needed_secrets = crate::secret_resolver::with_read_dependencies(
+            config,
+            profile,
+            &consumed_secrets,
+            &|_| false,
+        );
         let resolved_secrets =
             crate::secret_resolver::resolve_secrets_batch(config, profile, &needed_secrets).await?;
 
