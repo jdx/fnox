@@ -495,6 +495,7 @@ pub async fn plan(
         )?);
         let project_dir = lease::project_dir_from_config(config, &cli.config);
         for (name, lease_config) in leases.iter().filter(|(name, _)| sel.leases.contains(name)) {
+            lease_config.ensure_in_build()?;
             let prereq_missing = lease_config.check_prerequisites();
             if let Some(ref missing) = prereq_missing {
                 let has_cache = {

@@ -448,6 +448,7 @@ fn generate_provider_methods(
     let mut cache_ttl_arms = Vec::new();
     let mut env_deps_arms = Vec::new();
     let mut interactive_auth_arms = Vec::new();
+    let mut in_build_checks = Vec::new();
 
     for (_name, provider) in providers {
         let variant = Ident::new(&provider.rust_variant, Span::call_site());
@@ -520,6 +521,16 @@ fn generate_provider_methods(
             let interactive = provider.requires_interactive_auth;
             interactive_auth_arms.push(quote! {
                 Self::#variant { .. } => #interactive
+            });
+        }
+
+        // ensure_in_build check, only for providers behind a Cargo feature
+        if let (Some(cfg), Some(feature)) = (provider.cfg(), provider.feature.as_deref()) {
+            in_build_checks.push(quote! {
+                #[cfg(not(#cfg))]
+                if matches!(self, Self::#variant { .. }) {
+                    return Err(FnoxError::not_in_build("Provider", #serde_rename, #feature));
+                }
             });
         }
     }
@@ -628,6 +639,14 @@ fn generate_provider_methods(
                 match self {
                     #(#interactive_auth_arms),*
                 }
+            }
+
+            /// Fails with `NotInBuild` when this build of fnox was compiled without
+            /// the provider. Check it before resolving the provider's settings or
+            /// prompting for anything, so the error names the missing feature.
+            pub fn ensure_in_build(&self) -> Result<()> {
+                #(#in_build_checks)*
+                Ok(())
             }
 
             /// Get the auth command for this provider.

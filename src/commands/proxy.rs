@@ -419,6 +419,7 @@ impl ProxyRunCommand {
             crate::lease::set_secrets_as_env(&lease_values, &lease_inputs, &mut _lease_env)?;
         let rule_leases = rule_leases(proxy_config, &leases)?;
         for (name, lease) in &rule_leases {
+            lease.ensure_in_build()?;
             if let Some(missing) = lease.check_prerequisites() {
                 return Err(FnoxError::Config(format!(
                     "Proxy rule's lease '{name}' can't be minted: {missing}"

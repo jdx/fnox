@@ -1,4 +1,4 @@
-use crate::error::Result;
+use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -343,6 +343,26 @@ impl ProviderConfig {
     }
 }
 
+/// Why `provider_config` can't be used here, if it can't: this build of fnox
+/// lacks the provider, or it needs a terminal and fnox runs non-interactively.
+/// Check this before resolving the provider's settings, so neither case leads to
+/// prompts or unrelated errors first.
+pub(crate) fn unusable_provider_error(
+    provider_name: &str,
+    provider_config: &ProviderConfig,
+) -> Option<FnoxError> {
+    if let Err(error) = provider_config.ensure_in_build() {
+        return Some(error);
+    }
+    if crate::env::is_non_interactive() && provider_config.requires_interactive_auth() {
+        return Some(FnoxError::Provider(format!(
+            "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
+            provider_name
+        )));
+    }
+    None
+}
+
 /// Create a provider from an unresolved provider configuration.
 ///
 /// This is a convenience wrapper that first resolves any secret references in the
@@ -607,6 +627,29 @@ mod tests {
                 crate::error::FnoxError::NotInBuild { kind: "Provider", name, help }
                     if name == "aws-sm" && help.contains("`aws` Cargo feature")
             ),
+            "{err:?}"
+        );
+    }
+
+    /// A left-out provider fails before its settings are resolved, so a setting
+    /// that references an unknown secret does not hide the missing feature.
+    #[cfg(not(feature = "aws"))]
+    #[tokio::test]
+    async fn left_out_provider_fails_before_resolving_settings() {
+        let provider_config: ProviderConfig = toml_edit::de::from_str(
+            "type = \"aws-sm\"\nregion = { secret = \"FNOX_TEST_UNDEFINED_REGION\" }",
+        )
+        .unwrap();
+        assert!(matches!(
+            provider_config.ensure_in_build(),
+            Err(FnoxError::NotInBuild { .. })
+        ));
+        let err = get_provider_resolved(&Config::new(), &[], "sm", &provider_config)
+            .await
+            .err()
+            .unwrap();
+        assert!(
+            matches!(&err, FnoxError::NotInBuild { name, .. } if name == "aws-sm"),
             "{err:?}"
         );
     }
