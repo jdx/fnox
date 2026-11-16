@@ -343,8 +343,12 @@ impl GetCommand {
         // Resolve consumed secrets and inject them as env vars so that:
         // 1. The encryption provider can initialize (e.g. VAULT_TOKEN)
         // 2. The backend SDK can authenticate for fresh lease creation
-        let mut consumed: std::collections::HashSet<&str> =
-            lease_config.consumed_env_vars().iter().copied().collect();
+        // A backend left out of this build (the case above) can only serve the
+        // encrypted cache, which needs the encryption provider's inputs alone.
+        let mut consumed: std::collections::HashSet<&str> = match lease_config.ensure_in_build() {
+            Ok(()) => lease_config.consumed_env_vars().iter().copied().collect(),
+            Err(_) => Default::default(),
+        };
 
         // Always include the default encryption provider's env deps so that
         // create_and_record_lease can encrypt cached credentials even on a cold

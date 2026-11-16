@@ -312,7 +312,11 @@ pub fn resolve_set(
     let mut roots = sel.roots.clone();
     if !sel.leases.is_empty() {
         for name in &sel.leases {
-            if let Some(lease) = leases.get(name) {
+            // A backend left out of this build can only serve cached
+            // credentials, which need none of its inputs.
+            if let Some(lease) = leases.get(name)
+                && lease.ensure_in_build().is_ok()
+            {
                 roots.extend(lease.consumed_env_vars().iter().map(|key| key.to_string()));
             }
         }
@@ -1295,8 +1299,10 @@ role_arn = "arn:aws:iam::1:role/r"
 
         let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Scope).unwrap();
         let set = resolve_set(&config, &profile, &secrets, &leases, &sel).unwrap();
-        assert!(set.contains_key("AWS_WEB_IDENTITY_TOKEN_FILE"));
-        assert!(set.contains_key("AWS_ROLE_ARN"));
+        // Without `aws` the lease can only reuse a cache, which needs no inputs.
+        let built = cfg!(feature = "aws");
+        assert_eq!(set.contains_key("AWS_WEB_IDENTITY_TOKEN_FILE"), built);
+        assert_eq!(set.contains_key("AWS_ROLE_ARN"), built);
         assert!(!set.contains_key("UNUSED"));
     }
 
