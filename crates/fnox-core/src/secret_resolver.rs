@@ -407,6 +407,15 @@ pub fn resolve_if_missing_behavior(secret_config: &SecretConfig, config: &Config
         .unwrap_or(IfMissing::Warn)
 }
 
+/// The text of a warning for `error`. The warning is all the user sees, so a
+/// left-out provider's warning keeps its rebuild guidance.
+fn warning_detail(error: &FnoxError) -> String {
+    match error {
+        FnoxError::NotInBuild { help, .. } => format!("{error}\n{help}"),
+        _ => error.to_string(),
+    }
+}
+
 /// Handles provider errors according to if_missing behavior.
 /// Returns Some(err) if the error should be propagated, None if it should be ignored.
 pub fn handle_provider_error(
@@ -425,6 +434,7 @@ pub fn handle_provider_error(
             Some(error)
         }
         IfMissing::Warn => {
+            let error = warning_detail(&error);
             if use_tracing {
                 tracing::warn!("Error resolving secret '{}': {}", key, error);
             } else {
@@ -1673,6 +1683,17 @@ fn process_batch_results(
 mod tests {
     use super::*;
     use crate::config::ProfileConfig;
+
+    #[test]
+    fn warning_keeps_not_in_build_help() {
+        let detail = warning_detail(&FnoxError::not_in_build("Provider", "aws-sm", "aws"));
+        assert!(detail.contains("'aws-sm'"), "{detail}");
+        assert!(detail.contains("`aws` Cargo feature"), "{detail}");
+        assert_eq!(
+            warning_detail(&FnoxError::Provider("boom".into())),
+            "Provider error: boom"
+        );
+    }
 
     /// Helper to call compute_resolution_levels and sort each level for deterministic assertions.
     fn compute_sorted(

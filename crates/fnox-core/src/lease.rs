@@ -634,6 +634,27 @@ pub fn find_cached_entry(
     })
 }
 
+/// Fails with the missing Cargo feature when `lease_config`'s backend is left
+/// out of this build and no cached credentials could stand in for it.
+///
+/// Callers run this before resolving the lease's inputs, so a backend that
+/// could not use them reports the feature rather than a provider error.
+pub fn ensure_lease_usable(
+    name: &str,
+    lease_config: &crate::lease_backends::LeaseBackendConfig,
+    project_dir: &Path,
+) -> Result<()> {
+    let Err(error) = lease_config.ensure_in_build() else {
+        return Ok(());
+    };
+    let cached = {
+        let _lock = LeaseLedger::lock(project_dir)?;
+        let ledger = LeaseLedger::load(project_dir)?;
+        find_cached_entry(&ledger, name, &lease_config.config_hash()).is_some()
+    };
+    if cached { Ok(()) } else { Err(error) }
+}
+
 /// Resolve a [`CachedEntry`] into usable credentials, decrypting if needed.
 /// Returns `None` if decryption fails (caller should create a fresh lease).
 ///
@@ -878,11 +899,15 @@ mod tests {
             )
         };
 
-        let err = resolve().await.unwrap_err();
-        assert!(
-            matches!(&err, FnoxError::NotInBuild { name, .. } if name == "aws-sts"),
-            "{err:?}"
-        );
+        for err in [
+            resolve().await.unwrap_err(),
+            ensure_lease_usable("aws", &lease_config, project_dir).unwrap_err(),
+        ] {
+            assert!(
+                matches!(&err, FnoxError::NotInBuild { name, .. } if name == "aws-sts"),
+                "{err:?}"
+            );
+        }
 
         let creds = IndexMap::from([("AWS_ACCESS_KEY_ID".to_string(), "cached".to_string())]);
         let mut ledger = LeaseLedger::default();
@@ -899,10 +924,12 @@ mod tests {
             config_hash: Some(lease_config.config_hash()),
         });
         ledger.save(project_dir).unwrap();
+        let usable = ensure_lease_usable("aws", &lease_config, project_dir);
         let reused = resolve().await;
 
         let _ = std::fs::remove_file(&ledger_path);
         let _ = std::fs::remove_file(ledger_path.with_extension("lock"));
+        usable.unwrap();
         assert_eq!(reused.unwrap(), creds);
     }
 }
