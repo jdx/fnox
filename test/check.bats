@@ -380,3 +380,16 @@ EOF2
 	assert_fnox_success -c "$FNOX_CONFIG_FILE" check
 	assert_output --partial "No providers configured"
 }
+
+@test "fnox check fails a required secret when the default provider cannot be found" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+[secrets]
+LOCAL = { value = "item", if_missing = "error" }
+
+[profiles.prod.providers.p]
+type = "plain"
+EOF2
+
+	assert_fnox_failure -c "$FNOX_CONFIG_FILE" check
+	assert_output --partial "Secret 'LOCAL' needs the default provider"
+}

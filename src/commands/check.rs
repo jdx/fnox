@@ -78,7 +78,8 @@ impl CheckCommand {
                 println!("Found {} secret(s) in profile(s)", secrets.len());
                 let providers = config.get_providers(&profile)?;
                 // Looked up once, and only for a secret that needs it
-                let mut default_provider: Option<Option<String>> = None;
+                let mut default_provider: Option<std::result::Result<Option<String>, String>> =
+                    None;
                 let mut age_batches: IndexMap<String, IndexMap<String, SecretConfig>> =
                     IndexMap::new();
                 // Whether each provider's own settings resolve, checked once per provider
@@ -114,13 +115,37 @@ impl CheckCommand {
                         Some(provider) => Some(provider.to_string()),
                         None => match secret_config.sync.as_ref() {
                             Some(sync) => Some(sync.provider.clone()),
-                            None if secret_config.value().is_some() => default_provider
-                                .get_or_insert_with(|| {
-                                    // An unusable default provider, such as no providers
-                                    // at all, is reported below, not here.
-                                    config.get_default_provider(&profile).ok().flatten()
-                                })
-                                .clone(),
+                            None if secret_config.value().is_some() => {
+                                match default_provider
+                                    .get_or_insert_with(|| {
+                                        config
+                                            .get_default_provider(&profile)
+                                            .map_err(|err| err.to_string())
+                                    })
+                                    .clone()
+                                {
+                                    Ok(provider) => provider,
+                                    Err(error) => {
+                                        // A required secret can't be served, so say why. For
+                                        // the others, "No providers configured" below covers
+                                        // the common cause and `--strict` reports it.
+                                        let if_missing =
+                                            secret_resolver::resolve_if_missing_behavior(
+                                                &secret_config,
+                                                &config,
+                                            );
+                                        if matches!(if_missing, crate::config::IfMissing::Error)
+                                            && secret_config.default.is_none()
+                                        {
+                                            issues.push(format!(
+                                                "Secret '{}' needs the default provider, which is not usable: {}",
+                                                name, error
+                                            ));
+                                        }
+                                        None
+                                    }
+                                }
+                            }
                             None => None,
                         },
                     };
