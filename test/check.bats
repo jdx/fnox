@@ -278,3 +278,37 @@ EOF2
 	create_test_config
 	assert_fnox_success check --strict
 }
+
+@test "fnox check fails on a provider that cannot be configured when the required secret has a default" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+
+[providers.appcfg]
+type = "azure-ac"
+endpoint = { secret = "FNOX_TEST_UNSET_ENDPOINT" }
+
+[secrets]
+API_URL = { provider = "appcfg", value = "API_URL", if_missing = "error", default = "http://localhost" }
+EOF2
+
+	assert_fnox_failure check
+	assert_output --partial "Provider 'appcfg' could not be configured"
+	assert_output --partial "FNOX_TEST_UNSET_ENDPOINT"
+}
+
+@test "fnox check reports a provider that cannot be configured once for several secrets" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+
+[providers.appcfg]
+type = "azure-ac"
+endpoint = { secret = "FNOX_TEST_UNSET_ENDPOINT" }
+
+[secrets]
+A = { provider = "appcfg", value = "A", if_missing = "ignore" }
+B = { provider = "appcfg", value = "B", if_missing = "warn" }
+EOF2
+
+	assert_fnox_success check
+	assert_output --partial "Found 1 warning(s)"
+}

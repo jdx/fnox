@@ -81,7 +81,8 @@ impl CheckCommand {
                     IndexMap::new();
                 // Whether each provider's own settings resolve, checked once per provider
                 let mut provider_config_errors: HashMap<String, Option<String>> = HashMap::new();
-                let mut reported_providers: HashSet<String> = HashSet::new();
+                let mut reported_errors: HashSet<String> = HashSet::new();
+                let mut reported_warnings: HashSet<String> = HashSet::new();
 
                 for (name, secret_config) in secrets {
                     // Check if secret has a value source
@@ -119,32 +120,54 @@ impl CheckCommand {
                                 warnings.push(message);
                             }
                         } else {
+                            let resolution_provider = secret_config
+                                .sync
+                                .as_ref()
+                                .map(|sync| sync.provider.as_str())
+                                .unwrap_or(provider);
+
                             // A provider whose own settings don't resolve can't serve
-                            // any of its secrets, so report it whatever their
-                            // `if_missing` is. Secrets that must resolve report the
-                            // same failure below.
-                            if !provider_config_errors.contains_key(provider) {
-                                let error = crate::providers::resolve_provider_config(
-                                    &config,
-                                    &profile,
-                                    provider,
-                                    &providers[provider],
-                                )
-                                .await
-                                .err()
-                                .map(|err| err.to_string());
-                                provider_config_errors.insert(provider.to_string(), error);
-                            }
-                            if let Some(error) = &provider_config_errors[provider]
-                                && !matches!(if_missing, crate::config::IfMissing::Error)
+                            // its secrets, so report it whatever their `if_missing` is
+                            // and without relying on resolving the secret, which a
+                            // `default` can satisfy. A required secret without a
+                            // `default` reports the same failure when it resolves
+                            // below, so it skips this check and the settings are only
+                            // fetched once.
+                            let reports_own_failure =
+                                matches!(if_missing, crate::config::IfMissing::Error)
+                                    && secret_config.default.is_none();
+                            if !reports_own_failure
+                                && let Some(resolution_config) = providers.get(resolution_provider)
                             {
-                                if reported_providers.insert(provider.to_string()) {
-                                    warnings.push(format!(
-                                        "Provider '{}' could not be configured (used by secret '{}'): {}",
-                                        provider, name, error
-                                    ));
+                                if !provider_config_errors.contains_key(resolution_provider) {
+                                    let error = crate::providers::resolve_provider_config(
+                                        &config,
+                                        &profile,
+                                        resolution_provider,
+                                        resolution_config,
+                                    )
+                                    .await
+                                    .err()
+                                    .map(|err| err.to_string());
+                                    provider_config_errors
+                                        .insert(resolution_provider.to_string(), error);
                                 }
-                                continue;
+                                if let Some(error) = &provider_config_errors[resolution_provider] {
+                                    let message = format!(
+                                        "Provider '{}' could not be configured (used by secret '{}'): {}",
+                                        resolution_provider, name, error
+                                    );
+                                    if matches!(if_missing, crate::config::IfMissing::Error) {
+                                        if reported_errors.insert(resolution_provider.to_string()) {
+                                            issues.push(message);
+                                        }
+                                    } else if reported_warnings
+                                        .insert(resolution_provider.to_string())
+                                    {
+                                        warnings.push(message);
+                                    }
+                                    continue;
+                                }
                             }
 
                             // Skip checking if not --all and if_missing is not Error
@@ -158,11 +181,6 @@ impl CheckCommand {
                                 continue;
                             }
 
-                            let resolution_provider = secret_config
-                                .sync
-                                .as_ref()
-                                .map(|sync| sync.provider.as_str())
-                                .unwrap_or(provider);
                             let has_provider_value =
                                 secret_config.sync.is_some() || secret_config.value().is_some();
                             if matches!(if_missing, crate::config::IfMissing::Error)
