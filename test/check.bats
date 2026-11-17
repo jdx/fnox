@@ -205,3 +205,191 @@ EOF
 	assert_equal "$(grep -c '^first-age-key$' "$PASS_CALLS_FILE")" "1"
 	assert_equal "$(grep -c '^second-age-key$' "$PASS_CALLS_FILE")" "1"
 }
+
+@test "fnox check fails with unknown provider when the secret is required" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+
+[providers.real]
+type = "plain"
+
+[secrets.bad_secret]
+provider = "unknown"
+value = "test"
+if_missing = "error"
+EOF2
+
+	assert_fnox_failure check
+	assert_output --partial "unknown provider 'unknown'"
+}
+
+# A provider whose own settings take their value from an unset secret
+_create_unresolvable_provider_config() {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+
+[providers.appcfg]
+type = "azure-ac"
+endpoint = { secret = "FNOX_TEST_UNSET_ENDPOINT" }
+
+[secrets]
+API_URL = { provider = "appcfg", value = "API_URL", if_missing = "$1" }
+EOF2
+}
+
+@test "fnox check reports a provider that cannot be configured when if_missing is ignore" {
+	_create_unresolvable_provider_config ignore
+
+	assert_fnox_success check
+	assert_output --partial "Provider 'appcfg' could not be configured"
+	assert_output --partial "FNOX_TEST_UNSET_ENDPOINT"
+	refute_output --partial "Configuration is healthy"
+}
+
+@test "fnox check reports a provider that cannot be configured when if_missing is warn" {
+	_create_unresolvable_provider_config warn
+
+	assert_fnox_success check
+	assert_output --partial "Provider 'appcfg' could not be configured"
+}
+
+@test "fnox check fails on a provider that cannot be configured when if_missing is error" {
+	_create_unresolvable_provider_config error
+
+	assert_fnox_failure check
+	assert_output --partial "FNOX_TEST_UNSET_ENDPOINT"
+}
+
+@test "fnox check passes once the provider's settings resolve" {
+	_create_unresolvable_provider_config ignore
+
+	FNOX_TEST_UNSET_ENDPOINT="https://example.azconfig.io" assert_fnox_success check --all
+	refute_output --partial "could not be configured"
+}
+
+@test "fnox check --strict fails on warnings" {
+	_create_unresolvable_provider_config ignore
+
+	assert_fnox_failure check --strict
+	assert_output --partial "Provider 'appcfg' could not be configured"
+}
+
+@test "fnox check --strict passes with a healthy config" {
+	create_test_config
+	assert_fnox_success check --strict
+}
+
+@test "fnox check fails on a provider that cannot be configured when the required secret has a default" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+
+[providers.appcfg]
+type = "azure-ac"
+endpoint = { secret = "FNOX_TEST_UNSET_ENDPOINT" }
+
+[secrets]
+API_URL = { provider = "appcfg", value = "API_URL", if_missing = "error", default = "http://localhost" }
+EOF2
+
+	assert_fnox_failure check
+	assert_output --partial "Provider 'appcfg' could not be configured"
+	assert_output --partial "FNOX_TEST_UNSET_ENDPOINT"
+}
+
+@test "fnox check reports a provider that cannot be configured once for several secrets" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+
+[providers.appcfg]
+type = "azure-ac"
+endpoint = { secret = "FNOX_TEST_UNSET_ENDPOINT" }
+
+[secrets]
+A = { provider = "appcfg", value = "A", if_missing = "ignore" }
+B = { provider = "appcfg", value = "B", if_missing = "warn" }
+EOF2
+
+	assert_fnox_success check
+	assert_output --partial "Found 1 warning(s)"
+}
+
+@test "fnox check reports an unknown sync provider whatever the secret's if_missing" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+
+[providers.real]
+type = "plain"
+
+[secrets]
+OPTIONAL = { provider = "real", value = "x", if_missing = "ignore", sync = { provider = "missing", value = "x" } }
+EOF2
+
+	assert_fnox_success check
+	assert_output --partial "unknown sync provider 'missing'"
+
+	assert_fnox_failure check --strict
+}
+
+@test "fnox check covers secrets served by the default provider" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+default_provider = "appcfg"
+
+[providers.appcfg]
+type = "azure-ac"
+endpoint = { secret = "FNOX_TEST_UNSET_ENDPOINT" }
+
+[secrets]
+API_URL = { value = "API_URL", if_missing = "ignore" }
+EOF2
+
+	assert_fnox_success check
+	assert_output --partial "Provider 'appcfg' could not be configured"
+
+	sed -i.bak 's/if_missing = "ignore"/if_missing = "error"/' "${FNOX_CONFIG_FILE:-fnox.toml}"
+	assert_fnox_failure check
+	assert_output --partial "FNOX_TEST_UNSET_ENDPOINT"
+}
+
+@test "fnox check reports an unknown sync provider for a secret that uses the default provider" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+root = true
+default_provider = "real"
+
+[providers.real]
+type = "plain"
+
+[secrets]
+OPTIONAL = { value = "x", if_missing = "ignore", sync = { provider = "missing", value = "x" } }
+EOF2
+
+	assert_fnox_success check
+	assert_output --partial "unknown provider 'missing'"
+}
+
+@test "fnox check keeps a default-only secret working when providers are only defined in a profile" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+[secrets]
+LOCAL = { default = "ok" }
+
+[profiles.prod.providers.p]
+type = "plain"
+EOF2
+
+	# An explicit path skips the parent directories, so the config stays non-root
+	assert_fnox_success -c "$FNOX_CONFIG_FILE" check
+	assert_output --partial "No providers configured"
+}
+
+@test "fnox check fails a required secret when the default provider cannot be found" {
+	cat >"${FNOX_CONFIG_FILE:-fnox.toml}" <<EOF2
+[secrets]
+LOCAL = { value = "item", if_missing = "error" }
+
+[profiles.prod.providers.p]
+type = "plain"
+EOF2
+
+	assert_fnox_failure -c "$FNOX_CONFIG_FILE" check
+	assert_output --partial "Secret 'LOCAL' needs the default provider"
+}

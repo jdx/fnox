@@ -6,7 +6,7 @@ description: "Verify that the active profile's secrets resolve, without printing
 
 # `fnox check`
 
-- **Usage:** `fnox check [-a --all]`
+- **Usage:** `fnox check [-a --all] [--strict]`
 - **Aliases:** `c`
 
 Verify that the active profile's secrets resolve, without printing them
@@ -15,11 +15,14 @@ Validates the config, then resolves each secret that uses a provider and whose `
 
 Secrets without a provider are not resolved. One with no default is reported only when its own `if_missing` is `error` or `warn`; `--if-missing` and `FNOX_IF_MISSING` do not apply to it, so an environment-only secret that is unset can still pass.
 
-`--all` also resolves secrets whose `if_missing` is `warn` or `ignore`; their failures are reported as warnings, or not at all for `ignore`. Problems go to stderr, and fnox exits 1 when any error is found.
+A provider whose own settings do not resolve, such as an `endpoint` that takes its value from an unset secret, is reported whatever the secret's `if_missing`. It is an error when the secret's `if_missing` is `error` and a warning otherwise.
+
+`--all` also resolves secrets whose `if_missing` is `warn` or `ignore`; their failures are reported as warnings, or not at all for `ignore`. `--strict` reports every warning as an error. Problems go to stderr, and fnox exits 1 when any error is found.
 
 ## Flags
 
 - **`-a --all`** — Also resolve secrets whose `if_missing` is `warn` or `ignore`
+- **`--strict`** — Treat warnings as errors and exit 1
 - **`-h --help`** — Print help
 
 ## Examples
@@ -34,6 +37,12 @@ fnox check --all
 
 ```sh
 fnox check --if-missing error
+```
+
+**Fail on warnings, such as a provider that cannot be configured**
+
+```sh
+fnox check --strict
 ```
 
 **Check another profile**
