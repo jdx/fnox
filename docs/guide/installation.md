@@ -56,6 +56,19 @@ nix profile install github:jdx/fnox
 
 Download the archive for your platform from [GitHub Releases](https://github.com/jdx/fnox/releases) and put `fnox` somewhere on your `PATH`. Builds are published for macOS (Apple silicon and Intel), Linux (x86_64 and arm64, glibc and musl), and Windows (x86_64 and arm64).
 
+### Lite builds for Linux
+
+Each Linux release also has a lite build, `fnox-lite-<target>.tar.gz`. It is the same as a Cargo install with `--no-default-features` (see [Smaller builds](#smaller-builds)). It leaves out the AWS, Azure, Google Cloud, Kubernetes, Keeper, Enpass and FIDO2 providers, so it is smaller, and the glibc build does not need libudev. A config that uses a left-out provider still loads, but reading a secret from that provider fails.
+
+To install the lite build with mise, ask for the `lite` variant:
+
+```toml
+[tools]
+"packslip:github.com/jdx/fnox" = { version = "latest", variant = "lite", workflow = "release.yml" }
+```
+
+Plain `mise use fnox` and the other install methods keep installing the full build.
+
 ## Code signing
 
 Windows release binaries (`fnox.exe`) are Authenticode-signed. Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
