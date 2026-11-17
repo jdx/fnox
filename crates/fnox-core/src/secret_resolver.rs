@@ -407,6 +407,15 @@ pub fn resolve_if_missing_behavior(secret_config: &SecretConfig, config: &Config
         .unwrap_or(IfMissing::Warn)
 }
 
+/// The text of a warning for `error`. The warning is all the user sees, so a
+/// left-out provider's warning keeps its rebuild guidance.
+fn warning_detail(error: &FnoxError) -> String {
+    match error {
+        FnoxError::NotInBuild { help, .. } => format!("{error}\n{help}"),
+        _ => error.to_string(),
+    }
+}
+
 /// Handles provider errors according to if_missing behavior.
 /// Returns Some(err) if the error should be propagated, None if it should be ignored.
 pub fn handle_provider_error(
@@ -425,6 +434,7 @@ pub fn handle_provider_error(
             Some(error)
         }
         IfMissing::Warn => {
+            let error = warning_detail(&error);
             if use_tracing {
                 tracing::warn!("Error resolving secret '{}': {}", key, error);
             } else {
@@ -853,11 +863,8 @@ async fn try_get_secret(
     provider_value: &str,
     auth_command: &mut Option<String>,
 ) -> Result<String> {
-    if crate::env::is_non_interactive() && provider_config.requires_interactive_auth() {
-        return Err(FnoxError::Provider(format!(
-            "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
-            provider_name
-        )));
+    if let Some(error) = crate::providers::unusable_provider_error(provider_name, provider_config) {
+        return Err(error);
     }
 
     let provider = get_provider_resolved(config, profile, provider_name, provider_config).await?;
@@ -1365,10 +1372,12 @@ async fn resolve_provider_batch(
         }
     };
 
-    // Skip interactive providers in non-interactive mode (e.g. TUI).
+    // Skip providers left out of this build, and interactive providers in
+    // non-interactive mode (e.g. TUI), before resolving their settings.
     // Handle per-secret if_missing policy (like ProviderNotConfigured above)
     // so other providers at the same resolution level are not affected.
-    if crate::env::is_non_interactive() && provider_config.requires_interactive_auth() {
+    let unusable = || crate::providers::unusable_provider_error(provider_name, provider_config);
+    if unusable().is_some() {
         let fallback_keys: Vec<String> = provider_secrets
             .iter()
             .map(|(key, _)| key.clone())
@@ -1385,10 +1394,7 @@ async fn resolve_provider_batch(
                 let secret_config = &secrets[key];
                 log_provider_default_fallback(
                     key,
-                    &FnoxError::Provider(format!(
-                        "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
-                        provider_name
-                    )),
+                    &unusable().expect("checked above"),
                     resolve_if_missing_behavior(secret_config, config),
                 );
                 continue;
@@ -1396,10 +1402,7 @@ async fn resolve_provider_batch(
 
             let secret_config = &secrets[key];
             let if_missing = resolve_if_missing_behavior(secret_config, config);
-            let error = FnoxError::Provider(format!(
-                "Provider '{}' requires interactive authentication and cannot be used in non-interactive mode. Use 'fnox exec' instead.",
-                provider_name
-            ));
+            let error = unusable().expect("checked above");
             if let Some(error) = handle_provider_error(key, error, if_missing, true) {
                 return Err(error);
             }
@@ -1564,7 +1567,9 @@ fn handle_batch_error(
 
         let secret_config = &secrets[key];
         let if_missing = resolve_if_missing_behavior(secret_config, config);
-        let provider_error = FnoxError::Provider(error.to_string());
+        let provider_error = error
+            .clone_not_in_build()
+            .unwrap_or_else(|| FnoxError::Provider(error.to_string()));
         if let Some(err) = handle_provider_error(key, provider_error, if_missing, true) {
             // Fail fast if if_missing is error
             return Err(err);
@@ -1678,6 +1683,17 @@ fn process_batch_results(
 mod tests {
     use super::*;
     use crate::config::ProfileConfig;
+
+    #[test]
+    fn warning_keeps_not_in_build_help() {
+        let detail = warning_detail(&FnoxError::not_in_build("Provider", "aws-sm", "aws"));
+        assert!(detail.contains("'aws-sm'"), "{detail}");
+        assert!(detail.contains("`aws` Cargo feature"), "{detail}");
+        assert_eq!(
+            warning_detail(&FnoxError::Provider("boom".into())),
+            "Provider error: boom"
+        );
+    }
 
     /// Helper to call compute_resolution_levels and sort each level for deterministic assertions.
     fn compute_sorted(
@@ -2730,6 +2746,7 @@ DB = { provider = "op", value = "item/field" }
         );
     }
 
+    #[cfg(feature = "kubernetes")]
     #[test]
     fn dependency_closure_pulls_kubernetes_client_selection() {
         let (config, secrets) = closure_config(

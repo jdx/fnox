@@ -333,11 +333,22 @@ impl GetCommand {
             return self.extract_key_from_creds(name, entry.credentials.clone(), all_secrets);
         }
 
+        // Only an encrypted cache entry is left to stand in for a backend left
+        // out of this build; without one, name the missing feature before any
+        // consumed secret is resolved.
+        if cached_entry.is_none() {
+            lease_config.ensure_in_build()?;
+        }
+
         // Resolve consumed secrets and inject them as env vars so that:
         // 1. The encryption provider can initialize (e.g. VAULT_TOKEN)
         // 2. The backend SDK can authenticate for fresh lease creation
-        let mut consumed: std::collections::HashSet<&str> =
-            lease_config.consumed_env_vars().iter().copied().collect();
+        // A backend left out of this build (the case above) can only serve the
+        // encrypted cache, which needs the encryption provider's inputs alone.
+        let mut consumed: std::collections::HashSet<&str> = match lease_config.ensure_in_build() {
+            Ok(()) => lease_config.consumed_env_vars().iter().copied().collect(),
+            Err(_) => Default::default(),
+        };
 
         // Always include the default encryption provider's env deps so that
         // create_and_record_lease can encrypt cached credentials even on a cold
@@ -361,11 +372,21 @@ impl GetCommand {
         } else {
             config.get_secrets(profile)?
         };
-        let needed_secrets: indexmap::IndexMap<_, _> = all_secrets
+        let consumed_secrets: indexmap::IndexMap<_, _> = all_secrets
             .iter()
             .filter(|(k, _)| consumed.contains(k.as_str()))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
+        // Add what those secrets must read: a `default` that is the secret's
+        // only source (such as `default = "${BASE_TOKEN}"`) and its provider's
+        // credentials. A fallback behind a provider is left out, so an unused
+        // backup cannot block the read.
+        let needed_secrets = crate::secret_resolver::with_read_dependencies(
+            config,
+            profile,
+            &consumed_secrets,
+            &|_| false,
+        );
         let resolved_secrets =
             crate::secret_resolver::resolve_secrets_batch(config, profile, &needed_secrets).await?;
 

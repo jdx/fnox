@@ -266,7 +266,11 @@ impl AddCommand {
                 cache_ttl: None,
                 max_cache_ttl: None,
             },
-            #[cfg(not(target_env = "musl"))]
+            #[cfg(not(all(feature = "fido2", not(target_env = "musl"))))]
+            ProviderType::Fido2 => {
+                return Err(FnoxError::not_in_build("Provider", "fido2", "fido2"));
+            }
+            #[cfg(all(feature = "fido2", not(target_env = "musl")))]
             ProviderType::Fido2 => {
                 let provider_name = self.provider.clone();
                 let (credential_id_hex, salt_hex, rp_id, _pin) =

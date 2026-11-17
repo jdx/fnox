@@ -2,6 +2,7 @@
 display_name = "Enpass"
 serde_rename = "enpass"
 rust_variant = "Enpass"
+feature = "enpass"
 category = "PasswordManager"
 description = "Enpass vault, read live from its vault file (read-only)"
 default_name = "enpass"

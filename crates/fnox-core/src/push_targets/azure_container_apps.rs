@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 
 const TARGET_TYPE: &str = "azure-container-apps";
 const ARM: &str = "https://management.azure.com";
+#[cfg(feature = "azure")]
 const SCOPE: &str = "https://management.azure.com/.default";
 const API_VERSION: &str = "2024-03-01";
 /// How long to follow a long-running update before giving up
@@ -77,6 +78,13 @@ impl AzureContainerApps {
         }
     }
 
+    #[cfg(not(feature = "azure"))]
+    async fn token(&self) -> Result<String> {
+        self.auth()?;
+        Err(FnoxError::not_in_build("Push target", TARGET_TYPE, "azure"))
+    }
+
+    #[cfg(feature = "azure")]
     async fn token(&self) -> Result<String> {
         let auth = self.auth()?;
         let url = super::docs_url(TARGET_TYPE);
@@ -396,7 +404,11 @@ impl PushTarget for AzureContainerApps {
                 let message = e.to_string();
                 values
                     .iter()
-                    .map(|_| Err(FnoxError::Config(message.clone())))
+                    .map(|_| {
+                        Err(e
+                            .clone_not_in_build()
+                            .unwrap_or_else(|| FnoxError::Config(message.clone())))
+                    })
                     .collect()
             }
         }
@@ -406,6 +418,19 @@ impl PushTarget for AzureContainerApps {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(feature = "azure"))]
+    #[tokio::test]
+    async fn left_out_target_reports_missing_feature_for_each_value() {
+        let results = target("").push_all(&[("A", "1"), ("B", "2")]).await;
+        assert_eq!(results.len(), 2);
+        for result in results {
+            assert!(
+                matches!(&result, Err(FnoxError::NotInBuild { help, .. }) if help.contains("`azure`")),
+                "{result:?}"
+            );
+        }
+    }
 
     fn target(extra: &str) -> AzureContainerApps {
         toml_edit::de::from_str(&format!(

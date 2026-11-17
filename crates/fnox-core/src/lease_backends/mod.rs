@@ -387,6 +387,45 @@ pub enum LeaseBackendConfig {
 }
 
 impl LeaseBackendConfig {
+    /// Fails with `NotInBuild` when this build of fnox was compiled without the
+    /// backend. Check it before [`check_prerequisites`](Self::check_prerequisites)
+    /// or prompting for credentials, which a left-out backend can't use.
+    pub fn ensure_in_build(&self) -> Result<()> {
+        #[cfg(not(feature = "aws"))]
+        if matches!(self, Self::AwsSts { .. }) {
+            return Err(crate::error::FnoxError::not_in_build(
+                "Lease backend",
+                "aws-sts",
+                "aws",
+            ));
+        }
+        #[cfg(not(feature = "gcp"))]
+        if matches!(self, Self::GcpIam { .. }) {
+            return Err(crate::error::FnoxError::not_in_build(
+                "Lease backend",
+                "gcp-iam",
+                "gcp",
+            ));
+        }
+        #[cfg(not(feature = "azure"))]
+        if matches!(self, Self::AzureToken { .. }) {
+            return Err(crate::error::FnoxError::not_in_build(
+                "Lease backend",
+                "azure-token",
+                "azure",
+            ));
+        }
+        #[cfg(not(feature = "kubernetes"))]
+        if matches!(self, Self::Kubernetes { .. }) {
+            return Err(crate::error::FnoxError::not_in_build(
+                "Lease backend",
+                "kubernetes",
+                "kubernetes",
+            ));
+        }
+        Ok(())
+    }
+
     /// Check if the prerequisites for this backend are available.
     /// Returns a human-readable message describing what's missing, or None if ready.
     pub fn check_prerequisites(&self) -> Option<String> {
@@ -530,6 +569,7 @@ impl LeaseBackendConfig {
         duration_override: Option<&str>,
     ) -> Result<Box<dyn LeaseBackend>> {
         match self {
+            #[cfg(feature = "aws")]
             LeaseBackendConfig::AwsSts {
                 region,
                 profile,
@@ -542,6 +582,13 @@ impl LeaseBackendConfig {
                 role_arn.clone(),
                 endpoint.clone(),
             ))),
+            #[cfg(not(feature = "aws"))]
+            LeaseBackendConfig::AwsSts { .. } => Err(crate::error::FnoxError::not_in_build(
+                "Lease backend",
+                "aws-sts",
+                "aws",
+            )),
+            #[cfg(feature = "gcp")]
             LeaseBackendConfig::GcpIam {
                 service_account_email,
                 scopes,
@@ -552,6 +599,12 @@ impl LeaseBackendConfig {
                 scopes.clone(),
                 env_var.clone(),
             ))),
+            #[cfg(not(feature = "gcp"))]
+            LeaseBackendConfig::GcpIam { .. } => Err(crate::error::FnoxError::not_in_build(
+                "Lease backend",
+                "gcp-iam",
+                "gcp",
+            )),
             LeaseBackendConfig::Vault {
                 address,
                 token,
@@ -572,6 +625,7 @@ impl LeaseBackendConfig {
                 method.clone(),
                 duration_override.is_some() || duration.is_some(),
             )?)),
+            #[cfg(feature = "azure")]
             LeaseBackendConfig::AzureToken {
                 scope,
                 env_var,
@@ -584,6 +638,12 @@ impl LeaseBackendConfig {
                 auth.as_deref(),
                 managed_identity_client_id.clone(),
             )?)),
+            #[cfg(not(feature = "azure"))]
+            LeaseBackendConfig::AzureToken { .. } => Err(crate::error::FnoxError::not_in_build(
+                "Lease backend",
+                "azure-token",
+                "azure",
+            )),
             LeaseBackendConfig::Cloudflare {
                 token_type,
                 account_id,
@@ -650,6 +710,7 @@ impl LeaseBackendConfig {
                 access_level,
                 env_var.clone(),
             )?)),
+            #[cfg(feature = "kubernetes")]
             LeaseBackendConfig::Kubernetes {
                 service_account,
                 namespace,
@@ -666,6 +727,12 @@ impl LeaseBackendConfig {
                 kubeconfig.clone(),
                 env_var.clone(),
             ))),
+            #[cfg(not(feature = "kubernetes"))]
+            LeaseBackendConfig::Kubernetes { .. } => Err(crate::error::FnoxError::not_in_build(
+                "Lease backend",
+                "kubernetes",
+                "kubernetes",
+            )),
             LeaseBackendConfig::Oauth2ClientCredentials {
                 token_url,
                 client_id,
@@ -764,6 +831,29 @@ impl LeaseBackendConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ensure_in_build_names_only_left_out_backends() {
+        for fixture in fixtures() {
+            // Which arms are true depends on the enabled features.
+            #[allow(clippy::match_like_matches_macro)]
+            let left_out = match &fixture {
+                LeaseBackendConfig::AwsSts { .. } => cfg!(not(feature = "aws")),
+                LeaseBackendConfig::GcpIam { .. } => cfg!(not(feature = "gcp")),
+                LeaseBackendConfig::AzureToken { .. } => cfg!(not(feature = "azure")),
+                LeaseBackendConfig::Kubernetes { .. } => cfg!(not(feature = "kubernetes")),
+                _ => false,
+            };
+            match fixture.ensure_in_build() {
+                Ok(()) => assert!(!left_out, "{fixture:?} should be left out"),
+                Err(crate::error::FnoxError::NotInBuild { kind, .. }) => {
+                    assert!(left_out, "{fixture:?} should be built");
+                    assert_eq!(kind, "Lease backend");
+                }
+                Err(other) => panic!("unexpected error for {fixture:?}: {other:?}"),
+            }
+        }
+    }
 
     fn fixtures() -> Vec<LeaseBackendConfig> {
         [

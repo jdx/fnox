@@ -1,3 +1,7 @@
+// Without the `gcp` feature only the config helpers are compiled;
+// `create_backend` reports the backend as not included in this build.
+#![cfg_attr(not(feature = "gcp"), allow(dead_code, unused_imports))]
+
 use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
 use async_trait::async_trait;
@@ -49,6 +53,7 @@ impl GcpIamBackend {
     }
 }
 
+#[cfg(feature = "gcp")]
 #[async_trait]
 impl LeaseBackend for GcpIamBackend {
     async fn create_lease(&self, duration: Duration, label: &str) -> Result<Lease> {

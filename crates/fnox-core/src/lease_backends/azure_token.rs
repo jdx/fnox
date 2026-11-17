@@ -1,9 +1,15 @@
+// Without the `azure` feature only the config helpers are compiled;
+// `create_backend` reports the backend as not included in this build.
+#![cfg_attr(not(feature = "azure"), allow(dead_code, unused_imports))]
+
 use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
 use crate::providers::azure_shared::{self, AzureAuth};
 use async_trait::async_trait;
+#[cfg(feature = "azure")]
 use azure_core::credentials::TokenCredential;
 use indexmap::IndexMap;
+#[cfg(feature = "azure")]
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -99,11 +105,13 @@ impl AzureTokenBackend {
         )
     }
 
+    #[cfg(feature = "azure")]
     fn build_credential(&self) -> Result<Arc<dyn TokenCredential>> {
         self.auth.build_credential("Azure Token", URL)
     }
 }
 
+#[cfg(feature = "azure")]
 #[async_trait]
 impl LeaseBackend for AzureTokenBackend {
     async fn create_lease(&self, duration: Duration, _label: &str) -> Result<Lease> {

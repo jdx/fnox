@@ -22,6 +22,28 @@ cargo install fnox --locked
 
 This builds from source. The minimum Rust version is the `rust-version` in [Cargo.toml](https://github.com/jdx/fnox/blob/main/Cargo.toml). Run the same command again to upgrade.
 
+### Smaller builds
+
+Some providers bring in large SDKs or system libraries. Each group is a Cargo feature, and all of them are on by default:
+
+| Feature      | Adds                                                                 |
+| ------------ | -------------------------------------------------------------------- |
+| `aws`        | AWS KMS, Secrets Manager and Parameter Store; the `aws-sts` lease    |
+| `azure`      | Azure Key Vault, App Configuration and Container Apps; `azure-token` |
+| `gcp`        | Google Cloud KMS and Secret Manager; the `gcp-iam` lease             |
+| `kubernetes` | Kubernetes Secrets; the `kubernetes` lease                           |
+| `keeper`     | Keeper Secrets Manager                                               |
+| `enpass`     | Enpass (builds SQLCipher and OpenSSL from source)                    |
+| `fido2`      | FIDO2 keys (needs libudev on Linux)                                  |
+
+To leave groups out, turn off the defaults and list the ones you want:
+
+```sh
+cargo install fnox --locked --no-default-features --features aws
+```
+
+With `--no-default-features` alone, fnox still includes every other provider, such as age, 1Password, Bitwarden, HashiCorp Vault and the OS keychain. A config that uses a left-out provider still loads; fnox reports an error only when it needs a secret from that provider.
+
 ## Nix
 
 The repository is a Nix flake:

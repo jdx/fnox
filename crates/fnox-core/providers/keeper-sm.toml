@@ -2,6 +2,7 @@
 display_name = "Keeper Secrets Manager"
 serde_rename = "keeper-sm"
 rust_variant = "KeeperSecretsManager"
+feature = "keeper"
 category = "CloudSecretsManager"
 description = "Keeper Secrets Manager"
 default_name = "keeper"

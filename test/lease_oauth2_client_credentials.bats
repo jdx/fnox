@@ -312,3 +312,56 @@ EOF
 	assert_failure
 	assert_output --partial "307"
 }
+
+@test "oauth2-client-credentials: fnox get resolves a client secret taken from another secret" {
+	unset OAUTH2_CLIENT_SECRET
+	start_token_server
+
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+BASE_SECRET = { default = "s3cret" }
+OAUTH2_CLIENT_SECRET = { default = "\${BASE_SECRET}" }
+
+[leases.idp]
+type = "oauth2-client-credentials"
+token_url = "http://127.0.0.1:$MOCK_PORT/token"
+client_id = "cid"
+EOF
+
+	run fnox get OAUTH2_ACCESS_TOKEN
+	assert_success
+	assert_output "tok-abc123"
+
+	run mock_requests
+	assert_output --partial "\"authorization\": \"Basic $(printf 'cid:s3cret' | base64)\""
+}
+
+@test "oauth2-client-credentials: fnox get ignores an unused fallback of the client secret" {
+	unset OAUTH2_CLIENT_SECRET
+	start_token_server
+
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+BACKUP_SECRET = { default = "\${UNDEFINED_SECRET}", if_missing = "error" }
+OAUTH2_CLIENT_SECRET = { provider = "plain", value = "s3cret", default = "\${BACKUP_SECRET}" }
+
+[leases.idp]
+type = "oauth2-client-credentials"
+token_url = "http://127.0.0.1:$MOCK_PORT/token"
+client_id = "cid"
+EOF
+
+	run fnox get OAUTH2_ACCESS_TOKEN
+	assert_success
+	assert_output "tok-abc123"
+}

@@ -325,6 +325,10 @@ impl LeaseCreateCommand {
         resolved_secrets: &indexmap::IndexMap<String, Option<String>>,
         temp_env_guard: &mut TempEnvGuard,
     ) -> Result<()> {
+        // A backend left out of this build can't use credentials, so say so
+        // before checking for them or prompting.
+        backend_config.ensure_in_build()?;
+
         // Hard-fail if any secret required by this lease backend failed to resolve.
         // resolve_secrets_batch respects if_missing (default: "warn"), which would
         // silently swallow auth errors (e.g. FIDO2 PIN failure) and produce a

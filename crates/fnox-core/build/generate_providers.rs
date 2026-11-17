@@ -39,6 +39,15 @@ struct ProviderTomlRaw {
     daemon_cache_supported: bool,
     #[serde(default)]
     daemon_cache_disabled_field: Option<String>,
+    /// Cargo feature of fnox-core that compiles this provider's implementation.
+    /// Without it the provider type still parses, and using it fails with
+    /// `FnoxError::NotInBuild`.
+    #[serde(default)]
+    feature: Option<String>,
+    /// Extra `cfg` predicate the implementation needs besides `feature`, such
+    /// as `not(target_env = "musl")`.
+    #[serde(default)]
+    target_cfg: Option<String>,
     #[serde(default)]
     fields: IndexMap<String, FieldDef>,
     #[serde(default)]
@@ -63,8 +72,25 @@ struct ProviderToml {
     requires_interactive_auth_field: Option<String>,
     daemon_cache_supported: bool,
     daemon_cache_disabled_field: Option<String>,
+    feature: Option<String>,
+    target_cfg: Option<String>,
     fields: IndexMap<String, FieldDef>,
     wizard_fields: IndexMap<String, WizardFieldDef>,
+}
+
+impl ProviderToml {
+    /// The `cfg` predicate under which this provider's implementation is
+    /// compiled, or `None` when it is always compiled.
+    fn cfg(&self) -> Option<TokenStream> {
+        let feature = self.feature.as_deref()?;
+        Some(match &self.target_cfg {
+            Some(extra) => {
+                let extra: TokenStream = extra.parse().expect("target_cfg must be a cfg predicate");
+                quote! { all(feature = #feature, #extra) }
+            }
+            None => quote! { feature = #feature },
+        })
+    }
 }
 
 fn default_true() -> bool {
@@ -106,6 +132,8 @@ impl ProviderTomlRaw {
             requires_interactive_auth_field: self.requires_interactive_auth_field,
             daemon_cache_supported: self.daemon_cache_supported,
             daemon_cache_disabled_field: self.daemon_cache_disabled_field,
+            feature: self.feature,
+            target_cfg: self.target_cfg,
             fields: self.fields,
             wizard_fields: self.wizard_fields,
         }
@@ -181,19 +209,11 @@ fn load_providers() -> Result<Vec<(String, ProviderToml)>, Box<dyn std::error::E
     let providers_dir = PathBuf::from("providers");
     let mut providers = Vec::new();
 
-    // ctap-hid-fido2 → hidapi → libudev cannot be statically linked on musl,
-    // so the FIDO2 provider is excluded from musl builds. Keep this in sync
-    // with the cfg gates in src/providers/mod.rs and src/commands/provider/.
-    let is_musl = std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("musl");
-
     for entry in fs::read_dir(&providers_dir)? {
         let entry = entry?;
         let path = entry.path();
         if path.extension().is_some_and(|ext| ext == "toml") {
             let name = path.file_stem().unwrap().to_string_lossy().to_string();
-            if is_musl && name == "fido2" {
-                continue;
-            }
             let content = fs::read_to_string(&path)?;
             let raw: ProviderTomlRaw = toml_edit::de::from_str(&content)
                 .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))?;
@@ -428,6 +448,7 @@ fn generate_provider_methods(
     let mut cache_ttl_arms = Vec::new();
     let mut env_deps_arms = Vec::new();
     let mut interactive_auth_arms = Vec::new();
+    let mut in_build_checks = Vec::new();
 
     for (_name, provider) in providers {
         let variant = Ident::new(&provider.rust_variant, Span::call_site());
@@ -480,9 +501,17 @@ fn generate_provider_methods(
         cache_ttl_arms.push(quote! {
             Self::#variant { cache_ttl, max_cache_ttl, .. } => (cache_ttl.as_deref(), max_cache_ttl.as_deref())
         });
-        env_deps_arms.push(quote! {
-            Self::#variant { .. } => #module::env_dependencies()
-        });
+        match provider.cfg() {
+            Some(cfg) => env_deps_arms.push(quote! {
+                #[cfg(#cfg)]
+                Self::#variant { .. } => #module::env_dependencies(),
+                #[cfg(not(#cfg))]
+                Self::#variant { .. } => &[]
+            }),
+            None => env_deps_arms.push(quote! {
+                Self::#variant { .. } => #module::env_dependencies()
+            }),
+        }
         if let Some(field) = &provider.requires_interactive_auth_field {
             let field = Ident::new(field, Span::call_site());
             interactive_auth_arms.push(quote! {
@@ -494,18 +523,22 @@ fn generate_provider_methods(
                 Self::#variant { .. } => #interactive
             });
         }
+
+        // ensure_in_build check, only for providers behind a Cargo feature
+        if let (Some(cfg), Some(feature)) = (provider.cfg(), provider.feature.as_deref()) {
+            in_build_checks.push(quote! {
+                #[cfg(not(#cfg))]
+                if matches!(self, Self::#variant { .. }) {
+                    return Err(FnoxError::not_in_build("Provider", #serde_rename, #feature));
+                }
+            });
+        }
     }
 
     // Note: Use super::super:: because this is included inside mod generated { mod providers_methods { ... } }
     // Also reference providers_config module for ProviderConfig and ResolvedProviderConfig
     // Build use statements for provider modules
-    let module_uses: Vec<TokenStream> = providers
-        .iter()
-        .map(|(_name, provider)| {
-            let module = Ident::new(&provider.module, Span::call_site());
-            quote! { use super::super::#module; }
-        })
-        .collect();
+    let module_uses = module_uses(providers);
 
     let output = quote! {
         use crate::error::{FnoxError, Result};
@@ -608,6 +641,14 @@ fn generate_provider_methods(
                 }
             }
 
+            /// Fails with `NotInBuild` when this build of fnox was compiled without
+            /// the provider. Check it before resolving the provider's settings or
+            /// prompting for anything, so the error names the missing feature.
+            pub fn ensure_in_build(&self) -> Result<()> {
+                #(#in_build_checks)*
+                Ok(())
+            }
+
             /// Get the auth command for this provider.
             /// Returns the instance-level override if set, otherwise `resolved` (the command
             /// offered by the resolved provider instance), otherwise the static default.
@@ -633,6 +674,20 @@ fn generate_provider_methods(
     };
 
     Ok(output.to_string())
+}
+
+/// `use` items for every provider module, each gated like its provider
+fn module_uses(providers: &[(String, ProviderToml)]) -> Vec<TokenStream> {
+    providers
+        .iter()
+        .map(|(_name, provider)| {
+            let module = Ident::new(&provider.module, Span::call_site());
+            match provider.cfg() {
+                Some(cfg) => quote! { #[cfg(#cfg)] use super::super::#module; },
+                None => quote! { use super::super::#module; },
+            }
+        })
+        .collect()
 }
 
 /// Reserved names that conflict with function parameters in generated code
@@ -866,28 +921,47 @@ fn generate_provider_instantiate(
             vec![]
         };
 
-        if provider.fields.is_empty() {
-            arms.push(quote! {
+        let arm = if provider.fields.is_empty() {
+            quote! {
                 ResolvedProviderConfig::#variant => {
                     Ok(Box::new(#module::#struct_name::new(#(#name_arg),*)?))
                 }
-            });
+            }
         } else {
             let field_patterns = generate_field_patterns(provider);
             let new_args = generate_new_args(provider);
-            arms.push(quote! {
+            quote! {
                 ResolvedProviderConfig::#variant { #(#field_patterns),* } => {
                     Ok(Box::new(#module::#struct_name::new(#(#name_arg,)* #(#new_args),*)?))
                 }
-            });
+            }
+        };
+        match (provider.cfg(), &provider.feature) {
+            (Some(cfg), Some(feature)) => {
+                let serde_rename = &provider.serde_rename;
+                let pattern = if provider.fields.is_empty() {
+                    quote! { ResolvedProviderConfig::#variant }
+                } else {
+                    quote! { ResolvedProviderConfig::#variant { .. } }
+                };
+                arms.push(quote! {
+                    #[cfg(#cfg)]
+                    #arm,
+                    #[cfg(not(#cfg))]
+                    #pattern => Err(crate::error::FnoxError::not_in_build("Provider", #serde_rename, #feature))
+                });
+            }
+            _ => arms.push(arm),
         }
     }
+    let module_uses = module_uses(providers);
 
     // Note: Use super::super:: because this is included inside mod generated { mod providers_instantiate { ... } }
     let output = quote! {
         use crate::error::Result;
         use super::super::Provider;
         use super::providers_config::ResolvedProviderConfig;
+        #(#module_uses)*
 
         /// Create a provider from a resolved provider configuration.
         pub fn get_provider_from_resolved(provider_name: &str, config: &ResolvedProviderConfig) -> Result<Box<dyn Provider>> {

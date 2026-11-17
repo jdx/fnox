@@ -2,6 +2,7 @@
 display_name = "AWS KMS"
 serde_rename = "aws-kms"
 rust_variant = "AwsKms"
+feature = "aws"
 category = "CloudKms"
 description = "AWS Key Management Service"
 default_name = "kms"

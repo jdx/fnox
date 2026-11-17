@@ -393,6 +393,12 @@ impl ProxyRunCommand {
         )
         .with_write_target(cli.config.clone(), cli.write_profile.clone())
         .with_walk_up(cli.walk_up);
+        // Proxy leases are always minted, so a left-out backend fails before
+        // any secret is resolved.
+        let rule_leases = rule_leases(proxy_config, &leases)?;
+        for lease in rule_leases.values() {
+            lease.ensure_in_build()?;
+        }
         let resolved = session.resolve_now(&requested).await?;
         // A rule secret without a value is pending: the child still gets its
         // placeholder, and the proxy resolves it again when a request needs it
@@ -417,7 +423,6 @@ impl ProxyRunCommand {
             .collect();
         let _lease_files =
             crate::lease::set_secrets_as_env(&lease_values, &lease_inputs, &mut _lease_env)?;
-        let rule_leases = rule_leases(proxy_config, &leases)?;
         for (name, lease) in &rule_leases {
             if let Some(missing) = lease.check_prerequisites() {
                 return Err(FnoxError::Config(format!(

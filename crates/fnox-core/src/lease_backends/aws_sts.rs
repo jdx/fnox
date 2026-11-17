@@ -1,7 +1,13 @@
+// Without the `aws` feature only the config helpers are compiled;
+// `create_backend` reports the backend as not included in this build.
+#![cfg_attr(not(feature = "aws"), allow(dead_code, unused_imports))]
+
 use crate::error::{FnoxError, Result};
 use crate::lease_backends::{Lease, LeaseBackend};
 use async_trait::async_trait;
+#[cfg(feature = "aws")]
 use aws_config::BehaviorVersion;
+#[cfg(feature = "aws")]
 use aws_sdk_sts::Client;
 use indexmap::IndexMap;
 use std::time::Duration;
@@ -86,6 +92,7 @@ impl AwsStsBackend {
         }
     }
 
+    #[cfg(feature = "aws")]
     async fn create_client(&self) -> Result<Client> {
         let mut builder = aws_config::defaults(BehaviorVersion::latest())
             .region(aws_sdk_sts::config::Region::new(self.region.clone()));
@@ -105,6 +112,7 @@ impl AwsStsBackend {
     }
 }
 
+#[cfg(feature = "aws")]
 #[async_trait]
 impl LeaseBackend for AwsStsBackend {
     async fn create_lease(&self, duration: Duration, label: &str) -> Result<Lease> {

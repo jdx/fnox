@@ -13,7 +13,7 @@ The `fido2` provider encrypts values into `fnox.toml` with a key derived from a 
 | Writes (`fnox set`) | Yes                                              |
 | Requires            | A FIDO2 key with hmac-secret support, plugged in |
 
-FIDO2 support alone is not enough: confirm that your key and firmware support the hmac-secret extension. The provider is not included in Linux musl builds of fnox.
+FIDO2 support alone is not enough: confirm that your key and firmware support the hmac-secret extension. Linux musl builds of fnox leave the provider out, because they cannot link libudev; a config that uses it still loads, but reading a FIDO2 secret fails with an error that points to a glibc build. Builds from source include it through the `fido2` Cargo feature, which is on by default.
 
 ## Quick start
 

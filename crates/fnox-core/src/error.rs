@@ -238,6 +238,20 @@ pub enum FnoxError {
         suggestion: Option<String>,
     },
 
+    /// A provider, lease backend or push target type that this build of fnox
+    /// was compiled without. See [`FnoxError::not_in_build`].
+    #[error("{kind} type '{name}' is not included in this build of fnox")]
+    #[diagnostic(
+        code(fnox::not_in_build),
+        url("https://fnox.jdx.dev/guide/installation")
+    )]
+    NotInBuild {
+        kind: &'static str,
+        name: String,
+        #[help]
+        help: String,
+    },
+
     /// Provider not configured error with source code context showing where the provider is referenced.
     #[error("Provider '{provider}' not configured in profile '{profile}'")]
     #[diagnostic(
@@ -766,6 +780,27 @@ impl From<miette::ErrReport> for FnoxError {
 }
 
 impl FnoxError {
+    /// The error for using a `kind` (such as "provider") of type `name` whose
+    /// code sits behind the Cargo feature `feature`, which this build lacks.
+    pub fn not_in_build(kind: &'static str, name: &str, feature: &'static str) -> Self {
+        let help = if feature == "fido2" && cfg!(target_env = "musl") {
+            "FIDO2 needs libudev, which Linux musl builds cannot link. Use a glibc \
+             (linux-gnu) build of fnox for FIDO2."
+                .to_string()
+        } else {
+            format!(
+                "This build was compiled without the `{feature}` Cargo feature. Use a \
+                 full release build of fnox, or rebuild with \
+                 `cargo install fnox --locked --features {feature}`."
+            )
+        };
+        FnoxError::NotInBuild {
+            kind,
+            name: name.to_string(),
+            help,
+        }
+    }
+
     /// Returns true if this error represents a provider authentication failure.
     pub fn is_auth_error(&self) -> bool {
         matches!(self, FnoxError::ProviderAuthFailed { .. })
@@ -776,6 +811,7 @@ impl FnoxError {
     /// Returns `None` for non-provider error variants.
     pub fn clone_provider_error(&self) -> Option<FnoxError> {
         Some(match self {
+            FnoxError::NotInBuild { .. } => return self.clone_not_in_build(),
             FnoxError::ProviderAuthFailed {
                 provider,
                 details,
@@ -844,6 +880,19 @@ impl FnoxError {
         })
     }
 
+    /// Clone a `NotInBuild` error, keeping its help text. Returns `None` for any
+    /// other variant.
+    pub fn clone_not_in_build(&self) -> Option<FnoxError> {
+        match self {
+            FnoxError::NotInBuild { kind, name, help } => Some(FnoxError::NotInBuild {
+                kind,
+                name: name.clone(),
+                help: help.clone(),
+            }),
+            _ => None,
+        }
+    }
+
     /// Map a batch-level error to a per-secret error, preserving structured variants.
     ///
     /// If the error is `ProviderSecretNotFound`, the secret name is replaced with the given name.
@@ -897,6 +946,29 @@ fn env_keys_rejected_summary(unknown: &[String], not_injectable: &[String]) -> S
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batch_errors_keep_not_in_build_help() {
+        let err = FnoxError::not_in_build("Provider", "aws-sm", "aws");
+        let FnoxError::NotInBuild { help, .. } = &err else {
+            unreachable!()
+        };
+        for copy in [
+            err.clone_not_in_build().unwrap(),
+            err.clone_provider_error().unwrap(),
+            err.map_batch_error("DB", "sm", "hint", "https://example.com"),
+        ] {
+            assert!(
+                matches!(&copy, FnoxError::NotInBuild { kind: "Provider", name, help: h } if name == "aws-sm" && h == help),
+                "{copy:?}"
+            );
+        }
+        assert!(
+            FnoxError::Provider("x".into())
+                .clone_not_in_build()
+                .is_none()
+        );
+    }
 
     #[test]
     fn is_auth_error_returns_true_for_provider_auth_failed() {

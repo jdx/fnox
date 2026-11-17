@@ -47,7 +47,7 @@ pub fn scope_purpose(scope: EnvScope) -> Purpose {
 /// credentials with these names are still applied after the scrub.
 pub fn ambient_scrub_keys() -> impl Iterator<Item = &'static str> {
     ["FNOX_AGE_KEY", "FNOX_AGE_KEY_FILE"].into_iter().chain(
-        fnox_core::providers::enpass::env_dependencies()
+        fnox_core::providers::ENPASS_PASSWORD_ENV_VARS
             .iter()
             .copied(),
     )
@@ -312,7 +312,11 @@ pub fn resolve_set(
     let mut roots = sel.roots.clone();
     if !sel.leases.is_empty() {
         for name in &sel.leases {
-            if let Some(lease) = leases.get(name) {
+            // A backend left out of this build can only serve cached
+            // credentials, which need none of its inputs.
+            if let Some(lease) = leases.get(name)
+                && lease.ensure_in_build().is_ok()
+            {
                 roots.extend(lease.consumed_env_vars().iter().map(|key| key.to_string()));
             }
         }
@@ -471,6 +475,14 @@ pub async fn plan(
     let leases = config.get_leases(profile)?;
     let sel =
         select(&secrets, &leases, scope, roots).map_err(|rejection| rejection_error(&rejection))?;
+    // Before any input is resolved: a left-out backend with nothing cached
+    // fails with its missing feature, not with an error from its inputs.
+    if !sel.leases.is_empty() {
+        let project_dir = lease::project_dir_from_config(config, &cli.config);
+        for (name, lease_config) in leases.iter().filter(|(name, _)| sel.leases.contains(name)) {
+            lease::ensure_lease_usable(name, lease_config, &project_dir)?;
+        }
+    }
     let set = resolve_set(config, profile, &secrets, &leases, &sel)?;
 
     let resolved = if set.is_empty() {
@@ -495,8 +507,14 @@ pub async fn plan(
         )?);
         let project_dir = lease::project_dir_from_config(config, &cli.config);
         for (name, lease_config) in leases.iter().filter(|(name, _)| sel.leases.contains(name)) {
-            let prereq_missing = lease_config.check_prerequisites();
-            if let Some(ref missing) = prereq_missing {
+            // A left-out backend can still serve cached credentials, so its
+            // missing feature only matters when there are none to reuse.
+            let not_in_build = lease_config.ensure_in_build().err();
+            let prereq_missing = match not_in_build {
+                Some(_) => None,
+                None => lease_config.check_prerequisites(),
+            };
+            if not_in_build.is_some() || prereq_missing.is_some() {
                 let has_cache = {
                     let _lock = LeaseLedger::lock(&project_dir)?;
                     let ledger = LeaseLedger::load(&project_dir)?;
@@ -506,10 +524,13 @@ pub async fn plan(
                         .is_some_and(|r| r.cached_credentials.is_some())
                 };
                 if !has_cache {
+                    if let Some(error) = not_in_build {
+                        return Err(error);
+                    }
                     tracing::warn!(
                         "Skipping lease '{}': {}\nRun 'fnox lease create -i {}' to set up credentials interactively.",
                         name,
-                        missing,
+                        prereq_missing.as_deref().unwrap_or_default(),
                         name
                     );
                     continue;
@@ -1278,8 +1299,10 @@ role_arn = "arn:aws:iam::1:role/r"
 
         let sel = select(&secrets, &leases, EnvScope::Exec, Roots::Scope).unwrap();
         let set = resolve_set(&config, &profile, &secrets, &leases, &sel).unwrap();
-        assert!(set.contains_key("AWS_WEB_IDENTITY_TOKEN_FILE"));
-        assert!(set.contains_key("AWS_ROLE_ARN"));
+        // Without `aws` the lease can only reuse a cache, which needs no inputs.
+        let built = cfg!(feature = "aws");
+        assert_eq!(set.contains_key("AWS_WEB_IDENTITY_TOKEN_FILE"), built);
+        assert_eq!(set.contains_key("AWS_ROLE_ARN"), built);
         assert!(!set.contains_key("UNUSED"));
     }
 
