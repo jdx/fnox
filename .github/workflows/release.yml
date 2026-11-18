@@ -325,6 +325,17 @@ jobs:
         run: |
           echo "::error::Windows binaries are signed only from a release tag, but this run is on ${GITHUB_REF}. Dispatch the workflow from the tag."
           exit 1
+      # A manual run publishes to v<inputs.version>, so it must be built from that tag.
+      - name: Require the version input to match the tag
+        if: github.ref_type == 'tag' && inputs.version != ''
+        shell: bash
+        env:
+          INPUTS_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "v${INPUTS_VERSION}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Version input v${INPUTS_VERSION} does not match the tag ${GITHUB_REF_NAME} this run was dispatched from."
+            exit 1
+          fi
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: unsigned-binary-${{ matrix.target }}
