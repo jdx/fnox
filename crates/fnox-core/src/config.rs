@@ -1781,10 +1781,8 @@ impl Config {
         };
 
         if let Some(item) = secrets_table.get_mut(secret_name) {
+            // Update in place; the key's formatting and field order are kept.
             secret_config.update_toml_item(item);
-            if let Some(mut key) = secrets_table.key_mut(secret_name) {
-                key.leaf_decor_mut().set_suffix("");
-            }
         } else {
             secrets_table[secret_name] =
                 Item::Value(Value::InlineTable(secret_config.to_inline_table()));
@@ -2997,7 +2995,7 @@ impl SecretConfig {
         match item {
             Item::Table(table) => self.write_to_table(table),
             Item::Value(Value::InlineTable(existing_inline)) => {
-                *existing_inline = self.to_inline_table();
+                merge_inline_table(existing_inline, self.to_inline_table());
             }
             _ => {
                 *item = Item::Value(Value::InlineTable(self.to_inline_table()));
@@ -3126,6 +3124,52 @@ where
     Ok(url)
 }
 
+/// Updates `existing` to hold the fields of `new`, keeping the order, spacing and
+/// untouched values of the existing table. Unchanged fields are not rewritten.
+fn merge_inline_table(existing: &mut toml_edit::InlineTable, new: toml_edit::InlineTable) {
+    let stale: Vec<String> = existing
+        .iter()
+        .map(|(k, _)| k.to_string())
+        .filter(|k| !new.contains_key(k))
+        .collect();
+    for key in stale {
+        existing.remove(&key);
+    }
+    for (key, mut value) in new {
+        // Assign through `get_mut` so the existing key keeps its quoting and spacing;
+        // `insert` would reformat it.
+        match existing.get_mut(&key) {
+            Some(old) if same_toml_value(old, &value) => {}
+            Some(old) => {
+                *value.decor_mut() = old.decor().clone();
+                *old = value;
+            }
+            None => {
+                existing.insert(&key, value);
+            }
+        }
+    }
+}
+
+/// Compares what two TOML values hold, ignoring quoting style and whitespace.
+fn same_toml_value(a: &toml_edit::Value, b: &toml_edit::Value) -> bool {
+    use toml_edit::Value;
+    match (a, b) {
+        (Value::String(a), Value::String(b)) => a.value() == b.value(),
+        (Value::Integer(a), Value::Integer(b)) => a.value() == b.value(),
+        (Value::Boolean(a), Value::Boolean(b)) => a.value() == b.value(),
+        (Value::Array(a), Value::Array(b)) => {
+            a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| same_toml_value(a, b))
+        }
+        (Value::InlineTable(a), Value::InlineTable(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .all(|(k, v)| b.get(k).is_some_and(|w| same_toml_value(v, w)))
+        }
+        _ => a.to_string().trim() == b.to_string().trim(),
+    }
+}
+
 fn push_array(targets: &[String]) -> toml_edit::Value {
     toml_edit::Value::Array(targets.iter().map(String::as_str).collect())
 }
@@ -3150,6 +3194,60 @@ fn is_false(value: &bool) -> bool {
 mod tests {
     use super::*;
     use std::path::Path;
+
+    #[test]
+    fn save_secret_keeps_existing_line_formatting() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("fnox.toml");
+        let original = "[secrets]\nAPP_MODE = { provider = \"plain\", value = \"a\", if_missing = \"error\", description = \"Mode\" }\n";
+        std::fs::write(&path, original).unwrap();
+        let mut secret = SecretConfig::new();
+        secret.set_provider(Some("plain".to_string()));
+        secret.set_value(Some("a".to_string()));
+        secret.if_missing = Some(IfMissing::Error);
+        secret.description = Some("Mode".to_string());
+        let config = Config::new();
+
+        config
+            .save_secret_to_source("APP_MODE", &secret, "default", &path)
+            .unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+
+        secret.set_value(Some("b".to_string()));
+        config
+            .save_secret_to_source("APP_MODE", &secret, "default", &path)
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            original.replace("\"a\"", "\"b\"")
+        );
+    }
+
+    #[test]
+    fn save_secret_keeps_literal_strings_and_quoted_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("fnox.toml");
+        let original = "[secrets]\nAPP_MODE = { provider = 'plain', \"value\"   =   'a' }\n";
+        std::fs::write(&path, original).unwrap();
+        let mut secret = SecretConfig::new();
+        secret.set_provider(Some("plain".to_string()));
+        secret.set_value(Some("a".to_string()));
+        let config = Config::new();
+
+        config
+            .save_secret_to_source("APP_MODE", &secret, "default", &path)
+            .unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+
+        secret.set_value(Some("b".to_string()));
+        config
+            .save_secret_to_source("APP_MODE", &secret, "default", &path)
+            .unwrap();
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert!(saved.contains("provider = 'plain'"), "{saved}");
+        assert!(saved.contains("\"value\"   =   "), "{saved}");
+        assert!(saved.contains("\"b\""), "{saved}");
+    }
 
     #[test]
     fn secret_url_accepts_http_and_https() {
