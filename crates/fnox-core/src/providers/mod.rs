@@ -46,6 +46,7 @@ pub mod keychain;
 pub mod kubernetes;
 pub mod lua;
 pub mod onepassword;
+pub mod passage;
 pub mod password_store;
 pub mod passwordstate;
 pub mod plain;
@@ -504,6 +505,26 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
         };
         return get_provider_from_resolved(provider_name, &resolved);
     }
+    if let ResolvedProviderConfig::Passage {
+        prefix,
+        store_dir,
+        identities_file,
+    } = resolved
+    {
+        let provider_source = provider_source_path(config, profile, provider_name);
+        let resolved = ResolvedProviderConfig::Passage {
+            prefix: prefix.clone(),
+            store_dir: crate::config_path::resolve_optional_string_relative_to_file(
+                store_dir.clone(),
+                provider_source.as_deref(),
+            ),
+            identities_file: crate::config_path::resolve_optional_string_relative_to_file(
+                identities_file.clone(),
+                provider_source.as_deref(),
+            ),
+        };
+        return get_provider_from_resolved(provider_name, &resolved);
+    }
     if let ResolvedProviderConfig::Foks {
         prefix,
         team,
@@ -589,7 +610,8 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
     get_provider_from_resolved(provider_name, resolved)
 }
 
-fn provider_source_path(
+/// The config file that declares `provider_name`, preferring the selected profiles.
+pub fn provider_source_path(
     config: &crate::config::Config,
     profiles: &[String],
     provider_name: &str,

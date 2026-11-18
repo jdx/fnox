@@ -105,6 +105,7 @@ const providerGroups = [
       ["KeePass", "keepass"],
       ["password-store", "password-store"],
       ["gopass", "gopass"],
+      ["passage", "passage"],
       ["Plaintext defaults", "plain"],
     ],
   ],

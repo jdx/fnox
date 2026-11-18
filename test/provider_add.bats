@@ -29,6 +29,7 @@ infisical|infisical|infisical
 keepass|keepass|keepass
 gopass|gopass|gopass
 keychain|keychain|keychain
+passage|passage|passage
 passstore|password-store|password-store
 passwordstate|passwordstate|passwordstate
 plain|plain|plain

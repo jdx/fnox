@@ -390,6 +390,15 @@ impl AddCommand {
                 cache_ttl: None,
                 max_cache_ttl: None,
             },
+            ProviderType::Passage => crate::config::ProviderConfig::Passage {
+                prefix: OptionStringOrSecretRef::literal("fnox/"),
+                store_dir: OptionStringOrSecretRef::none(),
+                identities_file: OptionStringOrSecretRef::none(),
+                auth_command: None,
+                daemon_cache: None,
+                cache_ttl: None,
+                max_cache_ttl: None,
+            },
             ProviderType::PasswordStore => crate::config::ProviderConfig::PasswordStore {
                 prefix: OptionStringOrSecretRef::literal("fnox/"),
                 store_dir: OptionStringOrSecretRef::none(),

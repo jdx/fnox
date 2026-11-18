@@ -922,6 +922,7 @@ See also:
                 choice keychain help="OS Keychain"
                 choice kubernetes help="Kubernetes Secrets (read-only)"
                 choice lua help="Custom provider implemented as a Lua plugin"
+                choice passage help="passage (age-encrypted, pass-compatible)"
                 choice password-store help="password-store (pass)"
                 choice passwordstate help="Click Studios Passwordstate"
                 choice plain help="Plain text provider"

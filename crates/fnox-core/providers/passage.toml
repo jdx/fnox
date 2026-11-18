@@ -1,0 +1,29 @@
+# passage provider - age-encrypted files, a pass-compatible store
+display_name = "passage"
+serde_rename = "passage"
+rust_variant = "Passage"
+category = "Local"
+description = "pass-compatible password manager using age (passage)"
+default_name = "passage"
+setup_instructions = """
+Requires passage CLI: https://github.com/FiloSottile/passage
+Create an identity: mkdir -p ~/.passage/store && age-keygen -o ~/.passage/identities
+Initialize store: age-keygen -y ~/.passage/identities > ~/.passage/store/.age-recipients"""
+
+[fields.prefix]
+type = "optional"
+placeholder = "fnox/"
+label = "Secret name prefix (optional):"
+wizard = true
+
+[fields.store_dir]
+type = "optional"
+placeholder = ""
+label = "Store directory (optional):"
+wizard = true
+
+[fields.identities_file]
+type = "optional"
+placeholder = ""
+label = ""
+wizard = false
