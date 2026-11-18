@@ -240,9 +240,10 @@ impl SandboxPolicy {
     }
 }
 
-/// The `key_file` of every provider the profiles use, such as an age identity.
+/// The key or identity file of every provider the profiles use: a `key_file`, such as an
+/// age identity, or an `identities_file`, such as a passage identity.
 ///
-/// A `key_file` that is not a literal path, such as a reference to a secret,
+/// A file setting that is not a literal path, such as a reference to a secret,
 /// names a file only once it is resolved, and the policy is built before any
 /// secret is. That is an error rather than a file left readable.
 fn provider_key_files(config: &Config, profile: &[String], cwd: &Path) -> Result<Vec<PathBuf>> {
@@ -252,16 +253,18 @@ fn provider_key_files(config: &Config, profile: &[String], cwd: &Path) -> Result
         let Ok(value) = serde_json::to_value(provider) else {
             continue;
         };
-        match value.get("key_file") {
-            None | Some(serde_json::Value::Null) => {}
-            Some(serde_json::Value::String(path)) => {
-                files.push(expand(path, &env::HOME_DIR, cwd));
-            }
-            Some(_) => {
-                return Err(FnoxError::Config(format!(
-                    "provider '{name}' sets key_file to something other than a path, \
-                     so the sandbox cannot tell which file to hide; use a literal path"
-                )));
+        for field in ["key_file", "identities_file"] {
+            match value.get(field) {
+                None | Some(serde_json::Value::Null) => {}
+                Some(serde_json::Value::String(path)) => {
+                    files.push(expand(path, &env::HOME_DIR, cwd));
+                }
+                Some(_) => {
+                    return Err(FnoxError::Config(format!(
+                        "provider '{name}' sets {field} to something other than a path, \
+                         so the sandbox cannot tell which file to hide; use a literal path"
+                    )));
+                }
             }
         }
     }
@@ -855,6 +858,20 @@ key_file = "/keys/private-age.txt"
         .unwrap();
         let files = provider_key_files(&config, &[], Path::new("/work")).unwrap();
         assert_eq!(files, [PathBuf::from("/keys/private-age.txt")]);
+    }
+
+    #[test]
+    fn passage_identities_files_are_collected() {
+        let config: Config = toml_edit::de::from_str(
+            r#"
+[providers.passage]
+type = "passage"
+identities_file = "/keys/passage-identity"
+"#,
+        )
+        .unwrap();
+        let files = provider_key_files(&config, &[], Path::new("/work")).unwrap();
+        assert_eq!(files, [PathBuf::from("/keys/passage-identity")]);
     }
 
     #[test]

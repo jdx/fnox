@@ -34,16 +34,16 @@ prefix = "fnox/"
 ```
 
 ```sh
-fnox set AWS_SECRET_ACCESS_KEY --provider passage
+fnox set DATABASE_URL --provider passage
 fnox provider test passage
-fnox exec -- aws sts get-caller-identity
+fnox exec -- npm start
 ```
 
-With `prefix = "fnox/"`, `fnox set AWS_SECRET_ACCESS_KEY` writes the entry `fnox/AWS_SECRET_ACCESS_KEY` and records `AWS_SECRET_ACCESS_KEY` in `fnox.toml`.
+With `prefix = "fnox/"`, `fnox set DATABASE_URL` writes the entry `fnox/DATABASE_URL` and records `DATABASE_URL` in `fnox.toml`.
 
 ## Authentication
 
-fnox runs `passage`, which decrypts with the identity in `PASSAGE_IDENTITIES_FILE` (default `~/.passage/identities`). If the identity is passphrase-protected or backed by a plugin such as a YubiKey, `passage` prompts on each read. Anyone whose public key is in the store's `.age-recipients` can add entries; only holders of a matching identity can decrypt.
+fnox runs `passage`, which decrypts with the identity in `PASSAGE_IDENTITIES_FILE` (default `~/.passage/identities`). If the identity is passphrase-protected or backed by a plugin such as a YubiKey, `passage` prompts on each read. fnox reads passage entries one at a time so those prompts do not overlap, and shows the plugin's messages (such as a touch request) as they appear. Anyone whose public key is in the store's `.age-recipients` can add entries; only holders of a matching identity can decrypt.
 
 ## Configuration
 
@@ -132,7 +132,7 @@ Your identity file is not one of the store's recipients. Check that `PASSAGE_IDE
 
 ### `passage` not found
 
-Install passage so `passage` is on `PATH` (`brew install passage`, or see the [project page](https://github.com/FiloSottile/passage)).
+Install passage so `passage` is on `PATH`. See the [passage project page](https://github.com/FiloSottile/passage) for install steps.
 
 ## See also
 

@@ -246,3 +246,16 @@ mod tests {
         assert!(!is_valid_profile_name(",prod"));
     }
 }
+
+/// The passage store directory from `FNOX_PASSAGE_DIR`, then `PASSAGE_DIR`.
+pub fn passage_dir() -> Option<String> {
+    var("FNOX_PASSAGE_DIR").or_else(|_| var("PASSAGE_DIR")).ok()
+}
+
+/// The passage identities file from `FNOX_PASSAGE_IDENTITIES_FILE`, then
+/// `PASSAGE_IDENTITIES_FILE`.
+pub fn passage_identities_file() -> Option<String> {
+    var("FNOX_PASSAGE_IDENTITIES_FILE")
+        .or_else(|_| var("PASSAGE_IDENTITIES_FILE"))
+        .ok()
+}

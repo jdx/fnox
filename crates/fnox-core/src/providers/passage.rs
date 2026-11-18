@@ -1,7 +1,9 @@
+use crate::env;
 use crate::error::{FnoxError, Result};
 use crate::providers::ProviderCapability;
 use async_trait::async_trait;
-use tokio::io::AsyncWriteExt;
+use std::collections::HashMap;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
 const URL: &str = "https://fnox.jdx.dev/providers/passage";
@@ -36,11 +38,11 @@ impl PassageProvider {
 
     /// Configure environment variables for the passage command
     fn configure_command_env(&self, cmd: &mut Command) {
-        let env_store_dir = passage_dir();
+        let env_store_dir = env::passage_dir();
         if let Some(dir) = self.store_dir.as_deref().or(env_store_dir.as_deref()) {
             cmd.env("PASSAGE_DIR", dir);
         }
-        let env_identities = passage_identities_file();
+        let env_identities = env::passage_identities_file();
         if let Some(file) = self
             .identities_file
             .as_deref()
@@ -55,7 +57,8 @@ impl PassageProvider {
             FnoxError::ProviderCliNotFound {
                 provider: "passage".to_string(),
                 cli: "passage".to_string(),
-                install_hint: "brew install passage".to_string(),
+                install_hint: "see https://github.com/FiloSottile/passage for install steps"
+                    .to_string(),
                 url: URL.to_string(),
             }
         } else {
@@ -129,8 +132,40 @@ impl PassageProvider {
             drop(pipe);
         }
 
-        let output = child
-            .wait_with_output()
+        // Forward stderr to the terminal as it arrives while also keeping it for error
+        // mapping. age plugins (YubiKey, etc.) print touch and PIN prompts there, and
+        // holding them until exit would make a hardware identity look like a hang.
+        let stderr_pipe = child.stderr.take();
+        let stderr_task = tokio::spawn(async move {
+            let mut captured = Vec::new();
+            if let Some(mut pipe) = stderr_pipe {
+                let mut buf = [0u8; 1024];
+                let mut term = tokio::io::stderr();
+                while let Ok(n) = pipe.read(&mut buf).await {
+                    if n == 0 {
+                        break;
+                    }
+                    captured.extend_from_slice(&buf[..n]);
+                    if !env::is_non_interactive() {
+                        let _ = term.write_all(&buf[..n]).await;
+                        let _ = term.flush().await;
+                    }
+                }
+            }
+            captured
+        });
+
+        let mut stdout_pipe = child.stdout.take();
+        let stdout_task = tokio::spawn(async move {
+            let mut out = Vec::new();
+            if let Some(pipe) = stdout_pipe.as_mut() {
+                let _ = pipe.read_to_end(&mut out).await;
+            }
+            out
+        });
+
+        let status = child
+            .wait()
             .await
             .map_err(|e| FnoxError::ProviderCliFailed {
                 provider: "passage".to_string(),
@@ -138,14 +173,16 @@ impl PassageProvider {
                 hint: "This is an internal error".to_string(),
                 url: URL.to_string(),
             })?;
+        let stderr_bytes = stderr_task.await.unwrap_or_default();
+        let stdout_bytes = stdout_task.await.unwrap_or_default();
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
+        if !status.success() {
+            let stderr = String::from_utf8_lossy(&stderr_bytes);
             return Err(Self::map_failure(stderr.trim(), secret));
         }
 
         let stdout =
-            String::from_utf8(output.stdout).map_err(|e| FnoxError::ProviderInvalidResponse {
+            String::from_utf8(stdout_bytes).map_err(|e| FnoxError::ProviderInvalidResponse {
                 provider: "passage".to_string(),
                 details: format!("Invalid UTF-8 in command output: {e}"),
                 hint: "The secret value contains invalid UTF-8 characters".to_string(),
@@ -166,6 +203,19 @@ impl crate::providers::Provider for PassageProvider {
         let path = self.build_secret_path(value);
         tracing::debug!("Getting secret '{path}' from passage");
         self.run(&["show", &path], None, &path).await
+    }
+
+    /// Read secrets one at a time: age has no agent, so each `passage show` may prompt for a
+    /// passphrase or hardware tap on the terminal, and concurrent prompts would collide.
+    async fn get_secrets_batch(
+        &self,
+        secrets: &[(String, String)],
+    ) -> HashMap<String, Result<String>> {
+        let mut results = HashMap::with_capacity(secrets.len());
+        for (key, value) in secrets {
+            results.insert(key.clone(), self.get_secret(value).await);
+        }
+        results
     }
 
     async fn put_secret(&self, key: &str, value: &str) -> Result<String> {
@@ -191,16 +241,4 @@ pub fn env_dependencies() -> &'static [&'static str] {
         "PASSAGE_IDENTITIES_FILE",
         "FNOX_PASSAGE_IDENTITIES_FILE",
     ]
-}
-
-fn passage_dir() -> Option<String> {
-    std::env::var("FNOX_PASSAGE_DIR")
-        .or_else(|_| std::env::var("PASSAGE_DIR"))
-        .ok()
-}
-
-fn passage_identities_file() -> Option<String> {
-    std::env::var("FNOX_PASSAGE_IDENTITIES_FILE")
-        .or_else(|_| std::env::var("PASSAGE_IDENTITIES_FILE"))
-        .ok()
 }

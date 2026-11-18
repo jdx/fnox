@@ -6,9 +6,9 @@ category = "Local"
 description = "pass-compatible password manager using age (passage)"
 default_name = "passage"
 setup_instructions = """
-Requires passage CLI: brew install passage
-Create an identity: age-keygen -o ~/.passage/identities
-Initialize store: put your age public key in ~/.passage/store/.age-recipients"""
+Requires passage CLI: https://github.com/FiloSottile/passage
+Create an identity: mkdir -p ~/.passage/store && age-keygen -o ~/.passage/identities
+Initialize store: age-keygen -y ~/.passage/identities > ~/.passage/store/.age-recipients"""
 
 [fields.prefix]
 type = "optional"

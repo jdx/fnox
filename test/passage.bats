@@ -13,6 +13,7 @@ setup() {
 	load 'test_helper/common_setup'
 	_common_setup
 
+	unset FNOX_PASSAGE_DIR FNOX_PASSAGE_IDENTITIES_FILE PASSAGE_IDENTITIES_FILE
 	export PASSAGE_DIR="$BATS_TEST_TMPDIR/passage-store"
 	mkdir -p "$PASSAGE_DIR" "$BATS_TEST_TMPDIR/bin"
 
