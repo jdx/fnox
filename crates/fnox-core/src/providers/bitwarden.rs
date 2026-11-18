@@ -454,6 +454,52 @@ impl crate::providers::Provider for BitwardenProvider {
             Ok(output)
         }
     }
+
+    /// Checks that the vault is unlocked: `bw status` with the session applied, or
+    /// `rbw unlocked`.
+    async fn test_connection(&self) -> Result<()> {
+        match self.backend {
+            BitwardenBackend::Bw => {
+                let mut cmd = Command::new("bw");
+                cmd.arg("status");
+                self.apply_bw_session_and_profile(&mut cmd)?;
+                let output = self.execute_command(&mut cmd).await?;
+                check_bw_status(&output)
+            }
+            BitwardenBackend::Rbw => {
+                let mut cmd = Command::new("rbw");
+                cmd.arg("unlocked");
+                if let Some(profile) = &self.profile {
+                    cmd.env("RBW_PROFILE", profile);
+                }
+                self.execute_command(&mut cmd).await.map(|_| ())
+            }
+        }
+    }
+}
+
+/// Fails unless `bw status` JSON reports an unlocked vault.
+fn check_bw_status(json: &str) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Status {
+        status: String,
+    }
+    let status: Status =
+        serde_json::from_str(json).map_err(|e| FnoxError::ProviderInvalidResponse {
+            provider: "Bitwarden".to_string(),
+            details: format!("Failed to parse 'bw status' output: {e}"),
+            hint: "Check that the Bitwarden CLI returned valid JSON".to_string(),
+            url: URL.to_string(),
+        })?;
+    if status.status == "unlocked" {
+        return Ok(());
+    }
+    Err(FnoxError::ProviderAuthFailed {
+        provider: "Bitwarden".to_string(),
+        details: format!("Vault is {}", status.status),
+        hint: "Run 'bw login' and set BW_SESSION=$(bw unlock --raw) or FNOX_BW_SESSION".to_string(),
+        url: URL.to_string(),
+    })
 }
 
 pub fn env_dependencies() -> &'static [&'static str] {
@@ -579,6 +625,14 @@ mod tests {
                 "MyApp/Production"
             ]
         );
+    }
+
+    #[test]
+    fn bw_status_must_be_unlocked() {
+        assert!(check_bw_status(r#"{"status":"unlocked"}"#).is_ok());
+        assert!(check_bw_status(r#"{"status":"locked"}"#).is_err());
+        assert!(check_bw_status(r#"{"status":"unauthenticated"}"#).is_err());
+        assert!(check_bw_status("not json").is_err());
     }
 
     #[test]
