@@ -1,6 +1,6 @@
 # Fnox verification preview
 
-A standalone developer preview for designing and tweaking the [Fnox Touch ID UI](../../../../../docs/guide/touch-id-preview.md). It shows configurable synthetic request metadata and simulates approval by default. An explicit system mode verifies the current user through the platform API. **Neither mode reads credentials, starts a proxy, or grants a reusable authorization lease.**
+A standalone developer preview for designing and tweaking the Fnox Touch ID approval UI. It shows configurable synthetic request metadata and simulates approval by default. An explicit system mode verifies the current user through the platform API. **Neither mode reads credentials, starts a proxy, or grants a reusable authorization lease.**
 
 ## Requirements
 

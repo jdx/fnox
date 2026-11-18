@@ -164,9 +164,6 @@ and may prompt again on repeated reads.
 Other uncached secrets can still prompt on their first read. Eviction, clearing
 the cache, stopping the daemon, or its idle timeout removes cached values.
 
-See the [Touch ID session concept](/guide/touch-id-session-concept) for a static
-design proposal, not an implemented screen.
-
 ### YubiKey {#yubikey}
 
 With [age-plugin-yubikey](https://github.com/str4d/age-plugin-yubikey) set up, use its recipient and identity:
