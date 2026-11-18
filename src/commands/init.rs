@@ -4,6 +4,7 @@ use crate::error::{FnoxError, Result};
 use crate::providers::{WizardCategory, WizardInfo, get_provider_from_resolved};
 use demand::{Confirm, DemandOption, Input, Select};
 use std::collections::HashMap;
+use std::io::IsTerminal;
 
 /// Create a fnox.toml config file
 ///
@@ -71,7 +72,7 @@ impl InitCommand {
             })?;
         }
 
-        let config = if self.skip_wizard || !atty::is(atty::Stream::Stdin) {
+        let config = if self.skip_wizard || !std::io::stdin().is_terminal() {
             // Non-interactive mode
             Config::new()
         } else {

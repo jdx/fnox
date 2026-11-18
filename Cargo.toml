@@ -24,7 +24,6 @@ arboard = "3"
 arc-swap = "1"
 axum = "0.8"
 async-trait = "0.1"
-atty = "0.2"
 aws-config = { version = "1", features = ["sso", "credentials-process", "credentials-login"] }
 aws-sdk-kms = { version = "1" }
 aws-sdk-secretsmanager = { version = "1" }
@@ -157,7 +156,6 @@ fnox-core = { path = "crates/fnox-core", version = "1", default-features = false
 aho-corasick = { workspace = true }
 anyhow = { workspace = true }
 arboard = { workspace = true }
-atty = { workspace = true }
 base64 = { workspace = true }
 blake3 = { workspace = true }
 chrono = { workspace = true }

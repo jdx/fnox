@@ -39,7 +39,6 @@ aes-gcm = { workspace = true }
 age = { workspace = true }
 arc-swap = { workspace = true }
 async-trait = { workspace = true }
-atty = { workspace = true }
 aws-config = { workspace = true, optional = true }
 aws-sdk-kms = { workspace = true, optional = true }
 aws-sdk-secretsmanager = { workspace = true, optional = true }

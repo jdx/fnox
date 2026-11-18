@@ -3,6 +3,7 @@ use crate::config::{self, Config, IfMissing};
 use crate::error::{FnoxError, Result};
 use crate::generate::{self, GenerateKind};
 use crate::providers::ProviderCapability;
+use std::io::IsTerminal;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
@@ -379,7 +380,7 @@ impl SetCommand {
             config::validate_secret_url(url).map_err(FnoxError::Config)?;
         }
 
-        if self.open && (!atty::is(atty::Stream::Stdin) || fnox_core::env::is_non_interactive()) {
+        if self.open && (!std::io::stdin().is_terminal() || fnox_core::env::is_non_interactive()) {
             return Err(FnoxError::Config(
                 "--open needs an interactive terminal to prompt for the new value".into(),
             ));
@@ -404,7 +405,7 @@ impl SetCommand {
         } else if let Some(ref v) = self.value {
             // Value provided as argument
             Some(v.clone())
-        } else if !atty::is(atty::Stream::Stdin) {
+        } else if !std::io::stdin().is_terminal() {
             // Read from stdin if piped
             tracing::debug!("Reading secret value from stdin");
             let mut buffer = String::new();
