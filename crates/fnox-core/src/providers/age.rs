@@ -522,9 +522,13 @@ impl crate::providers::Provider for AgeEncryptionProvider {
                     Ok(batch_key) => {
                         super::hw_encrypt::decrypt(batch_key, BATCH_KEY_CONTEXT, ciphertext)
                     }
-                    Err(error) => Err(FnoxError::AgeDecryptionFailed {
-                        details: error.to_string(),
-                    }),
+                    // Keep a provider-settings failure (such as an identity that
+                    // can't be fetched) so `if_missing` can't hide it.
+                    Err(error) => Err(error.clone_provider_config_failure().unwrap_or_else(|| {
+                        FnoxError::AgeDecryptionFailed {
+                            details: error.to_string(),
+                        }
+                    })),
                 }
             } else {
                 self.decrypt_age_value(value).await
