@@ -195,7 +195,11 @@ impl PassageProvider {
                 url: URL.to_string(),
             })?;
 
-        Ok(stdout.trim().to_string())
+        // passage appends one newline to the stored value; drop exactly that one so leading and
+        // trailing spaces that belong to the value are kept
+        let stdout = stdout.strip_suffix('\n').unwrap_or(&stdout);
+        let stdout = stdout.strip_suffix('\r').unwrap_or(stdout);
+        Ok(stdout.to_string())
     }
 }
 
