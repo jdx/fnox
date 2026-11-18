@@ -1,6 +1,25 @@
 # Changelog
 
-## [1.49.0](https://github.com/jdx/fnox/compare/v1.48.0..v1.49.0) - 2026-11-15
+## [1.50.0](https://github.com/jdx/fnox/compare/v1.49.0..v1.50.0) - 2026-11-18
+
+### 🚀 Features
+
+- **(deps)** add Cargo features to leave out cloud SDKs, Kubernetes, Keeper, Enpass and FIDO2 by [@jdx](https://github.com/jdx) in [#1189](https://github.com/jdx/fnox/pull/1189)
+- **(deps)** publish lite Linux release builds without cloud SDKs or libudev by [@jdx](https://github.com/jdx) in [#1190](https://github.com/jdx/fnox/pull/1190)
+
+### 🐛 Bug Fixes
+
+- **(check)** report providers that cannot be configured and add --strict by [@jdx](https://github.com/jdx) in [#1187](https://github.com/jdx/fnox/pull/1187)
+
+### 🛡️ Security
+
+- add cargo-deny advisories and sources checks by [@jdx](https://github.com/jdx) in [#1197](https://github.com/jdx/fnox/pull/1197)
+
+### 📦️ Dependency Updates
+
+- update rust crate usage-rs to v7.4.0 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1194](https://github.com/jdx/fnox/pull/1194)
+
+## [1.49.0](https://github.com/jdx/fnox/compare/v1.48.0..v1.49.0) - 2026-11-16
 
 ### 🚀 Features
 
