@@ -1,0 +1,33 @@
+# cargo-deny configuration. PR CI runs `cargo deny check sources`, plus `advisories`
+# when the dependency graph changes; a daily workflow checks advisories on main.
+# Licenses and duplicate-version bans are intentionally not checked.
+
+[advisories]
+# RustSec advisory database
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# Yanked releases are reported but do not fail the check.
+yanked = "warn"
+ignore = [
+  # Unmaintained crates with no safe upgrade, all transitive.
+  { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained - all versions affected, no safe upgrade available" },
+  { id = "RUSTSEC-2026-0374", reason = "basic-toml unmaintained - transitive via age (i18n-config), no safe upgrade available" },
+  { id = "RUSTSEC-2026-0441", reason = "pin-utils unmaintained - transitive via aws-smithy-http, no safe upgrade available" },
+  { id = "RUSTSEC-2025-0134", reason = "rustls-pemfile unmaintained - transitive via tonic 0.12 (google-cloud-kms), no safe upgrade available" },
+  { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml unmaintained - transitive via serde_yaml, no safe upgrade available" },
+  # Pinned by dependencies fnox cannot move on its own; revisit when they bump.
+  { id = "RUSTSEC-2023-0071", reason = "rsa Marvin attack - transitive via age; no patched rsa is available for the 0.9 line age uses" },
+  { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 constant-time advisory - transitive via aws-sigv4; the patched 0.7.6 is not semver-compatible with the 0.5 it pins" },
+  { id = "RUSTSEC-2026-0258", reason = "h2 0.3 unbounded empty DATA frames - transitive via the aws-smithy-http-client legacy hyper 0.14 stack; the fix is only in h2 0.4" },
+  { id = "RUSTSEC-2026-0346", reason = "rustls 0.21 Debug impl exposes TLS secrets - transitive via aws-smithy-http-client's legacy stack; the fix is only in rustls 0.23" },
+  { id = "RUSTSEC-2026-0349", reason = "rustls 0.21 ServerHello downgrade - transitive via aws-smithy-http-client's legacy stack; the fix is only in rustls 0.23" },
+  { id = "RUSTSEC-2026-0098", reason = "rustls-webpki 0.101 name constraints - transitive via rustls 0.21 in aws-smithy-http-client; the fix is only in 0.103" },
+  { id = "RUSTSEC-2026-0099", reason = "rustls-webpki 0.101 wildcard name constraints - transitive via rustls 0.21 in aws-smithy-http-client; the fix is only in 0.103" },
+  { id = "RUSTSEC-2026-0104", reason = "rustls-webpki 0.101 CRL parsing panic - transitive via rustls 0.21 in aws-smithy-http-client; the fix is only in 0.103" },
+  { id = "RUSTSEC-2026-0382", reason = "rustls-webpki 0.101 distrusted intermediates - transitive via rustls 0.21 in aws-smithy-http-client; the fix is only in 0.103" },
+  { id = "RUSTSEC-2026-0502", reason = "sqlcipher-src bundled SQLite CVE - pinned to 419 by libsqlite3-sys via rusqlite 0.41; waits on a rusqlite release that uses sqlcipher-src 420" },
+]
+
+[sources]
+allow-registry   = ["https://github.com/rust-lang/crates.io-index"]
+unknown-git      = "deny"
+unknown-registry = "deny"

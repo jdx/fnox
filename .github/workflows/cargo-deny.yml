@@ -1,0 +1,52 @@
+name: cargo-deny
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cargo-deny:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # The RustSec advisory DB changes independently of this repo, so a PR only
+      # runs `cargo deny check advisories` when it changes the dependency graph.
+      # The daily deny-advisories workflow reports new advisories otherwise.
+      - name: Detect dependency changes
+        id: deps
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          deps_changed=true
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            deps_changed=false
+            changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+            if grep -qE '(^|/)(Cargo\.lock|Cargo\.toml|deny\.toml)$' <<< "$changed"; then
+              deps_changed=true
+            fi
+          fi
+          echo "deps-changed=$deps_changed" >> "$GITHUB_OUTPUT"
+      # Deterministic checks always run. deny.toml intentionally does not
+      # configure licenses or bans, so only sources applies.
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check sources
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        if: steps.deps.outputs.deps-changed == 'true'
+        with:
+          command: check advisories

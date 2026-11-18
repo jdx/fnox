@@ -8,6 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::io::IsTerminal;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -2186,7 +2187,7 @@ impl Config {
             .unwrap_or(true);
 
         // Only prompt if enabled, not explicitly non-interactive, and we're in a TTY
-        enabled && !env::is_non_interactive() && atty::is(atty::Stream::Stdin)
+        enabled && !env::is_non_interactive() && std::io::stdin().is_terminal()
     }
 
     /// Whether `fnox exec` redacts piped output by default.

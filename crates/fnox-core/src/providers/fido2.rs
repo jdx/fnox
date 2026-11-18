@@ -1,6 +1,7 @@
 use crate::error::{FnoxError, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
+use std::io::IsTerminal;
 use std::sync::OnceLock;
 
 use super::hw_encrypt;
@@ -187,7 +188,7 @@ impl Fido2Provider {
         )
         .map_err(|e| FnoxError::Provider(format!("Failed to find FIDO2 device: {:?}", e)))?;
 
-        let is_tty = atty::is(atty::Stream::Stderr);
+        let is_tty = std::io::stderr().is_terminal();
         // Older keys may not answer getInfo; fall back to asking for an optional PIN.
         let verification = device
             .get_info()
