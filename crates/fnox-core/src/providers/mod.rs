@@ -610,7 +610,8 @@ pub(crate) fn get_provider_from_resolved_with_context_and_identity_cycle_guard(
     get_provider_from_resolved(provider_name, resolved)
 }
 
-fn provider_source_path(
+/// The config file that declares `provider_name`, preferring the selected profiles.
+pub fn provider_source_path(
     config: &crate::config::Config,
     profiles: &[String],
     provider_name: &str,

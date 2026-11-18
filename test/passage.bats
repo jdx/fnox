@@ -135,6 +135,16 @@ EOF
 	assert_output --partial "nope"
 }
 
+@test "a missing passage entry with if_missing ignore prints no error" {
+	create_passage_config
+	cat >>"${FNOX_CONFIG_FILE}" <<EOF
+MISSING = { provider = "passage", value = "nope", if_missing = "ignore" }
+EOF
+
+	run "$FNOX_BIN" get MISSING
+	refute_output --partial "not in the password store"
+}
+
 @test "fnox provider test succeeds for passage" {
 	create_passage_config
 

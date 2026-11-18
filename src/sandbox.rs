@@ -257,7 +257,12 @@ fn provider_key_files(config: &Config, profile: &[String], cwd: &Path) -> Result
             match value.get(field) {
                 None | Some(serde_json::Value::Null) => {}
                 Some(serde_json::Value::String(path)) => {
-                    files.push(expand(path, &env::HOME_DIR, cwd));
+                    // A relative path is resolved from the config file that declares the
+                    // provider, which is how the provider itself reads it.
+                    let source = crate::providers::provider_source_path(config, profile, name);
+                    let resolved =
+                        crate::config_path::resolve_relative_to_file(path, source.as_deref());
+                    files.push(expand(&resolved.to_string_lossy(), &env::HOME_DIR, cwd));
                 }
                 Some(_) => {
                     return Err(FnoxError::Config(format!(
@@ -872,6 +877,23 @@ identities_file = "/keys/passage-identity"
         .unwrap();
         let files = provider_key_files(&config, &[], Path::new("/work")).unwrap();
         assert_eq!(files, [PathBuf::from("/keys/passage-identity")]);
+    }
+
+    #[test]
+    fn relative_passage_identities_files_resolve_from_the_declaring_config() {
+        let mut config: Config = toml_edit::de::from_str(
+            r#"
+[providers.passage]
+type = "passage"
+identities_file = "keys/passage"
+"#,
+        )
+        .unwrap();
+        config
+            .provider_sources
+            .insert("passage".to_string(), PathBuf::from("/work/fnox.toml"));
+        let files = provider_key_files(&config, &[], Path::new("/work/app")).unwrap();
+        assert_eq!(files, [PathBuf::from("/work/keys/passage")]);
     }
 
     #[test]

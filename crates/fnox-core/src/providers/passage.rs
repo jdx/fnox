@@ -3,7 +3,7 @@ use crate::error::{FnoxError, Result};
 use crate::providers::ProviderCapability;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
 const URL: &str = "https://fnox.jdx.dev/providers/passage";
@@ -138,16 +138,22 @@ impl PassageProvider {
         let stderr_pipe = child.stderr.take();
         let stderr_task = tokio::spawn(async move {
             let mut captured = Vec::new();
-            if let Some(mut pipe) = stderr_pipe {
-                let mut buf = [0u8; 1024];
+            if let Some(pipe) = stderr_pipe {
+                let mut reader = tokio::io::BufReader::new(pipe);
                 let mut term = tokio::io::stderr();
-                while let Ok(n) = pipe.read(&mut buf).await {
-                    if n == 0 {
-                        break;
+                let mut line = Vec::new();
+                loop {
+                    line.clear();
+                    match reader.read_until(b'\n', &mut line).await {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {}
                     }
-                    captured.extend_from_slice(&buf[..n]);
-                    if !env::is_non_interactive() {
-                        let _ = term.write_all(&buf[..n]).await;
+                    captured.extend_from_slice(&line);
+                    // passage's own "Error: ..." lines are left for the caller to report
+                    // (or suppress, as with `if_missing = "ignore"`); everything else is
+                    // a prompt or plugin message the user needs to see now.
+                    if !env::is_non_interactive() && !line.starts_with(b"Error:") {
+                        let _ = term.write_all(&line).await;
                         let _ = term.flush().await;
                     }
                 }
