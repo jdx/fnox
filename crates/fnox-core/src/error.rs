@@ -883,10 +883,15 @@ impl FnoxError {
     /// True when a provider's own settings could not be resolved, so the
     /// provider cannot serve any of its secrets whatever their `if_missing`.
     pub fn is_provider_config_failure(&self) -> bool {
-        matches!(self, FnoxError::ProviderConfigResolutionFailed { .. })
+        matches!(
+            self,
+            FnoxError::ProviderConfigResolutionFailed { .. }
+                | FnoxError::ProviderConfigCycle { .. }
+        )
     }
 
-    /// Clones a provider-config resolution failure, keeping its variant.
+    /// Clones a provider-config failure (unresolved or circular settings),
+    /// keeping its variant.
     pub fn clone_provider_config_failure(&self) -> Option<FnoxError> {
         match self {
             FnoxError::ProviderConfigResolutionFailed {
@@ -898,6 +903,12 @@ impl FnoxError {
                 secret: secret.clone(),
                 details: details.clone(),
             }),
+            FnoxError::ProviderConfigCycle { provider, cycle } => {
+                Some(FnoxError::ProviderConfigCycle {
+                    provider: provider.clone(),
+                    cycle: cycle.clone(),
+                })
+            }
             _ => None,
         }
     }

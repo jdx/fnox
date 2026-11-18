@@ -301,6 +301,22 @@ fn resolve_secret_ref<'a>(
                 && let Some(provider_value) = secret_config.value()
             {
                 // This secret uses a provider - need to resolve that provider first
+                // A failure to produce the value (the referenced secret's own
+                // provider can't be set up, or its key is missing) means the
+                // outer provider's settings don't resolve, so report it as a
+                // configuration failure rather than a missing key.
+                let settings_failure = |error: FnoxError| match error {
+                    FnoxError::ProviderConfigResolutionFailed { .. }
+                    | FnoxError::ProviderConfigCycle { .. }
+                    | FnoxError::NotInBuild { .. }
+                    | FnoxError::ProviderAuthFailed { .. } => error,
+                    error => FnoxError::ProviderConfigResolutionFailed {
+                        provider: provider_name.to_string(),
+                        secret: secret_name.to_string(),
+                        details: error.to_string(),
+                    },
+                };
+
                 let providers = config.get_providers(profile)?;
                 if let Some(secret_provider_config) = providers.get(secret_provider_name) {
                     if let Some(error) =
@@ -308,22 +324,6 @@ fn resolve_secret_ref<'a>(
                     {
                         return Err(error);
                     }
-
-                    // A failure to produce the value (the referenced secret's own
-                    // provider can't be set up, or its key is missing) means the
-                    // outer provider's settings don't resolve, so report it as a
-                    // configuration failure rather than a missing key.
-                    let settings_failure = |error: FnoxError| match error {
-                        FnoxError::ProviderConfigResolutionFailed { .. }
-                        | FnoxError::ProviderConfigCycle { .. }
-                        | FnoxError::NotInBuild { .. }
-                        | FnoxError::ProviderAuthFailed { .. } => error,
-                        error => FnoxError::ProviderConfigResolutionFailed {
-                            provider: provider_name.to_string(),
-                            secret: secret_name.to_string(),
-                            details: error.to_string(),
-                        },
-                    };
 
                     // Recursively resolve the provider's config
                     let resolved_provider = resolve_provider_config_with_context(
@@ -355,12 +355,12 @@ fn resolve_secret_ref<'a>(
                     let similar = find_similar(secret_provider_name, available_providers);
                     let suggestion = format_suggestions(&similar);
 
-                    return Err(FnoxError::ProviderNotConfigured {
+                    return Err(settings_failure(FnoxError::ProviderNotConfigured {
                         provider: secret_provider_name.to_string(),
                         profile: profile.join(","),
                         config_path: config.provider_sources.get(secret_provider_name).cloned(),
                         suggestion,
-                    });
+                    }));
                 }
             }
 
