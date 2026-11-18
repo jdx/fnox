@@ -89,6 +89,20 @@ EOF
 	assert_output "test-value-123"
 }
 
+@test "fnox get returns a passage value exactly as stored" {
+	create_passage_config "fnox/"
+
+	run "$FNOX_BIN" set SPACED "  padded value  " --provider passage
+	assert_success
+
+	run cat "$PASSAGE_DIR/fnox/SPACED.age"
+	assert_output "  padded value  "
+
+	run "$FNOX_BIN" get SPACED
+	assert_success
+	assert_output "  padded value  "
+}
+
 @test "fnox get selects a line of a multi-line passage entry" {
 	create_passage_config
 	printf 'hunter2\nalice\n' >"$PASSAGE_DIR/database.age"

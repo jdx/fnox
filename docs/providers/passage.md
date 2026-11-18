@@ -73,7 +73,7 @@ The provider fields take priority over both. Other `passage` settings, such as `
 | `api-key`             | `fnox/api-key`                       |
 | `database/production` | `fnox/database/production`           |
 
-fnox reads an entry with `passage show` and removes the single trailing newline `passage` adds. It returns the whole entry, including any extra lines.
+fnox reads an entry with `passage show` and returns the stored value exactly as written, including any extra lines and any leading or trailing whitespace. An entry saved with a trailing newline (for example by `passage edit`) keeps it.
 
 ### Select a line
 
