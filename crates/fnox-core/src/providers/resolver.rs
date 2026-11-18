@@ -227,6 +227,24 @@ pub fn resolve_provider_ref<'a>(
     )
 }
 
+/// Reports a failure to produce a value for a provider's own settings as a
+/// configuration failure, so it is not mistaken for a missing key. Errors that
+/// already say what is wrong with the configuration, and auth failures (which
+/// can be retried after signing in), keep their variant.
+fn settings_failure(error: FnoxError, provider: &str, secret: &str) -> FnoxError {
+    match error {
+        FnoxError::ProviderConfigResolutionFailed { .. }
+        | FnoxError::ProviderConfigCycle { .. }
+        | FnoxError::NotInBuild { .. }
+        | FnoxError::ProviderAuthFailed { .. } => error,
+        error => FnoxError::ProviderConfigResolutionFailed {
+            provider: provider.to_string(),
+            secret: secret.to_string(),
+            details: error.to_string(),
+        },
+    }
+}
+
 pub fn resolve_provider_ref_with_identity_cycle_guard<'a>(
     config: &'a Config,
     profile: &'a [String],
@@ -272,16 +290,22 @@ pub fn resolve_provider_ref_with_identity_cycle_guard<'a>(
             provider_config,
             ctx,
         )
-        .await?;
+        .await
+        .map_err(|e| settings_failure(e, &provider_ref.provider, &provider_ref.value))?;
         let provider = super::get_provider_from_resolved_with_context_and_identity_cycle_guard(
             config,
             profile,
             &provider_ref.provider,
             &resolved_provider,
             Some(identity_cycle_guard),
-        )?;
+        )
+        .map_err(|e| settings_failure(e, &provider_ref.provider, &provider_ref.value))?;
 
-        provider.get_secret(&provider_ref.value).await.map(Some)
+        provider
+            .get_secret(&provider_ref.value)
+            .await
+            .map(Some)
+            .map_err(|e| settings_failure(e, &provider_ref.provider, &provider_ref.value))
     })
 }
 
@@ -312,17 +336,8 @@ fn resolve_secret_ref<'a>(
                 // provider can't be set up, or its key is missing) means the
                 // outer provider's settings don't resolve, so report it as a
                 // configuration failure rather than a missing key.
-                let settings_failure = |error: FnoxError| match error {
-                    FnoxError::ProviderConfigResolutionFailed { .. }
-                    | FnoxError::ProviderConfigCycle { .. }
-                    | FnoxError::NotInBuild { .. }
-                    | FnoxError::ProviderAuthFailed { .. } => error,
-                    error => FnoxError::ProviderConfigResolutionFailed {
-                        provider: provider_name.to_string(),
-                        secret: secret_name.to_string(),
-                        details: error.to_string(),
-                    },
-                };
+                let settings_failure =
+                    |error: FnoxError| settings_failure(error, provider_name, secret_name);
 
                 let providers = config.get_providers(profile)?;
                 if let Some(secret_provider_config) = providers.get(secret_provider_name) {
