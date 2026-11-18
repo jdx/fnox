@@ -91,3 +91,42 @@ TOML
 	assert_success
 	assert_output --partial "command succeeded"
 }
+
+# A provider whose own settings don't resolve can't serve any secret, so
+# if_missing (which is about a missing key) doesn't hide it.
+@test "fnox exec fails when a provider's own settings don't resolve, whatever if_missing is" {
+	for mode in ignore warn; do
+		cat >fnox.toml <<TOML
+root = true
+
+[providers.appcfg]
+type = "azure-ac"
+endpoint = { secret = "FNOX_TEST_UNSET_ENDPOINT" }
+
+[secrets]
+API_URL = { provider = "appcfg", value = "API_URL", if_missing = "$mode" }
+TOML
+
+		run "$FNOX_BIN" exec -- echo "should not run"
+		assert_failure
+		assert_output --partial "FNOX_TEST_UNSET_ENDPOINT"
+		refute_output --partial "should not run"
+	done
+}
+
+@test "fnox export fails when a provider's own settings don't resolve with if_missing=ignore" {
+	cat >fnox.toml <<'TOML'
+root = true
+
+[providers.appcfg]
+type = "azure-ac"
+endpoint = { secret = "FNOX_TEST_UNSET_ENDPOINT" }
+
+[secrets]
+API_URL = { provider = "appcfg", value = "API_URL", if_missing = "ignore" }
+TOML
+
+	run "$FNOX_BIN" export
+	assert_failure
+	assert_output --partial "FNOX_TEST_UNSET_ENDPOINT"
+}

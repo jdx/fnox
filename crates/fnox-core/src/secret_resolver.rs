@@ -424,6 +424,13 @@ pub fn handle_provider_error(
     if_missing: IfMissing,
     use_tracing: bool,
 ) -> Option<FnoxError> {
+    // A provider whose own settings don't resolve can't serve any secret, so
+    // `if_missing` (which is about a key missing from the store) doesn't apply.
+    let if_missing = if error.is_provider_config_failure() {
+        IfMissing::Error
+    } else {
+        if_missing
+    };
     match if_missing {
         IfMissing::Error => {
             if use_tracing {
@@ -1569,6 +1576,7 @@ fn handle_batch_error(
         let if_missing = resolve_if_missing_behavior(secret_config, config);
         let provider_error = error
             .clone_not_in_build()
+            .or_else(|| error.clone_provider_config_failure())
             .unwrap_or_else(|| FnoxError::Provider(error.to_string()));
         if let Some(err) = handle_provider_error(key, provider_error, if_missing, true) {
             // Fail fast if if_missing is error

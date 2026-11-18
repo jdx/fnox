@@ -22,7 +22,7 @@ SENTRY_DSN = { provider = "aws", value = "sentry-dsn", if_missing = "ignore" }  
 
 The policy applies to commands that resolve many secrets at once: `exec`, `export`, `check`, and shell integration. `fnox get KEY` always reports an error if it can't produce that one value.
 
-`if_missing` is about a missing value, not a provider that can't be set up. If a provider's own settings don't resolve, for example `endpoint = { secret = "APPCFG_ENDPOINT" }` with `APPCFG_ENDPOINT` unset, `fnox check` reports it whatever the secret's `if_missing`: as an error when the secret is `"error"`, and as a warning otherwise. `fnox check --strict` turns those warnings into a failing exit code, which suits CI. `exec` and `export` still apply `if_missing`, so an environment without that store can run with the secret skipped.
+`if_missing` is about a missing value, not a provider that can't be set up. If a provider's own settings don't resolve, for example `endpoint = { secret = "APPCFG_ENDPOINT" }` with `APPCFG_ENDPOINT` unset, `exec`, `export` and `get` fail whatever the secret's `if_missing`, unless the secret has a `default` to fall back on. `fnox check` reports the same problem as an error when the secret is `"error"` and as a warning otherwise; `fnox check --strict` turns those warnings into a failing exit code, which suits CI.
 
 ## Fall back to a default
 
