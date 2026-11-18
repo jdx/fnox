@@ -245,11 +245,18 @@ pub fn resolve_provider_ref_with_identity_cycle_guard<'a>(
             let similar = find_similar(&provider_ref.provider, available_providers);
             let suggestion = format_suggestions(&similar);
 
-            return Err(FnoxError::ProviderNotConfigured {
+            // The reference is part of a provider's own settings, so an
+            // undefined provider is a configuration failure, not a missing key.
+            let error = FnoxError::ProviderNotConfigured {
                 provider: provider_ref.provider.clone(),
                 profile: profile.join(","),
                 config_path: config.provider_sources.get(&provider_ref.provider).cloned(),
                 suggestion,
+            };
+            return Err(FnoxError::ProviderConfigResolutionFailed {
+                provider: provider_ref.provider.clone(),
+                secret: provider_ref.value.clone(),
+                details: error.to_string(),
             });
         };
 
