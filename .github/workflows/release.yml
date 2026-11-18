@@ -304,13 +304,38 @@ jobs:
       matrix:
         target: [x86_64-pc-windows-msvc, aarch64-pc-windows-msvc]
     steps:
-      # Only tagged releases may be signed; a manual run from a branch is not a release.
+      # Signing is opt-in until a SignPath organization exists. Without
+      # SIGNPATH_ORGANIZATION_ID the unsigned Windows zips are published as-is.
+      - name: Check SignPath configuration
+        id: signpath
+        shell: bash
+        env:
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+        run: |
+          if [ -n "$SIGNPATH_ORGANIZATION_ID" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::SIGNPATH_ORGANIZATION_ID is not set; publishing unsigned Windows binaries."
+          fi
+      # Only tagged runs may publish Windows binaries; a manual run from a branch is not a release.
       - name: Require a release tag
         if: github.ref_type != 'tag'
         shell: bash
         run: |
           echo "::error::Windows binaries are signed only from a release tag, but this run is on ${GITHUB_REF}. Dispatch the workflow from the tag."
           exit 1
+      # A manual run publishes to v<inputs.version>, so it must be built from that tag.
+      - name: Require the version input to match the tag
+        if: github.ref_type == 'tag' && inputs.version != ''
+        shell: bash
+        env:
+          INPUTS_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "v${INPUTS_VERSION}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Version input v${INPUTS_VERSION} does not match the tag ${GITHUB_REF_NAME} this run was dispatched from."
+            exit 1
+          fi
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: unsigned-binary-${{ matrix.target }}
@@ -319,6 +344,7 @@ jobs:
       # configuration must use a zip-file root containing the nested
       # fnox-*.zip, and sign fnox.exe inside that.
       - name: Upload zip for SignPath
+        if: steps.signpath.outputs.enabled == 'true'
         id: upload-unsigned
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -327,6 +353,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: Sign with SignPath
+        if: steps.signpath.outputs.enabled == 'true'
         uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -339,6 +366,7 @@ jobs:
           output-artifact-directory: signed
       # Fail the release rather than ship an unsigned or tampered fnox.exe.
       - name: Verify the Authenticode signature
+        if: steps.signpath.outputs.enabled == 'true'
         shell: pwsh
         run: |
           $zips = @(Get-ChildItem signed -Filter 'fnox-*.zip')
@@ -349,6 +377,12 @@ jobs:
           $sig = Get-AuthenticodeSignature -LiteralPath $exe.FullName
           Write-Host "Status: $($sig.Status); signer: $($sig.SignerCertificate.Subject)"
           if ($sig.Status -ne 'Valid') { throw "fnox.exe signature is $($sig.Status)" }
+      - name: Use unsigned zip
+        if: steps.signpath.outputs.enabled != 'true'
+        shell: bash
+        run: |
+          mkdir -p signed
+          cp unsigned/fnox-*.zip signed/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binary-${{ matrix.target }}
