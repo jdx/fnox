@@ -124,6 +124,10 @@ fnox -c ./fnox.toml check --all
 
 fnox then loads that file, its imports, and the global config. This is useful for checking exactly what is committed.
 
+::: warning
+A bare default filename such as `-c fnox.toml` is not an explicit path. fnox treats it like running without `-c`: it searches parent directories and applies `fnox.local.toml`. Write `-c ./fnox.toml` (or an absolute path) to skip the directory search and `fnox.local.toml`; fnox still applies that file's imports and the global config.
+:::
+
 ## Secret references in provider config {#secret-references-in-provider-config}
 
 Many provider fields accept `{ secret = "NAME" }` instead of a literal, so a provider's own credential can be stored as a secret:
