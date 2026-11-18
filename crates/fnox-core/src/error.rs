@@ -880,8 +880,6 @@ impl FnoxError {
         })
     }
 
-    /// Clone a `NotInBuild` error, keeping its help text. Returns `None` for any
-    /// other variant.
     /// True when a provider's own settings could not be resolved, so the
     /// provider cannot serve any of its secrets whatever their `if_missing`.
     pub fn is_provider_config_failure(&self) -> bool {
@@ -904,6 +902,8 @@ impl FnoxError {
         }
     }
 
+    /// Clone a `NotInBuild` error, keeping its help text. Returns `None` for any
+    /// other variant.
     pub fn clone_not_in_build(&self) -> Option<FnoxError> {
         match self {
             FnoxError::NotInBuild { kind, name, help } => Some(FnoxError::NotInBuild {

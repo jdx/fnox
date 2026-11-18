@@ -309,6 +309,22 @@ fn resolve_secret_ref<'a>(
                         return Err(error);
                     }
 
+                    // A failure to produce the value (the referenced secret's own
+                    // provider can't be set up, or its key is missing) means the
+                    // outer provider's settings don't resolve, so report it as a
+                    // configuration failure rather than a missing key.
+                    let settings_failure = |error: FnoxError| match error {
+                        FnoxError::ProviderConfigResolutionFailed { .. }
+                        | FnoxError::ProviderConfigCycle { .. }
+                        | FnoxError::NotInBuild { .. }
+                        | FnoxError::ProviderAuthFailed { .. } => error,
+                        error => FnoxError::ProviderConfigResolutionFailed {
+                            provider: provider_name.to_string(),
+                            secret: secret_name.to_string(),
+                            details: error.to_string(),
+                        },
+                    };
+
                     // Recursively resolve the provider's config
                     let resolved_provider = resolve_provider_config_with_context(
                         config,
@@ -317,7 +333,8 @@ fn resolve_secret_ref<'a>(
                         secret_provider_config,
                         ctx,
                     )
-                    .await?;
+                    .await
+                    .map_err(settings_failure)?;
 
                     // Create the provider and get the secret
                     let provider = super::get_provider_from_resolved_with_context(
@@ -325,8 +342,12 @@ fn resolve_secret_ref<'a>(
                         profile,
                         secret_provider_name,
                         &resolved_provider,
-                    )?;
-                    return provider.get_secret(provider_value).await;
+                    )
+                    .map_err(settings_failure)?;
+                    return provider
+                        .get_secret(provider_value)
+                        .await
+                        .map_err(settings_failure);
                 } else {
                     // Find similar provider names for suggestion
                     let available_providers: Vec<_> =
