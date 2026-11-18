@@ -103,6 +103,30 @@ EOF
 	assert_output "  padded value  "
 }
 
+@test "fnox get keeps a trailing newline and carriage return in a passage value" {
+	create_passage_config
+	printf 'tok' >"$PASSAGE_DIR/plain.age"
+	printf 'tok\n' >"$PASSAGE_DIR/newline.age"
+	printf 'tok\r' >"$PASSAGE_DIR/cr.age"
+	cat >>"${FNOX_CONFIG_FILE}" <<EOF
+PLAIN = { provider = "passage", value = "plain" }
+NEWLINE = { provider = "passage", value = "newline" }
+CR = { provider = "passage", value = "cr" }
+EOF
+
+	"$FNOX_BIN" get PLAIN >"$BATS_TEST_TMPDIR/plain.out"
+	"$FNOX_BIN" get NEWLINE >"$BATS_TEST_TMPDIR/newline.out"
+	"$FNOX_BIN" get CR >"$BATS_TEST_TMPDIR/cr.out"
+
+	# bats `run` drops trailing newlines, so compare byte counts: each extra character
+	# stored in the entry must reach the output
+	plain=$(wc -c <"$BATS_TEST_TMPDIR/plain.out")
+	newline=$(wc -c <"$BATS_TEST_TMPDIR/newline.out")
+	cr=$(wc -c <"$BATS_TEST_TMPDIR/cr.out")
+	[ "$newline" -eq $((plain + 1)) ]
+	[ "$cr" -eq $((plain + 1)) ]
+}
+
 @test "fnox get selects a line of a multi-line passage entry" {
 	create_passage_config
 	printf 'hunter2\nalice\n' >"$PASSAGE_DIR/database.age"
