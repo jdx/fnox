@@ -3117,9 +3117,9 @@ dependencies = [
 
 [[package]]
 name = "google-cloud-secretmanager-v1"
-version = "1.14.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d1ea99166ff8fd58e598dd300c9987617293f942cdfec3b84880e2c9ff74110"
+checksum = "6373a046c9b9d140f6fe90d33b58044cef05e6218947d7b87e15f4d8263a3e0e"
 dependencies = [
  "async-trait",
  "bytes",

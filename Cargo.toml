@@ -51,7 +51,7 @@ futures = "0.3"
 gcp_auth = { version = "0.12" }
 globset = "0.4"
 google-cloud-kms = { version = "0.6" }
-google-cloud-secretmanager-v1 = { version = "1" }
+google-cloud-secretmanager-v1 = { version = "2" }
 hex = "0.4"
 hkdf = "0.13"
 hmac = "0.13"
