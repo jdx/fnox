@@ -463,6 +463,11 @@ impl crate::providers::Provider for BitwardenProvider {
                 let mut cmd = Command::new("bw");
                 cmd.arg("status");
                 self.apply_bw_session_and_profile(&mut cmd)?;
+                // `bw status` ignores `--session` and reads `BW_SESSION`, so pass the
+                // same token (`FNOX_BW_SESSION` first) that `get_secret` uses.
+                if let Some(token) = bw_session_token() {
+                    cmd.env("BW_SESSION", token);
+                }
                 let output = self.execute_command(&mut cmd).await?;
                 check_bw_status(&output)
             }
