@@ -101,6 +101,9 @@ pub enum ProviderType {
     /// Custom provider implemented as a Lua plugin
     #[usage(name = "lua")]
     Lua,
+    /// passage (age-encrypted, pass-compatible)
+    #[usage(name = "passage")]
+    Passage,
     /// password-store (pass)
     #[usage(name = "password-store")]
     #[strum(serialize = "password-store")]

@@ -2936,6 +2936,7 @@
                     "keychain",
                     "kubernetes",
                     "lua",
+                    "passage",
                     "password-store",
                     "passwordstate",
                     "plain",
@@ -3035,6 +3036,10 @@
                     {
                       "value": "lua",
                       "help": "Custom provider implemented as a Lua plugin"
+                    },
+                    {
+                      "value": "passage",
+                      "help": "passage (age-encrypted, pass-compatible)"
                     },
                     {
                       "value": "password-store",

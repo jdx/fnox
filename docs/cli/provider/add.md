@@ -20,7 +20,7 @@ The `aws` and `gcp` choices create `aws-sm` and `gcp-sm` providers. With an expl
 - **`<PROVIDER>`** — Name for the provider, which secrets reference with `provider = "..."`
 - **`<PROVIDER_TYPE>`** — Provider type
 
-  **Choices:** `1password`, `age`, `aws`, `aws-kms`, `aws-ps`, `azure-ac`, `azure-kms`, `azure-sm`, `gcp`, `gcp-kms`, `fido2`, `bitwarden`, `doppler`, `enpass`, `foks`, `gopass`, `bitwarden-sm`, `infisical`, `keepass`, `keeper-sm`, `keychain`, `kubernetes`, `lua`, `password-store`, `passwordstate`, `plain`, `proton-pass`, `vault`, `yubikey`
+  **Choices:** `1password`, `age`, `aws`, `aws-kms`, `aws-ps`, `azure-ac`, `azure-kms`, `azure-sm`, `gcp`, `gcp-kms`, `fido2`, `bitwarden`, `doppler`, `enpass`, `foks`, `gopass`, `bitwarden-sm`, `infisical`, `keepass`, `keeper-sm`, `keychain`, `kubernetes`, `lua`, `passage`, `password-store`, `passwordstate`, `plain`, `proton-pass`, `vault`, `yubikey`
 
 ## Flags
 

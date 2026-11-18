@@ -101,6 +101,7 @@ These use a store on your machine, or no storage beyond `fnox.toml` itself.
 | [KeePass](/providers/keepass)               | `keepass`        | Yes                                         | A `.kdbx` file and its password (and key file, if used)             |
 | [password-store](/providers/password-store) | `password-store` | Yes                                         | `pass` CLI and a GPG key                                            |
 | [gopass](/providers/gopass)                 | `gopass`         | Yes                                         | `gopass` CLI and an initialized store                               |
+| [passage](/providers/passage)               | `passage`        | Yes                                         | `passage` CLI and an age identity                                   |
 | [Plaintext defaults](/providers/plain)      | `plain`          | Yes, as plaintext in config; No with `file` | Nothing. Only for values that are not secret                        |
 
 ## Custom providers

@@ -43,6 +43,7 @@ const CREDENTIAL_PATHS: &[&str] = &[
     ".kube",
     ".gnupg",
     ".password-store",
+    ".passage",
     ".config/gcloud",
     ".config/gh",
     ".config/op",
