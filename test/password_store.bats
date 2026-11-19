@@ -529,3 +529,17 @@ TOML
 	assert_success
 	assert_output "token"
 }
+
+@test "fnox get preserves a trailing carriage return in a stored value" {
+	create_pass_config
+
+	printf 'token\r' >value.txt
+	run "$FNOX_BIN" set CRVALUE --from-file value.txt --provider pass
+	assert_success
+	track_secret_path "CRVALUE"
+
+	# fnox get prints the value plus its own newline
+	expected=$(printf 'token\r\n' | od -An -tx1)
+	actual=$("$FNOX_BIN" get CRVALUE | od -An -tx1)
+	[ "$actual" = "$expected" ]
+}
