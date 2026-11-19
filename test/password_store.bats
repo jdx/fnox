@@ -501,3 +501,46 @@ EOF
 	assert_failure
 	assert_output --partial "out of range"
 }
+
+@test "fnox get preserves leading and trailing whitespace of a stored value" {
+	create_pass_config
+
+	printf '  inicio\nfim\n\n' >value.txt
+	run "$FNOX_BIN" set WHITESPACE --from-file value.txt --provider pass
+	assert_success
+	track_secret_path "WHITESPACE"
+
+	# fnox get prints the value plus its own newline
+	expected=$(printf '  inicio\nfim\n\n\n' | od -An -tx1)
+	actual=$("$FNOX_BIN" get WHITESPACE | od -An -tx1)
+	[ "$actual" = "$expected" ]
+}
+
+@test "fnox get strips only the terminating newline of entries made by pass" {
+	create_pass_config
+
+	printf 'token\n' | pass insert -m -f TOKEN
+	track_secret_path "TOKEN"
+	cat >>fnox.toml <<'TOML'
+TOKEN = { provider = "pass", value = "TOKEN" }
+TOML
+
+	# compare raw bytes: bats `run` strips trailing newlines, hiding a retained one
+	expected=$(printf 'token\n' | od -An -tx1)
+	actual=$("$FNOX_BIN" get TOKEN | od -An -tx1)
+	[ "$actual" = "$expected" ]
+}
+
+@test "fnox get preserves a trailing carriage return in a stored value" {
+	create_pass_config
+
+	printf 'token\r' >value.txt
+	run "$FNOX_BIN" set CRVALUE --from-file value.txt --provider pass
+	assert_success
+	track_secret_path "CRVALUE"
+
+	# fnox get prints the value plus its own newline
+	expected=$(printf 'token\r\n' | od -An -tx1)
+	actual=$("$FNOX_BIN" get CRVALUE | od -An -tx1)
+	[ "$actual" = "$expected" ]
+}

@@ -113,7 +113,10 @@ impl PasswordStoreProvider {
                 url: "https://fnox.jdx.dev/providers/password-store".to_string(),
             })?;
 
-        Ok(stdout.trim().to_string())
+        // `pass` entries end with a terminating newline (put_secret adds one). Drop exactly one
+        // so values are usable as env vars, but keep all other leading/trailing whitespace.
+        let stdout = stdout.strip_suffix('\n').unwrap_or(&stdout);
+        Ok(stdout.to_string())
     }
 }
 
@@ -172,8 +175,14 @@ impl crate::providers::Provider for PasswordStoreProvider {
         if let Some(mut stdin) = child.stdin.take() {
             use tokio::io::AsyncWriteExt;
 
+            // Append the terminating newline `pass` entries conventionally have; reads strip
+            // exactly one, so the value round-trips byte for byte.
+            let mut data = Vec::with_capacity(value.len() + 1);
+            data.extend_from_slice(value.as_bytes());
+            data.push(b'\n');
+
             stdin
-                .write_all(value.as_bytes())
+                .write_all(&data)
                 .await
                 .map_err(|e| FnoxError::ProviderCliFailed {
                     provider: "password-store".to_string(),
