@@ -69,7 +69,7 @@ The provider fields take priority over both.
 | `api-key`             | `fnox/api-key`                       |
 | `database/production` | `fnox/database/production`           |
 
-fnox reads an entry with `pass show` and removes exactly one terminating newline, the one `pass` conventionally adds. Other leading and trailing whitespace is kept, so values stored with `fnox set` (including files) read back exactly as written. It returns the whole entry, including any extra lines.
+fnox reads an entry with `pass show` and removes exactly one terminating newline, the one `pass` conventionally adds. Other leading and trailing whitespace is kept, so the value fnox stores reads back exactly as written. `fnox set` trims piped stdin before it reaches the provider; use `--from-file` or `--file` when you need to keep a value's leading or trailing whitespace. It returns the whole entry, including any extra lines.
 
 ### Select a line
 
