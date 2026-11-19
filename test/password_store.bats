@@ -501,3 +501,32 @@ EOF
 	assert_failure
 	assert_output --partial "out of range"
 }
+
+@test "fnox get preserves leading and trailing whitespace of a stored value" {
+	create_pass_config
+
+	run bash -c "printf '  inicio\nfim\n\n' | '$FNOX_BIN' set WHITESPACE --provider pass"
+	assert_success
+	track_secret_path "WHITESPACE"
+
+	# fnox get prints the value plus its own newline
+	expected=$(printf '  inicio\nfim\n\n\n' | od -An -tx1)
+	actual=$("$FNOX_BIN" get WHITESPACE | od -An -tx1)
+	[ "$actual" = "$expected" ]
+}
+
+@test "fnox get strips only the terminating newline of entries made by pass" {
+	create_pass_config
+
+	printf 'token\n' | pass insert -m -f TOKEN
+	track_secret_path "TOKEN"
+	cat >>fnox.toml <<'TOML'
+
+[secrets]
+TOKEN = { provider = "pass", value = "TOKEN" }
+TOML
+
+	run "$FNOX_BIN" get TOKEN
+	assert_success
+	assert_output "token"
+}
