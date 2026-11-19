@@ -116,7 +116,6 @@ impl PasswordStoreProvider {
         // `pass` entries end with a terminating newline (put_secret adds one). Drop exactly one
         // so values are usable as env vars, but keep all other leading/trailing whitespace.
         let stdout = stdout.strip_suffix('\n').unwrap_or(&stdout);
-        let stdout = stdout.strip_suffix('\r').unwrap_or(stdout);
         Ok(stdout.to_string())
     }
 }

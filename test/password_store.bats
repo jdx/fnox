@@ -505,7 +505,8 @@ EOF
 @test "fnox get preserves leading and trailing whitespace of a stored value" {
 	create_pass_config
 
-	run bash -c "printf '  inicio\nfim\n\n' | '$FNOX_BIN' set WHITESPACE --provider pass"
+	printf '  inicio\nfim\n\n' >value.txt
+	run "$FNOX_BIN" set WHITESPACE --from-file value.txt --provider pass
 	assert_success
 	track_secret_path "WHITESPACE"
 
@@ -521,8 +522,6 @@ EOF
 	printf 'token\n' | pass insert -m -f TOKEN
 	track_secret_path "TOKEN"
 	cat >>fnox.toml <<'TOML'
-
-[secrets]
 TOKEN = { provider = "pass", value = "TOKEN" }
 TOML
 
