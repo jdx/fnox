@@ -525,9 +525,10 @@ EOF
 TOKEN = { provider = "pass", value = "TOKEN" }
 TOML
 
-	run "$FNOX_BIN" get TOKEN
-	assert_success
-	assert_output "token"
+	# compare raw bytes: bats `run` strips trailing newlines, hiding a retained one
+	expected=$(printf 'token\n' | od -An -tx1)
+	actual=$("$FNOX_BIN" get TOKEN | od -An -tx1)
+	[ "$actual" = "$expected" ]
 }
 
 @test "fnox get preserves a trailing carriage return in a stored value" {
