@@ -493,7 +493,7 @@ jobs:
               printf '[[artifact]]\npath = "%s"\nbin = ["Fnox.app/Contents/MacOS/fnox"]\n\n' "$asset"
             done
           } > release-assets/packslip.toml
-      - uses: jdx/packslip@44e50e5f64551234b4a382d991bd7f7f7d021d06 # v1.11.3
+      - uses: jdx/packslip@e0340e0c1d10c90a434de2b90f3a1ba345923564 # v1.11.4
         env:
           # Override the workflow's PAT; Packslip only needs this job's token.
           GITHUB_TOKEN: ${{ github.token }}
