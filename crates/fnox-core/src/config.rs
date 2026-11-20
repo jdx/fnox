@@ -1890,7 +1890,24 @@ impl Config {
             Some(file_profile) => file_profile == profile,
             None => profile == "default",
         };
-        let secrets_item: Option<&mut toml_edit::Item> = if own_secrets {
+        // A profile file may also declare its own profile under
+        // `[profiles.<name>.secrets]`; use the root table unless only the
+        // nested one has the secret.
+        let use_root = own_secrets
+            && (profile_name_from_file(target_file).is_none()
+                || doc
+                    .get("secrets")
+                    .and_then(|s| s.as_table_like())
+                    .is_some_and(|t| t.contains_key(old_name))
+                || !doc
+                    .get("profiles")
+                    .and_then(|p| p.as_table_like())
+                    .and_then(|p| p.get(profile))
+                    .and_then(|p| p.as_table_like())
+                    .and_then(|p| p.get("secrets"))
+                    .and_then(|s| s.as_table_like())
+                    .is_some_and(|t| t.contains_key(old_name)));
+        let secrets_item: Option<&mut toml_edit::Item> = if use_root {
             doc.get_mut("secrets")
         } else {
             doc.get_mut("profiles")

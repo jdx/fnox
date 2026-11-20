@@ -163,3 +163,16 @@ TOML
 	run grep -c "^NEW_KEY" fnox.default.toml
 	assert_output "1"
 }
+
+@test "fnox rename finds a profile file's own profile in a nested table" {
+	cat >fnox.staging.toml <<'TOML'
+[providers.plain]
+type = "plain"
+
+[profiles.staging.secrets]
+OLD = { provider = "plain", value = "nested" }
+TOML
+	assert_fnox_success -c fnox.staging.toml -P staging rename OLD NEW
+	run grep -c "^NEW" fnox.staging.toml
+	assert_output "1"
+}
