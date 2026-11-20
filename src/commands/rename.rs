@@ -49,6 +49,7 @@ impl RenameCommand {
                 "The old and new secret names are the same".into(),
             ));
         }
+        crate::config::validate_secret_name(&self.new)?;
         let profile = Config::get_profiles(cli.profile.as_slice());
         let write_profile = Config::resolve_write_profile(&profile, cli.write_profile.as_deref())?;
         tracing::debug!(

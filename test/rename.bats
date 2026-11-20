@@ -91,3 +91,11 @@ TOML
 	run grep -c '^OLD_KEY' fnox.toml
 	assert_output "1"
 }
+
+@test "fnox rename rejects an invalid new name and leaves the file unchanged" {
+	write_config
+	cp fnox.toml fnox.toml.orig
+	assert_fnox_failure rename OLD_KEY 'BAD-KEY'
+	assert_fnox_failure rename OLD_KEY 'BAD-KEY' --dry-run
+	diff fnox.toml fnox.toml.orig
+}
