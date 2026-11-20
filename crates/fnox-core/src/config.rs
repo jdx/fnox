@@ -1884,15 +1884,22 @@ impl Config {
             ))
         })?;
 
-        let secrets = if profile == "default" || is_profile_file(target_file) {
-            doc.get_mut("secrets").and_then(|s| s.as_table_mut())
+        // A profile file's top-level `[secrets]` belongs to that file's own
+        // profile; any other profile lives under `[profiles.<name>.secrets]`.
+        let own_secrets = if is_profile_file(target_file) {
+            profile_name_from_file(target_file).as_deref() == Some(profile)
+        } else {
+            profile == "default"
+        };
+        let secrets: Option<&mut dyn toml_edit::TableLike> = if own_secrets {
+            doc.get_mut("secrets").and_then(|s| s.as_table_like_mut())
         } else {
             doc.get_mut("profiles")
-                .and_then(|p| p.as_table_mut())
+                .and_then(|p| p.as_table_like_mut())
                 .and_then(|p| p.get_mut(profile))
-                .and_then(|p| p.as_table_mut())
+                .and_then(|p| p.as_table_like_mut())
                 .and_then(|p| p.get_mut("secrets"))
-                .and_then(|s| s.as_table_mut())
+                .and_then(|s| s.as_table_like_mut())
         };
         let Some(secrets) = secrets else {
             return Ok(false);
@@ -1908,20 +1915,27 @@ impl Config {
             )));
         }
 
-        // Rebuild the table so the renamed entry keeps its position and decor.
-        let entries: Vec<(toml_edit::Key, toml_edit::Item)> = secrets
+        // Rebuild the table so the renamed entry keeps its position and key decor.
+        // This works for both standard and inline tables.
+        let entries: Vec<(String, toml_edit::Item, toml_edit::Decor, toml_edit::Decor)> = secrets
             .iter()
-            .map(|(k, v)| (secrets.key(k).cloned().unwrap(), v.clone()))
+            .map(|(k, v)| {
+                let key = secrets.key(k);
+                (
+                    k.to_string(),
+                    v.clone(),
+                    key.map(|k| k.leaf_decor().clone()).unwrap_or_default(),
+                    key.map(|k| k.dotted_decor().clone()).unwrap_or_default(),
+                )
+            })
             .collect();
         secrets.clear();
-        for (key, item) in entries {
-            if key.get() == old_name {
-                let mut renamed = toml_edit::Key::new(new_name);
-                *renamed.leaf_decor_mut() = key.leaf_decor().clone();
-                *renamed.dotted_decor_mut() = key.dotted_decor().clone();
-                secrets.insert_formatted(&renamed, item);
-            } else {
-                secrets.insert_formatted(&key, item);
+        for (name, item, leaf, dotted) in entries {
+            let name = if name == old_name { new_name } else { &name };
+            secrets.insert(name, item);
+            if let Some(mut key) = secrets.key_mut(name) {
+                *key.leaf_decor_mut() = leaf;
+                *key.dotted_decor_mut() = dotted;
             }
         }
 

@@ -99,3 +99,38 @@ TOML
 	assert_fnox_failure rename OLD_KEY 'BAD-KEY' --dry-run
 	diff fnox.toml fnox.toml.orig
 }
+
+@test "fnox rename works with an inline secrets table" {
+	cat >fnox.toml <<'TOML'
+root = true
+secrets = { OLD_KEY = { provider = "plain", value = "v" }, OTHER = { provider = "plain", value = "o" } }
+
+[providers.plain]
+type = "plain"
+TOML
+	assert_fnox_success rename OLD_KEY NEW_KEY
+	assert_fnox_success get NEW_KEY
+	assert_output "v"
+	assert_fnox_success get OTHER
+}
+
+@test "fnox rename in a profile file's other profile edits the right table" {
+	cat >fnox.staging.toml <<'TOML'
+[providers.plain]
+type = "plain"
+
+[secrets]
+OLD = { provider = "plain", value = "staging" }
+
+[profiles.dev.secrets]
+OLD = { provider = "plain", value = "dev" }
+TOML
+	assert_fnox_success -c fnox.staging.toml -P dev rename OLD NEW
+	run grep -c '^NEW' fnox.staging.toml
+	assert_output "1"
+	# the staging profile's own OLD is untouched
+	run grep -c "^OLD" fnox.staging.toml
+	assert_output "1"
+	run grep -A1 "^\[secrets\]" fnox.staging.toml
+	assert_output --partial "OLD ="
+}
