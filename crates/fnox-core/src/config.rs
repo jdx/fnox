@@ -1859,6 +1859,79 @@ impl Config {
         Ok(removed)
     }
 
+    /// Rename a secret in a config file, keeping its value, position, comments and formatting.
+    ///
+    /// Returns `Ok(false)` when `old_name` is not in the file's secrets table.
+    /// Fails with a config error when `new_name` already exists there.
+    pub fn rename_secret_in_source(
+        old_name: &str,
+        new_name: &str,
+        profile: &str,
+        target_file: &Path,
+    ) -> Result<bool> {
+        use toml_edit::DocumentMut;
+
+        let content =
+            fs::read_to_string(target_file).map_err(|source| FnoxError::ConfigReadFailed {
+                path: target_file.to_path_buf(),
+                source,
+            })?;
+        let mut doc = content.parse::<DocumentMut>().map_err(|e| {
+            FnoxError::Config(format!(
+                "Failed to parse TOML in {}: {}",
+                target_file.display(),
+                e
+            ))
+        })?;
+
+        let secrets = if profile == "default" || is_profile_file(target_file) {
+            doc.get_mut("secrets").and_then(|s| s.as_table_mut())
+        } else {
+            doc.get_mut("profiles")
+                .and_then(|p| p.as_table_mut())
+                .and_then(|p| p.get_mut(profile))
+                .and_then(|p| p.as_table_mut())
+                .and_then(|p| p.get_mut("secrets"))
+                .and_then(|s| s.as_table_mut())
+        };
+        let Some(secrets) = secrets else {
+            return Ok(false);
+        };
+        if !secrets.contains_key(old_name) {
+            return Ok(false);
+        }
+        if secrets.contains_key(new_name) {
+            return Err(FnoxError::Config(format!(
+                "Secret '{}' already exists in {}",
+                new_name,
+                target_file.display()
+            )));
+        }
+
+        // Rebuild the table so the renamed entry keeps its position and decor.
+        let entries: Vec<(toml_edit::Key, toml_edit::Item)> = secrets
+            .iter()
+            .map(|(k, v)| (secrets.key(k).cloned().unwrap(), v.clone()))
+            .collect();
+        secrets.clear();
+        for (key, item) in entries {
+            if key.get() == old_name {
+                let mut renamed = toml_edit::Key::new(new_name);
+                *renamed.leaf_decor_mut() = key.leaf_decor().clone();
+                *renamed.dotted_decor_mut() = key.dotted_decor().clone();
+                secrets.insert_formatted(&renamed, item);
+            } else {
+                secrets.insert_formatted(&key, item);
+            }
+        }
+
+        fs::write(target_file, doc.to_string()).map_err(|source| FnoxError::ConfigWriteFailed {
+            path: target_file.to_path_buf(),
+            source,
+        })?;
+        Ok(true)
+    }
+
     /// Save multiple secrets to a config file, preserving comments and formatting.
     ///
     /// This is the batch equivalent of `save_secret_to_source`, used by `fnox import`.
