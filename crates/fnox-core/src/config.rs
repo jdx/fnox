@@ -1767,11 +1767,11 @@ impl Config {
             doc["secrets"].as_table_mut().unwrap()
         } else {
             if doc.get("profiles").is_none() {
-                doc["profiles"] = Item::Table(toml_edit::Table::new());
+                doc["profiles"] = Item::Table(implicit_table());
             }
             let profiles = doc["profiles"].as_table_mut().unwrap();
             if profiles.get(profile).is_none() {
-                profiles[profile] = Item::Table(toml_edit::Table::new());
+                profiles[profile] = Item::Table(implicit_table());
             }
             let profile_table = profiles[profile].as_table_mut().unwrap();
             if profile_table.get("secrets").is_none() {
@@ -1905,11 +1905,11 @@ impl Config {
             doc["secrets"].as_table_mut().unwrap()
         } else {
             if doc.get("profiles").is_none() {
-                doc["profiles"] = Item::Table(toml_edit::Table::new());
+                doc["profiles"] = Item::Table(implicit_table());
             }
             let profiles = doc["profiles"].as_table_mut().unwrap();
             if profiles.get(profile).is_none() {
-                profiles[profile] = Item::Table(toml_edit::Table::new());
+                profiles[profile] = Item::Table(implicit_table());
             }
             let profile_table = profiles[profile].as_table_mut().unwrap();
             if profile_table.get("secrets").is_none() {
@@ -3146,10 +3146,69 @@ fn is_false(value: &bool) -> bool {
     !value
 }
 
+/// A new table that is omitted from the output when it only contains sub-tables,
+/// so `[profiles]` and `[profiles.<name>]` aren't written as empty headers.
+fn implicit_table() -> toml_edit::Table {
+    let mut table = toml_edit::Table::new();
+    table.set_implicit(true);
+    table
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;
+
+    fn plain_secret() -> SecretConfig {
+        let mut secret = SecretConfig::new();
+        secret.set_value(Some("example".to_string()));
+        secret
+    }
+
+    #[test]
+    fn new_profile_omits_empty_parent_tables() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("fnox.toml");
+
+        Config::new()
+            .save_secret_to_source("FOX", &plain_secret(), "fox", &path)
+            .unwrap();
+        let content = fs::read_to_string(&path).unwrap();
+        assert!(content.contains("[profiles.fox.secrets]"), "{content}");
+        assert!(!content.contains("[profiles]"), "{content}");
+        assert!(!content.contains("[profiles.fox]"), "{content}");
+
+        // Batch path (used by import)
+        let path = dir.path().join("batch.toml");
+        let mut secrets = IndexMap::new();
+        secrets.insert("FOX".to_string(), plain_secret());
+        Config::update_secrets_in_source(&secrets, &[], "fox", &path).unwrap();
+        let content = fs::read_to_string(&path).unwrap();
+        assert!(content.contains("[profiles.fox.secrets]"), "{content}");
+        assert!(!content.contains("[profiles]"), "{content}");
+        assert!(!content.contains("[profiles.fox]"), "{content}");
+    }
+
+    #[test]
+    fn existing_parent_tables_are_preserved() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("fnox.toml");
+        fs::write(
+            &path,
+            "# my profiles\n[profiles]\n\n[profiles.fox]\n# fox profile\nprovider = \"x\"\n",
+        )
+        .unwrap();
+
+        Config::new()
+            .save_secret_to_source("FOX", &plain_secret(), "fox", &path)
+            .unwrap();
+        let content = fs::read_to_string(&path).unwrap();
+        assert!(content.contains("# my profiles"), "{content}");
+        assert!(content.contains("[profiles]"), "{content}");
+        assert!(content.contains("[profiles.fox]"), "{content}");
+        assert!(content.contains("# fox profile"), "{content}");
+        assert!(content.contains("[profiles.fox.secrets]"), "{content}");
+    }
 
     #[test]
     fn secret_url_accepts_http_and_https() {
