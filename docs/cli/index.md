@@ -17,7 +17,7 @@ fnox reads `fnox.toml` from the current directory and its parents, resolves each
 Commands by task:
 
 - Read and run: [get](/cli/get), [list](/cli/list), [exec](/cli/exec), [env](/cli/env), [export](/cli/export), [check](/cli/check)
-- Store and migrate: [set](/cli/set), [remove](/cli/remove), [import](/cli/import), [sync](/cli/sync), [push](/cli/push), [reencrypt](/cli/reencrypt), [edit](/cli/edit), [files](/cli/files)
+- Store and migrate: [set](/cli/set), [remove](/cli/remove), [rename](/cli/rename), [import](/cli/import), [sync](/cli/sync), [push](/cli/push), [reencrypt](/cli/reencrypt), [edit](/cli/edit), [files](/cli/files)
 - Configure: [init](/cli/init), [provider](/cli/provider), [plugin](/cli/plugin), [profiles](/cli/profiles), [config-files](/cli/config-files)
 - Shell and tools: [activate](/cli/activate), [deactivate](/cli/deactivate), [completion](/cli/completion), [tui](/cli/tui), [mcp](/cli/mcp)
 - Diagnose: [doctor](/cli/doctor), [scan](/cli/scan)
@@ -51,13 +51,13 @@ Put fnox options before the `--` that starts a child command, as in `fnox -P pro
 
 - **`--walk-up`** — Write to the nearest parent config when the current directory has none
 
-  Applies to `set`, `remove`, `import`, and secrets entered through `fnox mcp` or `fnox proxy`. Without it, those commands create `fnox.toml` in the current directory when it has no config file. With it, they use the nearest parent directory's config, picked by the same rules, and create `fnox.toml` here only if no parent has one. The global config is never a fallback. `--config` and `--global` take precedence.
+  Applies to `set`, `remove`, `rename`, `import`, and secrets entered through `fnox mcp` or `fnox proxy`. Without it, those commands create `fnox.toml` in the current directory when it has no config file. With it, they use the nearest parent directory's config, picked by the same rules, and create `fnox.toml` here only if no parent has one. The global config is never a fallback. `--config` and `--global` take precedence.
 
   **Environment Variable:** `FNOX_WALK_UP`
 
 - **`--write-profile <WRITE_PROFILE>`** — Profile that write commands modify when several profiles are active
 
-  Applies to `set`, `remove`, `import`, `sync`, and `provider add|remove`. Required when more than one profile is active; otherwise defaults to the active profile.
+  Applies to `set`, `remove`, `rename`, `import`, `sync`, and `provider add|remove`. Required when more than one profile is active; otherwise defaults to the active profile.
 
 ## Flags
 
@@ -114,6 +114,7 @@ Put fnox options before the `--` that starts a child command, as in `fnox -P pro
 - [`fnox push [FLAGS] [KEYS]…`](/cli/push.md)
 - [`fnox reencrypt [FLAGS] [KEYS]…`](/cli/reencrypt.md)
 - [`fnox remove [FLAGS] [KEY]`](/cli/remove.md)
+- [`fnox rename [-g --global] [-n --dry-run] <OLD> <NEW>`](/cli/rename.md)
 - [`fnox scan [FLAGS] [DIR]`](/cli/scan.md)
 - [`fnox set [FLAGS] [KEY] [VALUE]`](/cli/set.md)
 - [`fnox sponsors`](/cli/sponsors.md)

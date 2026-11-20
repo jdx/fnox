@@ -11,7 +11,7 @@ fnox reads `fnox.toml` from the current directory and its parents, resolves each
 Commands by task:
 
  - Read and run: get, list, exec, env, export, check
- - Store and migrate: set, remove, import, sync, push, reencrypt, edit, files
+ - Store and migrate: set, remove, rename, import, sync, push, reencrypt, edit, files
  - Configure: init, provider, plugin, profiles, config-files
  - Shell and tools: activate, deactivate, completion, tui, mcp
  - Diagnose: doctor, scan
@@ -63,14 +63,14 @@ flag --walk-up help="Write to the nearest parent config when the current directo
     long_help #"""
 Write to the nearest parent config when the current directory has none
 
-Applies to `set`, `remove`, `import`, and secrets entered through `fnox mcp` or `fnox proxy`. Without it, those commands create `fnox.toml` in the current directory when it has no config file. With it, they use the nearest parent directory's config, picked by the same rules, and create `fnox.toml` here only if no parent has one. The global config is never a fallback. `--config` and `--global` take precedence.
+Applies to `set`, `remove`, `rename`, `import`, and secrets entered through `fnox mcp` or `fnox proxy`. Without it, those commands create `fnox.toml` in the current directory when it has no config file. With it, they use the nearest parent directory's config, picked by the same rules, and create `fnox.toml` here only if no parent has one. The global config is never a fallback. `--config` and `--global` take precedence.
 """#
 }
 flag --write-profile help="Profile that write commands modify when several profiles are active" global=#true {
     long_help #"""
 Profile that write commands modify when several profiles are active
 
-Applies to `set`, `remove`, `import`, `sync`, and `provider add|remove`. Required when more than one profile is active; otherwise defaults to the active profile.
+Applies to `set`, `remove`, `rename`, `import`, `sync`, and `provider add|remove`. Required when more than one profile is active; otherwise defaults to the active profile.
 """#
     arg <WRITE_PROFILE>
 }
@@ -1151,6 +1151,26 @@ Deletes its entry from `[files]` in the global config. The file at PATH and any 
     example "fnox remove OLD_TOKEN --dry-run" header="Preview the change"
     example "fnox remove OLD_TOKEN" header="Remove a secret"
     example "fnox -P staging remove OLD_TOKEN" header="Remove it from the staging profile"
+}
+cmd rename help="Rename a secret in a config file" {
+    alias mv
+    long_help #"""
+Rename a secret in a config file
+
+Renames OLD to NEW in the config file in the current directory, or the global config with `--global`, keeping the secret's value, provider and other fields, plus comments and formatting. Nothing is decrypted, and a secret stored at a remote provider keeps pointing at the same remote item. Fails if NEW already exists in that file.
+"""#
+    after_long_help #"""
+See also:
+- Config files: https://fnox.jdx.dev/guide/config-files
+"""#
+    flag "-g --global" help="Rename in the global config file (`~/.config/fnox/config.toml`)"
+    flag "-n --dry-run" help="Show what would be renamed without changing the file"
+    flag "-h --help" help="Print help" action=help builtin=#true
+    arg <OLD> help="Current name of the secret"
+    arg <NEW> help="New name for the secret"
+    example "fnox rename OLD_TOKEN NEW_TOKEN --dry-run" header="Preview the change"
+    example "fnox rename MY_SERVICE_API_KEY MYSERVICE_API_KEY" header="Rename a secret"
+    example "fnox -P staging rename OLD_TOKEN NEW_TOKEN" header="Rename it in the staging profile"
 }
 cmd sandbox-bridge help="Internal command used by `fnox proxy run --sandbox`" hide=#true {
     long_help #"""

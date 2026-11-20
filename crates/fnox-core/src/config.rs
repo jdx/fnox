@@ -1857,6 +1857,117 @@ impl Config {
         Ok(removed)
     }
 
+    /// Rename a secret in a config file, keeping its value, position, comments and formatting.
+    ///
+    /// Returns `Ok(false)` when `old_name` is not in the file's secrets table.
+    /// Fails with a config error when `new_name` already exists there.
+    pub fn rename_secret_in_source(
+        old_name: &str,
+        new_name: &str,
+        profile: &str,
+        target_file: &Path,
+    ) -> Result<bool> {
+        use toml_edit::DocumentMut;
+
+        let content =
+            fs::read_to_string(target_file).map_err(|source| FnoxError::ConfigReadFailed {
+                path: target_file.to_path_buf(),
+                source,
+            })?;
+        let mut doc = content.parse::<DocumentMut>().map_err(|e| {
+            FnoxError::Config(format!(
+                "Failed to parse TOML in {}: {}",
+                target_file.display(),
+                e
+            ))
+        })?;
+
+        // A profile file's top-level `[secrets]` belongs to that file's own
+        // profile; any other profile lives under `[profiles.<name>.secrets]`.
+        let own_secrets = match profile_name_from_file(target_file) {
+            Some(file_profile) => file_profile == profile,
+            None => profile == "default",
+        };
+        // A profile file may also declare its own profile under
+        // `[profiles.<name>.secrets]`; use the root table unless only the
+        // nested one has the secret.
+        let use_root = own_secrets
+            && (profile_name_from_file(target_file).is_none()
+                || doc
+                    .get("secrets")
+                    .and_then(|s| s.as_table_like())
+                    .is_some_and(|t| t.contains_key(old_name))
+                || !doc
+                    .get("profiles")
+                    .and_then(|p| p.as_table_like())
+                    .and_then(|p| p.get(profile))
+                    .and_then(|p| p.as_table_like())
+                    .and_then(|p| p.get("secrets"))
+                    .and_then(|s| s.as_table_like())
+                    .is_some_and(|t| t.contains_key(old_name)));
+        let secrets_item: Option<&mut toml_edit::Item> = if use_root {
+            doc.get_mut("secrets")
+        } else {
+            doc.get_mut("profiles")
+                .and_then(|p| p.as_table_like_mut())
+                .and_then(|p| p.get_mut(profile))
+                .and_then(|p| p.as_table_like_mut())
+                .and_then(|p| p.get_mut("secrets"))
+        };
+        let Some(secrets_item) = secrets_item else {
+            return Ok(false);
+        };
+        let Some(secrets) = secrets_item.as_table_like() else {
+            return Ok(false);
+        };
+        if !secrets.contains_key(old_name) {
+            return Ok(false);
+        }
+        if secrets.contains_key(new_name) {
+            return Err(FnoxError::Config(format!(
+                "Secret '{}' already exists in {}",
+                new_name,
+                target_file.display()
+            )));
+        }
+
+        // Rebuild the table so the renamed entry keeps its position and key
+        // formatting while every other key is reinserted exactly as written.
+        // Standard and inline tables have separate insert APIs.
+        macro_rules! rebuild {
+            ($table:expr) => {{
+                let table = $table;
+                let entries: Vec<_> = table
+                    .iter()
+                    .filter_map(|(k, v)| Some((table.get_key_value(k)?.0.clone(), v.clone())))
+                    .collect();
+                table.clear();
+                for (key, item) in entries {
+                    let key = if key.get() == old_name {
+                        let mut renamed = toml_edit::Key::new(new_name);
+                        *renamed.leaf_decor_mut() = key.leaf_decor().clone();
+                        *renamed.dotted_decor_mut() = key.dotted_decor().clone();
+                        renamed
+                    } else {
+                        key
+                    };
+                    table.insert_formatted(&key, item);
+                }
+            }};
+        }
+        match secrets_item {
+            toml_edit::Item::Table(table) => rebuild!(table),
+            toml_edit::Item::Value(toml_edit::Value::InlineTable(table)) => rebuild!(table),
+            _ => return Ok(false),
+        }
+
+        fs::write(target_file, doc.to_string()).map_err(|source| FnoxError::ConfigWriteFailed {
+            path: target_file.to_path_buf(),
+            source,
+        })?;
+        Ok(true)
+    }
+
     /// Save multiple secrets to a config file, preserving comments and formatting.
     ///
     /// This is the batch equivalent of `save_secret_to_source`, used by `fnox import`.

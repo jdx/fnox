@@ -32,6 +32,7 @@ pub mod proxy;
 pub mod push;
 pub mod reencrypt;
 pub mod remove;
+pub mod rename;
 pub mod sandbox_bridge;
 pub mod scan;
 pub mod schema;
@@ -51,7 +52,7 @@ pub mod version;
 /// Commands by task:
 ///
 ///  - Read and run: get, list, exec, env, export, check
-///  - Store and migrate: set, remove, import, sync, push, reencrypt, edit, files
+///  - Store and migrate: set, remove, rename, import, sync, push, reencrypt, edit, files
 ///  - Configure: init, provider, plugin, profiles, config-files
 ///  - Shell and tools: activate, deactivate, completion, tui, mcp
 ///  - Diagnose: doctor, scan
@@ -127,7 +128,7 @@ pub struct Cli {
 
     /// Write to the nearest parent config when the current directory has none
     ///
-    /// Applies to `set`, `remove`, `import`, and secrets entered through
+    /// Applies to `set`, `remove`, `rename`, `import`, and secrets entered through
     /// `fnox mcp` or `fnox proxy`. Without it, those commands
     /// create `fnox.toml` in the current directory when it has no config file.
     /// With it, they use the nearest parent directory's config, picked by the
@@ -139,7 +140,7 @@ pub struct Cli {
 
     /// Profile that write commands modify when several profiles are active
     ///
-    /// Applies to `set`, `remove`, `import`, `sync`, and `provider add|remove`.
+    /// Applies to `set`, `remove`, `rename`, `import`, `sync`, and `provider add|remove`.
     /// Required when more than one profile is active; otherwise defaults to the
     /// active profile.
     #[usage(long, global)]
@@ -210,6 +211,8 @@ pub enum Commands {
     Reencrypt(reencrypt::ReencryptCommand),
 
     Remove(remove::RemoveCommand),
+
+    Rename(rename::RenameCommand),
 
     /// Internal command used by `fnox proxy run --sandbox`
     #[usage(hide)]
@@ -418,6 +421,7 @@ impl Commands {
             Commands::Reencrypt(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Env(cmd) => cmd.run(cli).await,
             Commands::Remove(cmd) => cmd.run(cli).await,
+            Commands::Rename(cmd) => cmd.run(cli).await,
             Commands::Exec(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Set(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Sync(cmd) => cmd.run(cli, self.load_config(cli)?).await,

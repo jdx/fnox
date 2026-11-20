@@ -3955,6 +3955,96 @@
           }
         }
       },
+      "rename": {
+        "full_cmd": ["rename"],
+        "usage": "rename [-g --global] [-n --dry-run] <OLD> <NEW>",
+        "subcommands": {},
+        "args": [
+          {
+            "name": "OLD",
+            "usage": "<OLD>",
+            "help": "Current name of the secret",
+            "help_first_line": "Current name of the secret",
+            "required": true,
+            "double_dash": "Optional",
+            "hide": false
+          },
+          {
+            "name": "NEW",
+            "usage": "<NEW>",
+            "help": "New name for the secret",
+            "help_first_line": "New name for the secret",
+            "required": true,
+            "double_dash": "Optional",
+            "hide": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "global",
+            "usage": "-g --global",
+            "help": "Rename in the global config file (`~/.config/fnox/config.toml`)",
+            "help_first_line": "Rename in the global config file (`~/.config/fnox/config.toml`)",
+            "short": ["g"],
+            "long": ["global"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "dry-run",
+            "usage": "-n --dry-run",
+            "help": "Show what would be renamed without changing the file",
+            "help_first_line": "Show what would be renamed without changing the file",
+            "short": ["n"],
+            "long": ["dry-run"],
+            "hide": false,
+            "global": false
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
+        "mounts": [],
+        "unknown_flags": null,
+        "hide": false,
+        "args_override_self": true,
+        "help": "Rename a secret in a config file",
+        "help_long": "Rename a secret in a config file\n\nRenames OLD to NEW in the config file in the current directory, or the global config with `--global`, keeping the secret's value, provider and other fields, plus comments and formatting. Nothing is decrypted, and a secret stored at a remote provider keeps pointing at the same remote item. Fails if NEW already exists in that file.",
+        "name": "rename",
+        "aliases": ["mv"],
+        "hidden_aliases": [],
+        "after_help_long": "See also:\n- Config files: https://fnox.jdx.dev/guide/config-files",
+        "examples": [
+          {
+            "code": "fnox rename OLD_TOKEN NEW_TOKEN --dry-run",
+            "header": "Preview the change",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox rename MY_SERVICE_API_KEY MYSERVICE_API_KEY",
+            "header": "Rename a secret",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "fnox -P staging rename OLD_TOKEN NEW_TOKEN",
+            "header": "Rename it in the staging profile",
+            "help": null,
+            "lang": ""
+          }
+        ],
+        "headings": []
+      },
       "sandbox-bridge": {
         "full_cmd": ["sandbox-bridge"],
         "usage": "sandbox-bridge <--port <PORT>> <--socket <PATH>> [COMMAND]…",
@@ -5102,7 +5192,7 @@
         "name": "walk-up",
         "usage": "--walk-up",
         "help": "Write to the nearest parent config when the current directory has none",
-        "help_long": "Write to the nearest parent config when the current directory has none\n\nApplies to `set`, `remove`, `import`, and secrets entered through `fnox mcp` or `fnox proxy`. Without it, those commands create `fnox.toml` in the current directory when it has no config file. With it, they use the nearest parent directory's config, picked by the same rules, and create `fnox.toml` here only if no parent has one. The global config is never a fallback. `--config` and `--global` take precedence.",
+        "help_long": "Write to the nearest parent config when the current directory has none\n\nApplies to `set`, `remove`, `rename`, `import`, and secrets entered through `fnox mcp` or `fnox proxy`. Without it, those commands create `fnox.toml` in the current directory when it has no config file. With it, they use the nearest parent directory's config, picked by the same rules, and create `fnox.toml` here only if no parent has one. The global config is never a fallback. `--config` and `--global` take precedence.",
         "help_first_line": "Write to the nearest parent config when the current directory has none",
         "short": [],
         "long": ["walk-up"],
@@ -5114,7 +5204,7 @@
         "name": "write-profile",
         "usage": "--write-profile <WRITE_PROFILE>",
         "help": "Profile that write commands modify when several profiles are active",
-        "help_long": "Profile that write commands modify when several profiles are active\n\nApplies to `set`, `remove`, `import`, `sync`, and `provider add|remove`. Required when more than one profile is active; otherwise defaults to the active profile.",
+        "help_long": "Profile that write commands modify when several profiles are active\n\nApplies to `set`, `remove`, `rename`, `import`, `sync`, and `provider add|remove`. Required when more than one profile is active; otherwise defaults to the active profile.",
         "help_first_line": "Profile that write commands modify when several profiles are active",
         "short": [],
         "long": ["write-profile"],
@@ -5435,7 +5525,7 @@
     }
   },
   "about": "Load secrets from encrypted files, password managers, and cloud secret stores",
-  "about_long": "Load secrets from encrypted files, password managers, and cloud secret stores\n\nfnox reads `fnox.toml` from the current directory and its parents, resolves each secret through the provider it names, and hands the values to your shell or to the command you run.\n\nCommands by task:\n\n - Read and run: get, list, exec, env, export, check\n - Store and migrate: set, remove, import, sync, push, reencrypt, edit, files\n - Configure: init, provider, plugin, profiles, config-files\n - Shell and tools: activate, deactivate, completion, tui, mcp\n - Diagnose: doctor, scan\n - Cache and broker: daemon, lease, proxy\n\nPut fnox options before the `--` that starts a child command, as in `fnox -P prod exec -- npm start`. Everything after `--` belongs to the child command.",
+  "about_long": "Load secrets from encrypted files, password managers, and cloud secret stores\n\nfnox reads `fnox.toml` from the current directory and its parents, resolves each secret through the provider it names, and hands the values to your shell or to the command you run.\n\nCommands by task:\n\n - Read and run: get, list, exec, env, export, check\n - Store and migrate: set, remove, rename, import, sync, push, reencrypt, edit, files\n - Configure: init, provider, plugin, profiles, config-files\n - Shell and tools: activate, deactivate, completion, tui, mcp\n - Diagnose: doctor, scan\n - Cache and broker: daemon, lease, proxy\n\nPut fnox options before the `--` that starts a child command, as in `fnox -P prod exec -- npm start`. Everything after `--` belongs to the child command.",
   "after_help_long": "See also:\n- Quick start: https://fnox.jdx.dev/guide/quick-start\n- Configuration reference: https://fnox.jdx.dev/reference/configuration",
   "min_usage_version": "1.3",
   "examples": [
