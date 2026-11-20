@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.51.0](https://github.com/jdx/fnox/compare/v1.50.0..v1.51.0) - 2026-11-20
+
+### 🚀 Features
+
+- **(config)** add fnox rename to rename a secret without changing its value by [@jdx](https://github.com/jdx) in [#1225](https://github.com/jdx/fnox/pull/1225)
+- **(passage)** add passage provider for age-encrypted pass stores by [@jdx](https://github.com/jdx) in [#1200](https://github.com/jdx/fnox/pull/1200)
+
+### 🐛 Bug Fixes
+
+- **(bitwarden)** check the vault is unlocked in provider test by [@jdx](https://github.com/jdx) in [#1213](https://github.com/jdx/fnox/pull/1213)
+- **(config)** omit empty parent tables when creating profile secrets by [@jdx](https://github.com/jdx) in [#1224](https://github.com/jdx/fnox/pull/1224)
+- **(pass)** preserve whitespace of stored values on read by [@jdx](https://github.com/jdx) in [#1219](https://github.com/jdx/fnox/pull/1219)
+- **(set)** keep formatting and field order when updating an existing secret by [@jdx](https://github.com/jdx) in [#1212](https://github.com/jdx/fnox/pull/1212)
+
+### 📚 Documentation
+
+- **(config)** note that a bare -c fnox.toml still searches directories by [@jdx](https://github.com/jdx) in [#1214](https://github.com/jdx/fnox/pull/1214)
+- remove obsolete Touch ID preview and session concept pages by [@jdx](https://github.com/jdx) in [#1204](https://github.com/jdx/fnox/pull/1204)
+
+### 🛡️ Security
+
+- **(deps)** update mise tools by [@renovate[bot]](https://github.com/renovate[bot]) in [#1203](https://github.com/jdx/fnox/pull/1203)
+- remove the pull_request_target workflows by [@jdx](https://github.com/jdx) in [#1210](https://github.com/jdx/fnox/pull/1210)
+
+### 📦️ Dependency Updates
+
+- update rust crate rusqlite to 0.42 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1205](https://github.com/jdx/fnox/pull/1205)
+- update jdx/mise-action action to v5.2.7 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1202](https://github.com/jdx/fnox/pull/1202)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1206](https://github.com/jdx/fnox/pull/1206)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1211](https://github.com/jdx/fnox/pull/1211)
+- update rust crate google-cloud-secretmanager-v1 to v2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1215](https://github.com/jdx/fnox/pull/1215)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1216](https://github.com/jdx/fnox/pull/1216)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1217](https://github.com/jdx/fnox/pull/1217)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1221](https://github.com/jdx/fnox/pull/1221)
+- update jdx/packslip action to v1.11.4 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1220](https://github.com/jdx/fnox/pull/1220)
+
 ## [1.50.0](https://github.com/jdx/fnox/compare/v1.49.0..v1.50.0) - 2026-11-18
 
 ### 🚀 Features
@@ -10,10 +46,15 @@
 ### 🐛 Bug Fixes
 
 - **(check)** report providers that cannot be configured and add --strict by [@jdx](https://github.com/jdx) in [#1187](https://github.com/jdx/fnox/pull/1187)
+- **(exec)** fail when a provider's own settings don't resolve by [@jdx](https://github.com/jdx) in [#1199](https://github.com/jdx/fnox/pull/1199)
 
 ### 🛡️ Security
 
 - add cargo-deny advisories and sources checks by [@jdx](https://github.com/jdx) in [#1197](https://github.com/jdx/fnox/pull/1197)
+
+### 🔍 Other Changes
+
+- publish unsigned Windows binaries until SignPath is configured by [@jdx](https://github.com/jdx) in [#1198](https://github.com/jdx/fnox/pull/1198)
 
 ### 📦️ Dependency Updates
 
