@@ -134,3 +134,32 @@ TOML
 	run grep -A1 "^\[secrets\]" fnox.staging.toml
 	assert_output --partial "OLD ="
 }
+
+@test "fnox rename keeps the spelling of untouched quoted keys" {
+	cat >fnox.toml <<'TOML'
+root = true
+
+[providers.plain]
+type = "plain"
+
+[secrets]
+'QUOTED' = { provider = "plain", value = "q" }
+OLD_KEY = { provider = "plain", value = "v" }
+TOML
+	assert_fnox_success rename OLD_KEY NEW_KEY
+	run grep -c "^'QUOTED'" fnox.toml
+	assert_output "1"
+}
+
+@test "fnox rename works with -c fnox.default.toml" {
+	cat >fnox.default.toml <<'TOML'
+[providers.plain]
+type = "plain"
+
+[secrets]
+OLD_KEY = { provider = "plain", value = "v" }
+TOML
+	assert_fnox_success -c fnox.default.toml rename OLD_KEY NEW_KEY
+	run grep -c "^NEW_KEY" fnox.default.toml
+	assert_output "1"
+}
