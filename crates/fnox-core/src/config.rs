@@ -2080,7 +2080,7 @@ impl Config {
                 Ok(Some(backup)) => backups.push(backup),
                 Ok(None) => {}
                 Err(e) => {
-                    backups.into_iter().for_each(SourceBackup::restore);
+                    backups.into_iter().rev().for_each(SourceBackup::restore);
                     return Err(e);
                 }
             }
@@ -2088,7 +2088,7 @@ impl Config {
 
         // Write back (preserves all comments and formatting)
         fs::write(target_file, doc.to_string()).map_err(|source| {
-            backups.into_iter().for_each(SourceBackup::restore);
+            backups.into_iter().rev().for_each(SourceBackup::restore);
             FnoxError::ConfigWriteFailed {
                 path: target_file.to_path_buf(),
                 source,

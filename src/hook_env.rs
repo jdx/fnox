@@ -284,7 +284,7 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
 fn push_config_with_dependencies(
     configs: &mut Vec<(PathBuf, u128)>,
     config_path: &Path,
-    visited: &mut std::collections::HashSet<PathBuf>,
+    visited: &mut std::collections::HashSet<(PathBuf, PathBuf)>,
 ) {
     let mtime = |path: &Path| {
         std::fs::metadata(path)
@@ -298,9 +298,12 @@ fn push_config_with_dependencies(
     };
     // Canonical keys make `./` and `..` spellings of one file, and import
     // cycles, stop the walk
-    let canonical =
-        std::fs::canonicalize(config_path).unwrap_or_else(|_| config_path.to_path_buf());
-    if !visited.insert(canonical) {
+    // The parent directory is part of the key because `source` paths resolve
+    // against the directory the config was reached through, which differs
+    // between symlinks to one file.
+    let canonical = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let parent = config_path.parent().map(canonical).unwrap_or_default();
+    if !visited.insert((canonical(config_path), parent)) {
         return;
     }
     let (sources, imports) = config_dependencies(config_path);

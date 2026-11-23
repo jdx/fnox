@@ -266,6 +266,7 @@ impl EditCommand {
                 Err(e) => {
                     backups
                         .into_iter()
+                        .rev()
                         .for_each(fnox_core::config::SourceBackup::restore);
                     return Err(e);
                 }
@@ -274,6 +275,7 @@ impl EditCommand {
         fs::write(&cli.config, output).map_err(|source| {
             backups
                 .into_iter()
+                .rev()
                 .for_each(fnox_core::config::SourceBackup::restore);
             FnoxError::ConfigWriteFailed {
                 path: cli.config.clone(),
@@ -858,6 +860,18 @@ impl EditCommand {
             if edited_has_source && !original_has_source {
                 return Err(FnoxError::Config(format!(
                     "Cannot add `source` to secret '{key_str}' with `fnox edit`; use `fnox set --source` instead"
+                )));
+            }
+
+            if plaintext.is_none()
+                && let Some(original) = secrets_map
+                    .get(&lookup_key)
+                    .map(|e| &e.original_config)
+                    .filter(|c| c.source.is_some())
+                && explicit_provider.as_deref() != original.provider()
+            {
+                return Err(FnoxError::Config(format!(
+                    "Cannot change the provider of source secret '{key_str}' without its value; keep the value so it can be re-encrypted"
                 )));
             }
 
