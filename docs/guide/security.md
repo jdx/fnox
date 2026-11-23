@@ -6,6 +6,8 @@ description: "Understand what fnox protects, which code and systems you need to 
 
 fnox helps keep plaintext secrets out of source control. With an encryption provider, the config stores ciphertext. With a vault provider, it stores references and the provider controls who can read the values. Plain values and defaults are not encrypted; use them only for non-sensitive settings.
 
+A [local sync cache](/guide/sync) stores an encrypted copy that fnox can read without contacting the vault. Revoking vault access does not invalidate a copy that someone can still decrypt. To stop a synced credential from working, revoke or rotate it in the service that accepts it.
+
 ## What you need to trust
 
 - **Project config and code.** Review the [config files and imports](/guide/config-files) before running fnox or loading secrets through [shell integration](/guide/shell-integration) in an unfamiliar checkout. Project config can select providers and plugins, and project code can read the secrets you give it.
