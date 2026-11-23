@@ -2669,13 +2669,18 @@ impl Config {
     fn load_secret_sources(&mut self, path: &Path) -> Result<()> {
         let tables = std::iter::once(&mut self.secrets)
             .chain(self.profiles.values_mut().map(|p| &mut p.secrets));
+        // Root and profile secrets can be active together, so ownership is
+        // checked across all tables; a profile may reuse the file of the root
+        // secret it overrides.
+        let mut seen: HashMap<PathBuf, String> = HashMap::new();
         for table in tables {
-            let mut seen: HashMap<PathBuf, String> = HashMap::new();
             for (key, secret) in table.iter_mut() {
                 secret.load_source(key, path)?;
                 if let Some(file) = secret.source_file(path) {
                     let file = fs::canonicalize(&file).unwrap_or(file);
-                    if let Some(other) = seen.insert(file, key.clone()) {
+                    if let Some(other) = seen.insert(file, key.clone())
+                        && other != *key
+                    {
                         return Err(FnoxError::Config(format!(
                             "Secrets '{other}' and '{key}' use the same `source` file"
                         )));
@@ -3349,10 +3354,12 @@ impl SecretConfig {
                 target.display()
             )));
         }
-        crate::files::write_file(&target, &format!("{value}\n"))?;
+        let written = format!("{value}\n");
+        crate::files::write_file(&target, &written)?;
         Ok(Some(SourceBackup {
             path: target,
             previous,
+            written,
         }))
     }
 
@@ -3487,11 +3494,16 @@ fn merge_inline_table(existing: &mut toml_edit::InlineTable, new: toml_edit::Inl
 pub struct SourceBackup {
     path: PathBuf,
     previous: Option<String>,
+    written: String,
 }
 
 impl SourceBackup {
-    /// Put the file back as it was
+    /// Put the file back as it was, unless another process has changed it since
+    /// this one wrote it (its newer ciphertext must not be lost)
     pub fn restore(self) {
+        if fs::read_to_string(&self.path).ok().as_deref() != Some(self.written.as_str()) {
+            return;
+        }
         match self.previous {
             Some(previous) => {
                 let _ = crate::files::write_file(&self.path, &previous);

@@ -152,6 +152,32 @@ SH
 	assert [ ! -e secrets/OTHER.age ]
 }
 
+@test "edit refuses to add a source to an inline secret" {
+	fnox set API_KEY hunter2 --provider age
+	cp fnox.toml before.toml
+	cat >"$HOME/editor.sh" <<'SH'
+#!/bin/sh
+sed -i 's#^API_KEY= {#API_KEY= { source = "secrets/API_KEY.age",#' "$1"
+SH
+	chmod +x "$HOME/editor.sh"
+	EDITOR="$HOME/editor.sh" run fnox edit
+	assert_failure
+	run diff fnox.toml before.toml
+	assert_success
+}
+
+@test "a profile secret cannot share the source file of a root secret" {
+	fnox set A one --source secrets/shared.age
+	cat >>fnox.toml <<'EOF2'
+
+[profiles.dev.secrets.B]
+source = "secrets/shared.age"
+EOF2
+	run fnox get A
+	assert_failure
+	assert_output --partial "same \`source\` file"
+}
+
 @test "two secrets cannot share a source file" {
 	fnox set A one --source secrets/shared.age
 	run fnox set B two --source secrets/shared.age

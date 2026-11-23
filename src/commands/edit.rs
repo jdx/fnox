@@ -837,6 +837,11 @@ impl EditCommand {
                 && secrets_map
                     .get(&lookup_key)
                     .is_some_and(|e| e.original_config.source.is_some());
+            if has_source && !from_source && secrets_map.contains_key(&lookup_key) {
+                return Err(FnoxError::Config(format!(
+                    "Cannot add `source` to existing secret '{key_str}' with `fnox edit`; use `fnox set --source` instead"
+                )));
+            }
             if from_source {
                 let edited = value
                     .as_inline_table()
