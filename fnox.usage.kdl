@@ -1311,7 +1311,12 @@ Needs an interactive terminal and a `url` on the secret (or `--url`). The URL is
         conflicts VALUE --from-file --generate
     }
     flag --show help="Print the generated value after storing it" requires=--generate
-    flag --source help="With `--file`, keep the stored content in this file, relative to the global config directory, instead of in the config" requires=--file {
+    flag --source help="Keep the stored ciphertext in this file instead of in the config" {
+        long_help #"""
+Keep the stored ciphertext in this file instead of in the config
+
+The path is relative to the directory of the config that holds the entry (the global config directory with `--file`) and cannot leave it. Without `--file` it needs an encryption provider such as age.
+"""#
         arg <SOURCE>
     }
     flag --url help="Page where a new value can be created (http or https)" {

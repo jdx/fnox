@@ -380,6 +380,13 @@ pub struct SecretConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<SpannedValue<String>>,
 
+    /// File holding the value (ciphertext) instead of `value`, relative to the
+    /// directory of the config that declares the secret. Cannot be combined with
+    /// `value` or leave that directory. `fnox set` and `fnox reencrypt` write
+    /// to it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+
     /// Where to inject this secret as an environment variable:
     /// - `true` — shell integration and `fnox exec` (default)
     /// - `"exec"` — only `fnox exec` subprocesses, never the interactive shell
@@ -1094,6 +1101,7 @@ impl Config {
 
         // Set source paths for all secrets and providers
         config.set_source_paths(path);
+        config.load_secret_sources(path)?;
 
         Ok(config)
     }
@@ -1736,6 +1744,7 @@ impl Config {
         use toml_edit::{DocumentMut, Item, Value};
 
         let target_file = default_target.to_path_buf();
+        secret_config.write_source_file(secret_name, &target_file)?;
 
         // Load existing document or create new one (preserves comments)
         let mut doc = if target_file.exists() {
@@ -1987,6 +1996,10 @@ impl Config {
         target_file: &Path,
     ) -> Result<()> {
         use toml_edit::{DocumentMut, Item, Value};
+
+        for (name, config) in secrets {
+            config.write_source_file(name, target_file)?;
+        }
 
         // Load existing document or create new one (preserves comments)
         let mut doc = if target_file.exists() {
@@ -2626,6 +2639,18 @@ impl Config {
         }
     }
 
+    /// Read the value of every secret that keeps it in a `source` file
+    fn load_secret_sources(&mut self, path: &Path) -> Result<()> {
+        let tables = std::iter::once(&mut self.secrets)
+            .chain(self.profiles.values_mut().map(|p| &mut p.secrets));
+        for table in tables {
+            for (key, secret) in table.iter_mut() {
+                secret.load_source(key, path)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Set source paths for all secrets and providers in this config
     fn set_source_paths(&mut self, path: &Path) {
         // Set source paths for default profile secrets
@@ -2911,6 +2936,7 @@ impl SecretConfig {
             default: None,
             provider: None,
             value: None,
+            source: None,
             env: None,
             as_file: false,
             sensitive: None,
@@ -2955,7 +2981,9 @@ impl SecretConfig {
         if let Some(provider) = self.provider() {
             inline.insert("provider", toml_edit::Value::from(provider));
         }
-        if let Some(value) = self.value() {
+        if let Some(source) = &self.source {
+            inline.insert("source", toml_edit::Value::from(source.as_str()));
+        } else if let Some(value) = self.value() {
             inline.insert("value", toml_edit::Value::from(value));
         }
         if let Some(ref json_path) = self.json_path {
@@ -3034,7 +3062,14 @@ impl SecretConfig {
         }
 
         set_or_remove(table, "provider", self.provider().map(Value::from));
-        set_or_remove(table, "value", self.value().map(Value::from));
+        set_or_remove(
+            table,
+            "value",
+            self.value()
+                .filter(|_| self.source.is_none())
+                .map(Value::from),
+        );
+        set_or_remove(table, "source", self.source.as_deref().map(Value::from));
         set_or_remove(
             table,
             "json_path",
@@ -3140,6 +3175,90 @@ impl SecretConfig {
     /// Set the provider name (without span information).
     pub fn set_provider(&mut self, provider: Option<String>) {
         self.provider = provider.map(SpannedValue::without_span);
+    }
+
+    /// Check that `source` is not combined with `value` and is a relative path
+    /// inside the config directory.
+    fn validate_source(&self, key: &str) -> Result<()> {
+        let Some(source) = &self.source else {
+            return Ok(());
+        };
+        if self.value.is_some() {
+            return Err(FnoxError::Config(format!(
+                "Secret '{key}' sets both `value` and `source`; use one"
+            )));
+        }
+        let path = Path::new(source);
+        let escapes = path.is_absolute()
+            || path.components().any(|c| {
+                matches!(
+                    c,
+                    std::path::Component::ParentDir | std::path::Component::Prefix(_)
+                )
+            });
+        if source.is_empty() || escapes {
+            return Err(FnoxError::Config(format!(
+                "Secret '{key}' has `source = \"{source}\"`; it must be a relative path inside the config directory"
+            )));
+        }
+        Ok(())
+    }
+
+    /// The path of `source`, in the directory of the config at `config_path`.
+    pub fn source_file(&self, config_path: &Path) -> Option<PathBuf> {
+        let source = self.source.as_ref()?;
+        Some(config_path.parent()?.join(source))
+    }
+
+    /// Replace `value` with the contents of the `source` file, if there is one.
+    fn load_source(&mut self, key: &str, config_path: &Path) -> Result<()> {
+        self.validate_source(key)?;
+        let Some(path) = self.source_file(config_path) else {
+            return Ok(());
+        };
+        let content = fs::read_to_string(&path)
+            .map_err(|source| FnoxError::SecretFileReadFailed { path, source })?;
+        self.set_value(Some(content.trim_end().to_string()));
+        Ok(())
+    }
+
+    /// Write `value` to the `source` file, if there is one. A symlink there, as
+    /// a dotfiles manager makes it, is written through so the link is kept.
+    pub fn write_source_file(&self, key: &str, config_path: &Path) -> Result<()> {
+        let Some(path) = self.source_file(config_path) else {
+            return Ok(());
+        };
+        let Some(value) = self.value() else {
+            return Ok(());
+        };
+        // `validate_source` rejects `value` next to `source`, which the loaded
+        // entry has, so check only the path here
+        let mut checked = self.clone();
+        checked.value = None;
+        checked.validate_source(key)?;
+        let target = if path
+            .symlink_metadata()
+            .is_ok_and(|meta| meta.file_type().is_symlink())
+        {
+            fs::canonicalize(&path).map_err(|e| {
+                FnoxError::Config(format!(
+                    "Source '{}' is a symlink that cannot be resolved: {e}",
+                    path.display()
+                ))
+            })?
+        } else {
+            path
+        };
+        if fs::canonicalize(&target)
+            .is_ok_and(|t| fs::canonicalize(config_path).is_ok_and(|c| t == c))
+        {
+            return Err(FnoxError::Config(format!(
+                "Source of secret '{key}' is the config file {}; choose another name",
+                config_path.display()
+            )));
+        }
+        crate::files::write_file(&target, &format!("{value}\n"))?;
+        Ok(())
     }
 
     /// Get the value, if set.

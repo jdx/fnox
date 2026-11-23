@@ -2146,6 +2146,10 @@
             }
           ]
         },
+        "source": {
+          "description": "File holding the value (ciphertext) instead of `value`, relative to the\ndirectory of the config that declares the secret. Cannot be combined with\n`value` or leave that directory. `fnox set` and `fnox reencrypt` write\nto it.",
+          "type": ["string", "null"]
+        },
         "env": {
           "description": "Where to inject this secret as an environment variable:\n- `true` — shell integration and `fnox exec` (default)\n- `\"exec\"` — only `fnox exec` subprocesses, never the interactive shell\n- `false` — never injected; only accessible via `fnox get`\n\nWhen unset, inherits the top-level `env` default (which itself defaults to `true`).",
           "anyOf": [

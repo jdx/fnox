@@ -57,7 +57,10 @@ The provider is `--provider`, else the secret's current provider, else `default_
   Needs an interactive terminal and a `url` on the secret (or `--url`). The URL is printed before the browser opens, so you can open it yourself over SSH. Without a URL, fnox warns and still prompts for the value.
 
 - **`--show`** — Print the generated value after storing it
-- **`--source <SOURCE>`** — With `--file`, keep the stored content in this file, relative to the global config directory, instead of in the config
+- **`--source <SOURCE>`** — Keep the stored ciphertext in this file instead of in the config
+
+  The path is relative to the directory of the config that holds the entry (the global config directory with `--file`) and cannot leave it. Without `--file` it needs an encryption provider such as age.
+
 - **`--url <URL>`** — Page where a new value can be created (http or https)
 
   Recorded with the secret, shown by `fnox list`, and opened by `--open`.
