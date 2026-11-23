@@ -245,15 +245,40 @@ impl EditCommand {
         }
         modified_config.inherit_outer_layers(&config, &own_files);
 
-        self.reencrypt_secrets(&modified_config, &mut modified_doc, &all_secrets)
-            .await?;
+        let mut pending_sources = Vec::new();
+        self.reencrypt_secrets(
+            &modified_config,
+            &mut modified_doc,
+            &all_secrets,
+            &mut pending_sources,
+        )
+        .await?;
 
         // Step 8: Save the modified config (preserves all user edits)
         // Strip the temporary file header comments before saving
         let output = Self::strip_temp_header(&modified_doc.to_string());
-        fs::write(&cli.config, output).map_err(|source| FnoxError::ConfigWriteFailed {
-            path: cli.config.clone(),
-            source,
+        // Source files first, put back if the config cannot be written
+        let mut backups = Vec::new();
+        for (key, secret) in &pending_sources {
+            match secret.write_source_file(key, &cli.config) {
+                Ok(Some(backup)) => backups.push(backup),
+                Ok(None) => {}
+                Err(e) => {
+                    backups
+                        .into_iter()
+                        .for_each(fnox_core::config::SourceBackup::restore);
+                    return Err(e);
+                }
+            }
+        }
+        fs::write(&cli.config, output).map_err(|source| {
+            backups
+                .into_iter()
+                .for_each(fnox_core::config::SourceBackup::restore);
+            FnoxError::ConfigWriteFailed {
+                path: cli.config.clone(),
+                source,
+            }
         })?;
 
         let check = console::style("✓").green();
@@ -711,6 +736,7 @@ impl EditCommand {
         config: &Config,
         modified_doc: &mut DocumentMut,
         all_secrets: &[SecretEntry],
+        pending_sources: &mut Vec<(String, SecretConfig)>,
     ) -> Result<()> {
         // Create a map of secrets by (profile, key) to avoid collisions
         let secrets_map: HashMap<_, _> = all_secrets
@@ -723,8 +749,14 @@ impl EditCommand {
             .get_mut("secrets")
             .and_then(|item| item.as_table_mut())
         {
-            self.reencrypt_secrets_table(config, secrets_table, "default", &secrets_map)
-                .await?;
+            self.reencrypt_secrets_table(
+                config,
+                secrets_table,
+                "default",
+                &secrets_map,
+                pending_sources,
+            )
+            .await?;
         }
 
         // Process [profiles.*] sections
@@ -747,6 +779,7 @@ impl EditCommand {
                         secrets_table,
                         &profile_name,
                         &secrets_map,
+                        pending_sources,
                     )
                     .await?;
                 }
@@ -763,6 +796,7 @@ impl EditCommand {
         secrets_table: &mut Table,
         secret_profile: &str,
         secrets_map: &HashMap<(String, String), &SecretEntry>,
+        pending_sources: &mut Vec<(String, SecretConfig)>,
     ) -> Result<()> {
         let profile_stack = vec![secret_profile.to_string()];
         // Collect keys first to avoid borrow issues when mutating
@@ -794,6 +828,16 @@ impl EditCommand {
                 continue;
             };
 
+            let has_source = value
+                .as_inline_table()
+                .map(|t| t.contains_key("source"))
+                .or_else(|| value.as_table().map(|t| t.contains_key("source")))
+                .unwrap_or(false);
+            let from_source = has_source
+                && secrets_map
+                    .get(&lookup_key)
+                    .is_some_and(|e| e.original_config.source.is_some());
+
             // Check if this is an existing secret or a new one
             if let Some(secret_entry) = secrets_map.get(&lookup_key) {
                 // Existing secret - check if read-only
@@ -810,7 +854,9 @@ impl EditCommand {
                         )));
                     }
                     // Read-only and unchanged - restore original encrypted value
-                    if let Some(original_value) = secret_entry.original_config.value() {
+                    if from_source {
+                        Self::clear_secret_value(value);
+                    } else if let Some(original_value) = secret_entry.original_config.value() {
                         Self::set_secret_value(value, original_value);
                     }
                     continue;
@@ -825,7 +871,9 @@ impl EditCommand {
 
                 if !value_changed && !provider_changed {
                     // Nothing changed - restore original encrypted value to avoid version control churn
-                    if let Some(original_value) = secret_entry.original_config.value() {
+                    if from_source {
+                        Self::clear_secret_value(value);
+                    } else if let Some(original_value) = secret_entry.original_config.value() {
                         Self::set_secret_value(value, original_value);
                     }
                     continue;
@@ -860,8 +908,21 @@ impl EditCommand {
                     plaintext.to_string()
                 };
 
-                Self::set_secret_value(value, &encrypted_value);
+                if from_source {
+                    // The ciphertext goes to the secret's source file, not the config
+                    let mut stored = secret_entry.original_config.clone();
+                    stored.set_value(Some(encrypted_value));
+                    pending_sources.push((key_str.clone(), stored));
+                    Self::clear_secret_value(value);
+                } else {
+                    Self::set_secret_value(value, &encrypted_value);
+                }
             } else {
+                if has_source {
+                    return Err(FnoxError::Config(format!(
+                        "Secret '{key_str}' is new and sets `source`; add it with `fnox set --source`"
+                    )));
+                }
                 // New secret added by user
                 tracing::debug!("New secret '{}' detected, encrypting", key_str);
 
@@ -898,6 +959,15 @@ impl EditCommand {
         }
 
         Ok(())
+    }
+
+    /// Remove the value field of a secret that keeps its value in a source file
+    fn clear_secret_value(item: &mut toml_edit::Item) {
+        if let Some(inline_table) = item.as_inline_table_mut() {
+            inline_table.remove("value");
+        } else if let Some(table) = item.as_table_mut() {
+            table.remove("value");
+        }
     }
 
     /// Helper to set the value field in a secret (handles both inline table and table formats)

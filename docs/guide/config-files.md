@@ -150,7 +150,7 @@ fnox resolves `VAULT_TOKEN` first (from config, then the environment), then uses
 Inline ciphertext makes `fnox.toml` noisy to review. With an encryption provider such as age, `source` keeps each secret's ciphertext in its own file instead of `value`:
 
 ```bash
-fnox set DATABASE_URL "postgres://..." --source secrets/DATABASE_URL.age
+fnox set DATABASE_URL "postgres://..." --provider age --source secrets/DATABASE_URL.age
 ```
 
 ```toml
@@ -160,7 +160,7 @@ DATABASE_URL = { provider = "age", source = "secrets/DATABASE_URL.age" }
 
 `fnox.toml` stays a readable index, and rotating one secret changes one small file. `fnox set` and `fnox reencrypt` write to the source file, and `fnox get` reads it like an inline value.
 
-The path is relative to the directory of the config that declares the secret and cannot leave it. `source` cannot be combined with `value`. `fnox set --source` refuses providers that do not encrypt, such as `plain`. Removing a secret leaves its file on disk. If a dotfiles manager links the source file into place, fnox writes through the link.
+The path is relative to the directory of the config that declares the secret. It cannot be absolute or contain `..`, and a link in a directory above the file cannot lead out of that directory. A link as the file itself, as a dotfiles manager makes, may point anywhere and is followed. `fnox set` and `fnox edit` refuse a path where a file already exists that does not belong to the same secret. `source` cannot be combined with `value`. `fnox set --source` refuses providers that do not encrypt, such as `plain`. Removing a secret leaves its file on disk. If a dotfiles manager links the source file into place, fnox writes through the link.
 
 ## See also
 

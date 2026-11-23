@@ -101,3 +101,84 @@ TOML
 	assert_failure
 	assert [ ! -e secrets/P.age ]
 }
+
+@test "provider changes keep the config loadable" {
+	fnox set API_KEY hunter2 --source secrets/API_KEY.age
+	run fnox provider add extra plain
+	assert_success
+	run grep -c 'value' fnox.toml
+	assert_output 0
+	run fnox get API_KEY
+	assert_success
+	assert_output hunter2
+}
+
+@test "edit leaves source secrets out of the config and updates the file" {
+	fnox set API_KEY hunter2 --source secrets/API_KEY.age
+	before="$(cat secrets/API_KEY.age)"
+	cp fnox.toml before.toml
+
+	EDITOR=true run fnox edit
+	assert_success
+	run diff fnox.toml before.toml
+	assert_success
+	assert [ "$(cat secrets/API_KEY.age)" = "$before" ]
+
+	cat >"$HOME/editor.sh" <<'SH'
+#!/bin/sh
+sed -i 's/hunter2/changed/' "$1"
+SH
+	chmod +x "$HOME/editor.sh"
+	EDITOR="$HOME/editor.sh" run fnox edit
+	assert_success
+	run grep -c 'value' fnox.toml
+	assert_output 0
+	run fnox get API_KEY
+	assert_output changed
+}
+
+@test "two secrets cannot share a source file" {
+	fnox set A one --source secrets/shared.age
+	run fnox set B two --source secrets/shared.age
+	assert_failure
+	assert_output --partial "already exists"
+	run fnox get A
+	assert_output one
+}
+
+@test "an existing file is not overwritten by a new source" {
+	mkdir secrets
+	echo keep >secrets/mine.age
+	run fnox set A one --source secrets/mine.age
+	assert_failure
+	assert [ "$(cat secrets/mine.age)" = keep ]
+	run grep -c 'secrets/mine.age' fnox.toml
+	assert_output 0
+}
+
+@test "the config file cannot be its own source" {
+	run fnox set A one --source fnox.toml
+	assert_failure
+	assert_output --partial "is the config file"
+}
+
+@test "a linked directory cannot lead out of the config directory" {
+	mkdir "$HOME/outside"
+	ln -s "$HOME/outside" linked
+	run fnox set A one --source linked/A.age
+	assert_failure
+	assert [ ! -e "$HOME/outside/A.age" ]
+}
+
+@test "a child config does not share the parent's source file" {
+	fnox set A one --source secrets/A.age
+	mkdir child
+	run bash -c "cd child && fnox set A two"
+	assert_success
+	run grep -c 'source' child/fnox.toml
+	assert_output 0
+	run bash -c "cd child && fnox get A"
+	assert_output two
+	run fnox get A
+	assert_output one
+}

@@ -597,12 +597,13 @@ impl SetCommand {
             .flatten();
         let secret_config = profile_secrets
             .entry(self.key().to_string())
-            .or_insert_with(|| {
-                let mut seeded = inherited_secret.unwrap_or_default();
-                // The inherited file belongs to the config that declares it
-                seeded.source = None;
-                seeded
-            });
+            .or_insert_with(|| inherited_secret.unwrap_or_default());
+
+        // An entry from another config keeps its file there; this one gets the
+        // value inline instead, so the two never share a file
+        if existing_secret.is_none() && secret_config.source.is_some() {
+            secret_config.set_source(None);
+        }
 
         if let Some(ref source) = self.source {
             if encrypted_value.is_none() {
@@ -611,7 +612,7 @@ impl SetCommand {
                     self.key()
                 )));
             }
-            secret_config.source = Some(source.clone());
+            secret_config.set_source(Some(source.clone()));
         }
 
         // Update metadata

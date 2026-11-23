@@ -266,6 +266,14 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
                 && let Ok(modified) = metadata.modified()
                 && let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH)
             {
+                for source in secret_source_files(&config_path) {
+                    if let Ok(metadata) = std::fs::metadata(&source)
+                        && let Ok(modified) = metadata.modified()
+                        && let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH)
+                    {
+                        configs.push((source, duration.as_millis()));
+                    }
+                }
                 configs.push((config_path, duration.as_millis()));
             }
         }
@@ -286,6 +294,38 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
     }
 
     configs
+}
+
+/// The `source` files that the secrets of a config keep their ciphertext in, so
+/// that rotating one without touching the config is noticed
+fn secret_source_files(config_path: &Path) -> Vec<PathBuf> {
+    let Ok(text) = std::fs::read_to_string(config_path) else {
+        return Vec::new();
+    };
+    if !text.contains("source") {
+        return Vec::new();
+    }
+    let Ok(doc) = text.parse::<toml_edit::DocumentMut>() else {
+        return Vec::new();
+    };
+    let dir = config_path.parent().unwrap_or(Path::new(""));
+    let mut tables = Vec::new();
+    if let Some(table) = doc.get("secrets").and_then(|s| s.as_table_like()) {
+        tables.push(table);
+    }
+    if let Some(profiles) = doc.get("profiles").and_then(|p| p.as_table_like()) {
+        for (_, profile) in profiles.iter() {
+            if let Some(table) = profile.get("secrets").and_then(|s| s.as_table_like()) {
+                tables.push(table);
+            }
+        }
+    }
+    tables
+        .into_iter()
+        .flat_map(|table| table.iter())
+        .filter_map(|(_, secret)| secret.get("source")?.as_str())
+        .map(|source| dir.join(source))
+        .collect()
 }
 
 /// Create a hash of config files and their modification times
