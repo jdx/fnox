@@ -8,6 +8,7 @@ const start = {
     page("Quick start", "/guide/quick-start"),
     page("Use an existing vault", "/guide/existing-vault"),
     page("How fnox works", "/guide/how-it-works"),
+    page("Security and threat model", "/guide/security"),
   ],
 };
 const reference = {
