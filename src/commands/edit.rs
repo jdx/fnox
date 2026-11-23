@@ -837,6 +837,26 @@ impl EditCommand {
                 && secrets_map
                     .get(&lookup_key)
                     .is_some_and(|e| e.original_config.source.is_some());
+            if from_source {
+                let edited = value
+                    .as_inline_table()
+                    .and_then(|t| t.get("source"))
+                    .or_else(|| {
+                        value
+                            .as_table()
+                            .and_then(|t| t.get("source"))
+                            .and_then(|i| i.as_value())
+                    })
+                    .and_then(|v| v.as_str());
+                let original = secrets_map
+                    .get(&lookup_key)
+                    .and_then(|e| e.original_config.source.as_deref());
+                if edited != original {
+                    return Err(FnoxError::Config(format!(
+                        "Cannot change `source` of secret '{key_str}' with `fnox edit`; use `fnox set --source` instead"
+                    )));
+                }
+            }
 
             // Check if this is an existing secret or a new one
             if let Some(secret_entry) = secrets_map.get(&lookup_key) {

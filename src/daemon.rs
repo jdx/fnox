@@ -1949,6 +1949,12 @@ fn cache_key(
     hasher.update(key.as_bytes());
     hasher.update(purpose.as_bytes());
     hasher.update(serde_json::to_string(secret).unwrap_or_default().as_bytes());
+    // Ciphertext loaded from a `source` file is not serialized, so hash it
+    // separately: rotating the file must invalidate the cached value.
+    if secret.source.is_some() {
+        hasher.update(b"\0source\0");
+        hasher.update(secret.value().unwrap_or_default().as_bytes());
+    }
     CacheKey {
         secret: key.to_string(),
         hash: hasher.finalize().to_hex().to_string(),

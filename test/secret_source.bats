@@ -137,6 +137,21 @@ SH
 	assert_output changed
 }
 
+@test "edit refuses to change a secret's source path" {
+	fnox set API_KEY hunter2 --source secrets/API_KEY.age
+	before="$(cat secrets/API_KEY.age)"
+	cat >"$HOME/editor.sh" <<'SH'
+#!/bin/sh
+sed -i 's#secrets/API_KEY.age#secrets/OTHER.age#; s/hunter2/changed/' "$1"
+SH
+	chmod +x "$HOME/editor.sh"
+	EDITOR="$HOME/editor.sh" run fnox edit
+	assert_failure
+	assert_output --partial "Cannot change \`source\`"
+	assert [ "$(cat secrets/API_KEY.age)" = "$before" ]
+	assert [ ! -e secrets/OTHER.age ]
+}
+
 @test "two secrets cannot share a source file" {
 	fnox set A one --source secrets/shared.age
 	run fnox set B two --source secrets/shared.age
