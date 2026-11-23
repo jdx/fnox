@@ -824,6 +824,29 @@ impl EditCommand {
                 continue;
             };
 
+            // A retargeted `source` is refused even when the injected `value` was
+            // dropped, which would otherwise skip the secret altogether
+            if let Some(original) = secrets_map
+                .get(&lookup_key)
+                .and_then(|e| e.original_config.source.as_deref())
+            {
+                let edited = value
+                    .as_inline_table()
+                    .and_then(|t| t.get("source"))
+                    .or_else(|| {
+                        value
+                            .as_table()
+                            .and_then(|t| t.get("source"))
+                            .and_then(|i| i.as_value())
+                    })
+                    .and_then(|v| v.as_str());
+                if edited != Some(original) {
+                    return Err(FnoxError::Config(format!(
+                        "Cannot change `source` of secret '{key_str}' with `fnox edit`; use `fnox set --source` instead"
+                    )));
+                }
+            }
+
             let Some(plaintext) = plaintext else {
                 continue;
             };

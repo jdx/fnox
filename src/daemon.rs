@@ -1996,6 +1996,25 @@ fn config_fingerprint(config: &Config, env: &[(String, String)]) -> Result<Strin
             hasher.update(&content);
         }
     }
+    // Ciphertext kept in `source` files is not part of any config file hashed
+    // above, so a rotation must change the fingerprint too.
+    let mut sourced: Vec<(&str, &str)> = Vec::new();
+    for (key, secret) in config
+        .secrets
+        .iter()
+        .chain(config.profiles.values().flat_map(|p| p.secrets.iter()))
+    {
+        if secret.source.is_some() {
+            sourced.push((key.as_str(), secret.value().unwrap_or_default()));
+        }
+    }
+    sourced.sort();
+    for (key, value) in sourced {
+        hasher.update(b"source\0");
+        hasher.update(key.as_bytes());
+        hasher.update(b"\0");
+        hasher.update(value.as_bytes());
+    }
     // Entries copy their TTLs when stored, and `[daemon]` may live in a file the
     // sources above do not cover, such as the global config. Changing a
     // timer must not leave older entries on the old limits.
