@@ -263,7 +263,7 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
         // Check all config filenames (fnox.toml, .fnox.toml, fnox.$PROFILE.toml, etc.)
         for filename in &filenames {
             let config_path = current.join(filename);
-            push_config_with_dependencies(&mut configs, &config_path, &mut visited);
+            push_config_with_dependencies(&mut configs, &config_path, &mut visited, true);
         }
 
         // Move to parent directory
@@ -274,7 +274,7 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
 
     // Also check global config for change detection
     let global = Config::global_config_path();
-    push_config_with_dependencies(&mut configs, &global, &mut visited);
+    push_config_with_dependencies(&mut configs, &global, &mut visited, true);
 
     configs
 }
@@ -284,7 +284,8 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
 fn push_config_with_dependencies(
     configs: &mut Vec<(PathBuf, u128)>,
     config_path: &Path,
-    visited: &mut std::collections::HashSet<(PathBuf, PathBuf)>,
+    visited: &mut std::collections::HashSet<(PathBuf, PathBuf, bool)>,
+    follow_imports: bool,
 ) {
     let mtime = |path: &Path| {
         std::fs::metadata(path)
@@ -303,7 +304,7 @@ fn push_config_with_dependencies(
     // between symlinks to one file.
     let canonical = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
     let parent = config_path.parent().map(canonical).unwrap_or_default();
-    if !visited.insert((canonical(config_path), parent)) {
+    if !visited.insert((canonical(config_path), parent, follow_imports)) {
         return;
     }
     let (sources, imports) = config_dependencies(config_path);
@@ -313,8 +314,14 @@ fn push_config_with_dependencies(
         }
     }
     configs.push((config_path.to_path_buf(), config_mtime));
-    for import in imports {
-        push_config_with_dependencies(configs, &import, visited);
+    // Loading applies only the direct imports of a config it discovers, never
+    // the imports of an imported file. The flag is part of the visited key so
+    // a file reached first as an import still has its own imports followed
+    // when it is discovered.
+    if follow_imports {
+        for import in imports {
+            push_config_with_dependencies(configs, &import, visited, false);
+        }
     }
 }
 
