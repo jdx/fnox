@@ -126,7 +126,7 @@ TOML
 
 	cat >"$HOME/editor.sh" <<'SH'
 #!/bin/sh
-sed -i 's/hunter2/changed/' "$1"
+sed -i.bak 's/hunter2/changed/' "$1"
 SH
 	chmod +x "$HOME/editor.sh"
 	EDITOR="$HOME/editor.sh" run fnox edit
@@ -142,7 +142,7 @@ SH
 	before="$(cat secrets/API_KEY.age)"
 	cat >"$HOME/editor.sh" <<'SH'
 #!/bin/sh
-sed -i 's#secrets/API_KEY.age#secrets/OTHER.age#; s/hunter2/changed/' "$1"
+sed -i.bak 's#secrets/API_KEY.age#secrets/OTHER.age#; s/hunter2/changed/' "$1"
 SH
 	chmod +x "$HOME/editor.sh"
 	EDITOR="$HOME/editor.sh" run fnox edit
@@ -157,7 +157,7 @@ SH
 	cp fnox.toml before.toml
 	cat >"$HOME/editor.sh" <<'SH'
 #!/bin/sh
-sed -i 's#^API_KEY= {#API_KEY= { source = "secrets/API_KEY.age",#' "$1"
+sed -i.bak 's#^API_KEY= {#API_KEY= { source = "secrets/API_KEY.age",#' "$1"
 SH
 	chmod +x "$HOME/editor.sh"
 	EDITOR="$HOME/editor.sh" run fnox edit
