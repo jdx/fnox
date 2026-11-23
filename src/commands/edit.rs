@@ -847,6 +847,20 @@ impl EditCommand {
                 }
             }
 
+            let edited_has_source = value
+                .as_inline_table()
+                .map(|t| t.contains_key("source"))
+                .or_else(|| value.as_table().map(|t| t.contains_key("source")))
+                .unwrap_or(false);
+            let original_has_source = secrets_map
+                .get(&lookup_key)
+                .is_some_and(|e| e.original_config.source.is_some());
+            if edited_has_source && !original_has_source {
+                return Err(FnoxError::Config(format!(
+                    "Cannot add `source` to secret '{key_str}' with `fnox edit`; use `fnox set --source` instead"
+                )));
+            }
+
             let Some(plaintext) = plaintext else {
                 continue;
             };

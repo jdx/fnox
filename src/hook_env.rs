@@ -263,7 +263,7 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
         // Check all config filenames (fnox.toml, .fnox.toml, fnox.$PROFILE.toml, etc.)
         for filename in &filenames {
             let config_path = current.join(filename);
-            push_config_with_dependencies(&mut configs, &config_path, &mut visited);
+            push_config_with_dependencies(&mut configs, &config_path, &mut visited, true);
         }
 
         // Move to parent directory
@@ -274,7 +274,7 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
 
     // Also check global config for change detection
     let global = Config::global_config_path();
-    push_config_with_dependencies(&mut configs, &global, &mut visited);
+    push_config_with_dependencies(&mut configs, &global, &mut visited, true);
 
     configs
 }
@@ -285,6 +285,7 @@ fn push_config_with_dependencies(
     configs: &mut Vec<(PathBuf, u128)>,
     config_path: &Path,
     visited: &mut std::collections::HashSet<PathBuf>,
+    follow_imports: bool,
 ) {
     let mtime = |path: &Path| {
         std::fs::metadata(path)
@@ -306,8 +307,11 @@ fn push_config_with_dependencies(
         }
     }
     configs.push((config_path.to_path_buf(), config_mtime));
-    for import in imports {
-        push_config_with_dependencies(configs, &import, visited);
+    // Only direct imports are loaded, so imports inside them are not followed
+    if follow_imports {
+        for import in imports {
+            push_config_with_dependencies(configs, &import, visited, false);
+        }
     }
 }
 
