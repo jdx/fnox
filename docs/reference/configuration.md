@@ -206,24 +206,25 @@ DATABASE_URL = { provider = "op", value = "Database/url", description = "Main da
 
 Secret names are environment variable names: they must match `^[A-Za-z_][A-Za-z0-9_]*$`. Every field is optional; `API_KEY = {}` declares a secret that comes from the environment.
 
-| Field           | Type                            | Default                      | Description                                                                                        |
-| --------------- | ------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------- |
-| `provider`      | string                          | `default_provider`           | Provider that holds or decrypts the value.                                                         |
-| `value`         | string                          | none                         | Ciphertext for encryption providers, or the item reference for remote providers.                   |
-| `default`       | string                          | none                         | Fallback when the provider returns nothing or fails.                                               |
-| `if_missing`    | `"error"`, `"warn"`, `"ignore"` | inherited                    | Missing-secret behavior for this secret.                                                           |
-| `env`           | `true`, `"exec"`, `false`       | top-level `env`              | Where the secret is injected as an environment variable.                                           |
-| `as_file`       | boolean                         | `false`                      | Inject the path of a temporary file holding the value.                                             |
-| `sensitive`     | boolean                         | `true`                       | Set `false` to leave the value readable in redacted output. See [`sensitive`](#sensitive).         |
-| `json_path`     | string                          | none                         | Extract a field from a JSON value, with dot notation for nesting.                                  |
-| `line`          | integer, 1 or more              | none                         | Extract one line from a multi-line value.                                                          |
-| `description`   | string                          | none                         | Shown by `fnox list`.                                                                              |
-| `url`           | string                          | none                         | `http(s)` page where a new value is created. Shown by `fnox list`; `fnox set KEY --open` opens it. |
-| `daemon_cache`  | boolean                         | `true`                       | Set `false` to resolve this secret directly instead of from the daemon cache.                      |
-| `cache_ttl`     | duration                        | provider or `[daemon]` value | Sliding TTL for this secret in the daemon cache. Overrides the provider and `[daemon]` values.     |
-| `max_cache_ttl` | duration                        | provider or `[daemon]` value | Absolute TTL for this secret in the daemon cache. Overrides the provider and `[daemon]` values.    |
-| `sync`          | table                           | none                         | Encrypted cache written by `fnox sync`.                                                            |
-| `push`          | array of strings                | none                         | [Push targets](#push-targets) that `fnox push` copies the value into.                              |
+| Field           | Type                            | Default                      | Description                                                                                             |
+| --------------- | ------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `provider`      | string                          | `default_provider`           | Provider that holds or decrypts the value.                                                              |
+| `value`         | string                          | none                         | Ciphertext for encryption providers, or the item reference for remote providers.                        |
+| `source`        | string                          | none                         | File holding the ciphertext instead of `value`. See [separate files](/guide/config-files#source-files). |
+| `default`       | string                          | none                         | Fallback when the provider returns nothing or fails.                                                    |
+| `if_missing`    | `"error"`, `"warn"`, `"ignore"` | inherited                    | Missing-secret behavior for this secret.                                                                |
+| `env`           | `true`, `"exec"`, `false`       | top-level `env`              | Where the secret is injected as an environment variable.                                                |
+| `as_file`       | boolean                         | `false`                      | Inject the path of a temporary file holding the value.                                                  |
+| `sensitive`     | boolean                         | `true`                       | Set `false` to leave the value readable in redacted output. See [`sensitive`](#sensitive).              |
+| `json_path`     | string                          | none                         | Extract a field from a JSON value, with dot notation for nesting.                                       |
+| `line`          | integer, 1 or more              | none                         | Extract one line from a multi-line value.                                                               |
+| `description`   | string                          | none                         | Shown by `fnox list`.                                                                                   |
+| `url`           | string                          | none                         | `http(s)` page where a new value is created. Shown by `fnox list`; `fnox set KEY --open` opens it.      |
+| `daemon_cache`  | boolean                         | `true`                       | Set `false` to resolve this secret directly instead of from the daemon cache.                           |
+| `cache_ttl`     | duration                        | provider or `[daemon]` value | Sliding TTL for this secret in the daemon cache. Overrides the provider and `[daemon]` values.          |
+| `max_cache_ttl` | duration                        | provider or `[daemon]` value | Absolute TTL for this secret in the daemon cache. Overrides the provider and `[daemon]` values.         |
+| `sync`          | table                           | none                         | Encrypted cache written by `fnox sync`.                                                                 |
+| `push`          | array of strings                | none                         | [Push targets](#push-targets) that `fnox push` copies the value into.                                   |
 
 ### Resolution order
 

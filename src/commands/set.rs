@@ -257,9 +257,12 @@ pub struct SetCommand {
     #[usage(long, requires = "generate")]
     pub show: bool,
 
-    /// With `--file`, keep the stored content in this file, relative to the
-    /// global config directory, instead of in the config
-    #[usage(long, requires = "file")]
+    /// Keep the stored ciphertext in this file instead of in the config
+    ///
+    /// The path is relative to the directory of the config that holds the entry
+    /// (the global config directory with `--file`) and cannot leave it. Without
+    /// `--file` it needs an encryption provider such as age.
+    #[usage(long)]
     pub source: Option<String>,
 
     /// Page where a new value can be created (http or https)
@@ -513,6 +516,16 @@ impl SetCommand {
                     let is_remote_storage_provider =
                         capabilities.contains(&crate::providers::ProviderCapability::RemoteStorage);
 
+                    if self.source.is_some()
+                        && (!is_encryption_provider
+                            || matches!(provider_config, config::ProviderConfig::Plain { .. }))
+                    {
+                        return Err(FnoxError::Config(format!(
+                            "--source needs an encryption provider such as age; '{provider_name}' does not encrypt '{}'",
+                            self.key()
+                        )));
+                    }
+
                     if is_encryption_provider {
                         tracing::debug!(
                             "Encrypting secret value with provider '{}'",
@@ -585,6 +598,22 @@ impl SetCommand {
         let secret_config = profile_secrets
             .entry(self.key().to_string())
             .or_insert_with(|| inherited_secret.unwrap_or_default());
+
+        // An entry from another config keeps its file there; this one gets the
+        // value inline instead, so the two never share a file
+        if existing_secret.is_none() && secret_config.source.is_some() {
+            secret_config.set_source(None);
+        }
+
+        if let Some(ref source) = self.source {
+            if encrypted_value.is_none() {
+                return Err(FnoxError::Config(format!(
+                    "--source needs an encryption provider such as age to store '{}'",
+                    self.key()
+                )));
+            }
+            secret_config.set_source(Some(source.clone()));
+        }
 
         // Update metadata
         if let Some(ref desc) = self.description {

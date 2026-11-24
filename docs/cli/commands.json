@@ -4647,8 +4647,9 @@
           {
             "name": "source",
             "usage": "--source <SOURCE>",
-            "help": "With `--file`, keep the stored content in this file, relative to the global config directory, instead of in the config",
-            "help_first_line": "With `--file`, keep the stored content in this file, relative to the global config directory, instead of in the config",
+            "help": "Keep the stored ciphertext in this file instead of in the config",
+            "help_long": "Keep the stored ciphertext in this file instead of in the config\n\nThe path is relative to the directory of the config that holds the entry (the global config directory with `--file`) and cannot leave it. Without `--file` it needs an encryption provider such as age.",
+            "help_first_line": "Keep the stored ciphertext in this file instead of in the config",
             "short": [],
             "long": ["source"],
             "hide": false,
@@ -4659,8 +4660,7 @@
               "required": true,
               "double_dash": "Optional",
               "hide": false
-            },
-            "requires": ["--file"]
+            }
           },
           {
             "name": "url",

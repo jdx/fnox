@@ -380,6 +380,22 @@ pub struct SecretConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<SpannedValue<String>>,
 
+    /// File holding the value (ciphertext) instead of `value`, relative to the
+    /// directory of the config that declares the secret. Cannot be combined with
+    /// `value` or leave that directory. `fnox set` and `fnox reencrypt` write
+    /// to it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+
+    /// Ciphertext read from `source` (not serialized)
+    #[serde(skip)]
+    source_content: Option<String>,
+
+    /// Whether `source_content` was read from the file at `source`, so the
+    /// secret may overwrite it (not serialized)
+    #[serde(skip)]
+    source_owned: bool,
+
     /// Where to inject this secret as an environment variable:
     /// - `true` — shell integration and `fnox exec` (default)
     /// - `"exec"` — only `fnox exec` subprocesses, never the interactive shell
@@ -1094,6 +1110,7 @@ impl Config {
 
         // Set source paths for all secrets and providers
         config.set_source_paths(path);
+        config.load_secret_sources(path)?;
 
         Ok(config)
     }
@@ -1793,8 +1810,14 @@ impl Config {
             }
         }
 
+        // Write the source file first and put it back if the config cannot be written
+        let backup = secret_config.write_source_file(secret_name, &target_file)?;
+
         // Write back (preserves all comments and formatting)
         fs::write(&target_file, doc.to_string()).map_err(|source| {
+            if let Some(backup) = backup {
+                backup.restore();
+            }
             FnoxError::ConfigWriteFailed {
                 path: target_file,
                 source,
@@ -2050,10 +2073,26 @@ impl Config {
             }
         }
 
+        // Write the source files first and put them back if the config cannot be written
+        let mut backups = Vec::new();
+        for (name, config) in secrets {
+            match config.write_source_file(name, target_file) {
+                Ok(Some(backup)) => backups.push(backup),
+                Ok(None) => {}
+                Err(e) => {
+                    backups.into_iter().rev().for_each(SourceBackup::restore);
+                    return Err(e);
+                }
+            }
+        }
+
         // Write back (preserves all comments and formatting)
-        fs::write(target_file, doc.to_string()).map_err(|source| FnoxError::ConfigWriteFailed {
-            path: target_file.to_path_buf(),
-            source,
+        fs::write(target_file, doc.to_string()).map_err(|source| {
+            backups.into_iter().rev().for_each(SourceBackup::restore);
+            FnoxError::ConfigWriteFailed {
+                path: target_file.to_path_buf(),
+                source,
+            }
         })?;
 
         Ok(())
@@ -2626,6 +2665,32 @@ impl Config {
         }
     }
 
+    /// Read the value of every secret that keeps it in a `source` file
+    fn load_secret_sources(&mut self, path: &Path) -> Result<()> {
+        let tables = std::iter::once(&mut self.secrets)
+            .chain(self.profiles.values_mut().map(|p| &mut p.secrets));
+        // Root and profile secrets can be active together, so ownership is
+        // checked across all tables; a profile may reuse the file of the root
+        // secret it overrides.
+        let mut seen: HashMap<PathBuf, String> = HashMap::new();
+        for table in tables {
+            for (key, secret) in table.iter_mut() {
+                secret.load_source(key, path)?;
+                if let Some(file) = secret.source_file(path) {
+                    let file = fs::canonicalize(&file).unwrap_or(file);
+                    if let Some(other) = seen.insert(file, key.clone())
+                        && other != *key
+                    {
+                        return Err(FnoxError::Config(format!(
+                            "Secrets '{other}' and '{key}' use the same `source` file"
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Set source paths for all secrets and providers in this config
     fn set_source_paths(&mut self, path: &Path) {
         // Set source paths for default profile secrets
@@ -2911,6 +2976,9 @@ impl SecretConfig {
             default: None,
             provider: None,
             value: None,
+            source: None,
+            source_content: None,
+            source_owned: false,
             env: None,
             as_file: false,
             sensitive: None,
@@ -2955,7 +3023,9 @@ impl SecretConfig {
         if let Some(provider) = self.provider() {
             inline.insert("provider", toml_edit::Value::from(provider));
         }
-        if let Some(value) = self.value() {
+        if let Some(source) = &self.source {
+            inline.insert("source", toml_edit::Value::from(source.as_str()));
+        } else if let Some(value) = self.value() {
             inline.insert("value", toml_edit::Value::from(value));
         }
         if let Some(ref json_path) = self.json_path {
@@ -3034,7 +3104,14 @@ impl SecretConfig {
         }
 
         set_or_remove(table, "provider", self.provider().map(Value::from));
-        set_or_remove(table, "value", self.value().map(Value::from));
+        set_or_remove(
+            table,
+            "value",
+            self.value()
+                .filter(|_| self.source.is_none())
+                .map(Value::from),
+        );
+        set_or_remove(table, "source", self.source.as_deref().map(Value::from));
         set_or_remove(
             table,
             "json_path",
@@ -3142,16 +3219,167 @@ impl SecretConfig {
         self.provider = provider.map(SpannedValue::without_span);
     }
 
+    /// Check that `source` is not combined with `value` and is a relative path
+    /// inside the config directory.
+    fn validate_source(&self, key: &str) -> Result<()> {
+        let Some(source) = &self.source else {
+            return Ok(());
+        };
+        if self.value.is_some() {
+            return Err(FnoxError::Config(format!(
+                "Secret '{key}' sets both `value` and `source`; use one"
+            )));
+        }
+        let path = Path::new(source);
+        let escapes = path.is_absolute()
+            || path.components().any(|c| {
+                matches!(
+                    c,
+                    std::path::Component::ParentDir | std::path::Component::Prefix(_)
+                )
+            });
+        if source.is_empty() || escapes {
+            return Err(FnoxError::Config(format!(
+                "Secret '{key}' has `source = \"{source}\"`; it must be a relative path inside the config directory"
+            )));
+        }
+        Ok(())
+    }
+
+    /// The path of `source`, in the directory of the config at `config_path`.
+    pub fn source_file(&self, config_path: &Path) -> Option<PathBuf> {
+        let source = self.source.as_ref()?;
+        Some(config_path.parent()?.join(source))
+    }
+
+    /// The path `source` leads to once links are followed, checked to stay in
+    /// the config directory and not to be the config file itself.
+    ///
+    /// A link as the last component, as a dotfiles manager makes it, may lead
+    /// anywhere and is followed. A link in a directory above it may not leave
+    /// the config directory.
+    fn resolve_source(&self, key: &str, config_path: &Path) -> Result<Option<PathBuf>> {
+        self.validate_source(key)?;
+        let Some(path) = self.source_file(config_path) else {
+            return Ok(None);
+        };
+        let dir = config_path
+            .parent()
+            .filter(|d| !d.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        let canon_dir = fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+        let mut ancestor = path.parent().unwrap_or(dir);
+        while !ancestor.exists() {
+            match ancestor.parent() {
+                Some(parent) => ancestor = parent,
+                None => break,
+            }
+        }
+        if let Ok(canon) = fs::canonicalize(ancestor)
+            && !canon.starts_with(&canon_dir)
+        {
+            return Err(FnoxError::Config(format!(
+                "Source '{}' of secret '{key}' leaves the config directory through a link",
+                path.display()
+            )));
+        }
+        let target = if path
+            .symlink_metadata()
+            .is_ok_and(|meta| meta.file_type().is_symlink())
+        {
+            fs::canonicalize(&path).map_err(|e| {
+                FnoxError::Config(format!(
+                    "Source '{}' is a symlink that cannot be resolved: {e}",
+                    path.display()
+                ))
+            })?
+        } else {
+            path.clone()
+        };
+        let same = |a: &Path, b: &Path| {
+            a.components().eq(b.components())
+                || fs::canonicalize(a).is_ok_and(|a| fs::canonicalize(b).is_ok_and(|b| a == b))
+        };
+        if same(&path, config_path) || same(&target, config_path) {
+            return Err(FnoxError::Config(format!(
+                "Source of secret '{key}' is the config file {}; choose another name",
+                config_path.display()
+            )));
+        }
+        Ok(Some(target))
+    }
+
+    /// Read the ciphertext of the `source` file, if there is one.
+    fn load_source(&mut self, key: &str, config_path: &Path) -> Result<()> {
+        let Some(path) = self.resolve_source(key, config_path)? else {
+            return Ok(());
+        };
+        let content = fs::read_to_string(&path)
+            .map_err(|source| FnoxError::SecretFileReadFailed { path, source })?;
+        self.source_content = Some(content.trim_end().to_string());
+        self.source_owned = true;
+        Ok(())
+    }
+
+    /// Keep the value in the file at `source` (or inline again with `None`).
+    /// The value is carried over.
+    pub fn set_source(&mut self, source: Option<String>) {
+        let current = self.value().map(str::to_string);
+        if self.source != source {
+            self.source_owned = false;
+        }
+        self.source = source;
+        self.value = None;
+        self.source_content = None;
+        self.set_value(current);
+    }
+
+    /// Write the value to the `source` file, if there is one. Returns what is
+    /// needed to put the file back if the config cannot be written after it.
+    ///
+    /// A file that exists and was not read as this secret's own is refused, so
+    /// two secrets cannot share one and a mistaken path cannot destroy another
+    /// file.
+    pub fn write_source_file(&self, key: &str, config_path: &Path) -> Result<Option<SourceBackup>> {
+        let Some(target) = self.resolve_source(key, config_path)? else {
+            return Ok(None);
+        };
+        let Some(value) = self.value() else {
+            return Ok(None);
+        };
+        let previous = fs::read_to_string(&target).ok();
+        if !self.source_owned && (previous.is_some() || target.exists()) {
+            return Err(FnoxError::Config(format!(
+                "Source '{}' of secret '{key}' already exists; choose another name",
+                target.display()
+            )));
+        }
+        let written = format!("{value}\n");
+        crate::files::write_file(&target, &written)?;
+        Ok(Some(SourceBackup {
+            path: target,
+            previous,
+            written,
+        }))
+    }
+
     /// Get the value, if set.
     pub fn value(&self) -> Option<&str> {
         self.value
             .as_ref()
             .map(|s: &SpannedValue<String>| s.value().as_str())
+            .or(self.source_content.as_deref())
     }
 
-    /// Set the value (without span information).
+    /// Set the value (without span information). With a `source`, it is kept
+    /// for the source file and never written inline.
     pub fn set_value(&mut self, value: Option<String>) {
-        self.value = value.map(SpannedValue::without_span);
+        if self.source.is_some() {
+            self.value = None;
+            self.source_content = value;
+        } else {
+            self.value = value.map(SpannedValue::without_span);
+        }
     }
 }
 
@@ -3257,6 +3485,31 @@ fn merge_inline_table(existing: &mut toml_edit::InlineTable, new: toml_edit::Inl
             }
             None => {
                 existing.insert(&key, value);
+            }
+        }
+    }
+}
+
+/// A `source` file as it was before a write, to put back if the config write fails
+pub struct SourceBackup {
+    path: PathBuf,
+    previous: Option<String>,
+    written: String,
+}
+
+impl SourceBackup {
+    /// Put the file back as it was, unless another process has changed it since
+    /// this one wrote it (its newer ciphertext must not be lost)
+    pub fn restore(self) {
+        if fs::read_to_string(&self.path).ok().as_deref() != Some(self.written.as_str()) {
+            return;
+        }
+        match self.previous {
+            Some(previous) => {
+                let _ = crate::files::write_file(&self.path, &previous);
+            }
+            None => {
+                let _ = fs::remove_file(&self.path);
             }
         }
     }

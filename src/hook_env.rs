@@ -252,6 +252,7 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
     use crate::config::Config;
 
     let mut configs = Vec::new();
+    let mut visited = std::collections::HashSet::new();
     let mut current = start_dir.to_path_buf();
 
     // Get profile name using Settings system which respects: CLI flag > Env var > Default
@@ -262,12 +263,7 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
         // Check all config filenames (fnox.toml, .fnox.toml, fnox.$PROFILE.toml, etc.)
         for filename in &filenames {
             let config_path = current.join(filename);
-            if let Ok(metadata) = std::fs::metadata(&config_path)
-                && let Ok(modified) = metadata.modified()
-                && let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH)
-            {
-                configs.push((config_path, duration.as_millis()));
-            }
+            push_config_with_dependencies(&mut configs, &config_path, &mut visited, true);
         }
 
         // Move to parent directory
@@ -278,14 +274,97 @@ fn collect_config_files(start_dir: &Path) -> Vec<(PathBuf, u128)> {
 
     // Also check global config for change detection
     let global = Config::global_config_path();
-    if let Ok(metadata) = std::fs::metadata(&global)
-        && let Ok(modified) = metadata.modified()
-        && let Ok(duration) = modified.duration_since(SystemTime::UNIX_EPOCH)
-    {
-        configs.push((global, duration.as_millis()));
-    }
+    push_config_with_dependencies(&mut configs, &global, &mut visited, true);
 
     configs
+}
+
+/// Record a config file's mtime, with those of the `source` files of its secrets
+/// and of the configs it imports, so that changing any of them is noticed
+fn push_config_with_dependencies(
+    configs: &mut Vec<(PathBuf, u128)>,
+    config_path: &Path,
+    visited: &mut std::collections::HashSet<(PathBuf, PathBuf, bool)>,
+    follow_imports: bool,
+) {
+    let mtime = |path: &Path| {
+        std::fs::metadata(path)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|m| m.duration_since(SystemTime::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis())
+    };
+    let Some(config_mtime) = mtime(config_path) else {
+        return;
+    };
+    // Canonical keys make `./` and `..` spellings of one file, and import
+    // cycles, stop the walk
+    // The parent directory is part of the key because `source` paths resolve
+    // against the directory the config was reached through, which differs
+    // between symlinks to one file.
+    let canonical = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let parent = config_path.parent().map(canonical).unwrap_or_default();
+    if !visited.insert((canonical(config_path), parent, follow_imports)) {
+        return;
+    }
+    let (sources, imports) = config_dependencies(config_path);
+    for source in sources {
+        if let Some(m) = mtime(&source) {
+            configs.push((source, m));
+        }
+    }
+    configs.push((config_path.to_path_buf(), config_mtime));
+    // Loading applies only the direct imports of a config it discovers, never
+    // the imports of an imported file. The flag is part of the visited key so
+    // a file reached first as an import still has its own imports followed
+    // when it is discovered.
+    if follow_imports {
+        for import in imports {
+            push_config_with_dependencies(configs, &import, visited, false);
+        }
+    }
+}
+
+/// The `source` files that the secrets of a config keep their ciphertext in, and
+/// the configs it imports, so that changing one without touching the config is
+/// noticed
+fn config_dependencies(config_path: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let Ok(text) = std::fs::read_to_string(config_path) else {
+        return (Vec::new(), Vec::new());
+    };
+    if !text.contains("source") && !text.contains("import") {
+        return (Vec::new(), Vec::new());
+    }
+    let Ok(doc) = text.parse::<toml_edit::DocumentMut>() else {
+        return (Vec::new(), Vec::new());
+    };
+    let dir = config_path.parent().unwrap_or(Path::new(""));
+    let imports = doc
+        .get("import")
+        .and_then(|i| i.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|i| i.as_str())
+        .map(|i| crate::config_path::resolve_relative_to_dir(i, Some(dir)))
+        .collect();
+    let mut tables = Vec::new();
+    if let Some(table) = doc.get("secrets").and_then(|s| s.as_table_like()) {
+        tables.push(table);
+    }
+    if let Some(profiles) = doc.get("profiles").and_then(|p| p.as_table_like()) {
+        for (_, profile) in profiles.iter() {
+            if let Some(table) = profile.get("secrets").and_then(|s| s.as_table_like()) {
+                tables.push(table);
+            }
+        }
+    }
+    let sources = tables
+        .into_iter()
+        .flat_map(|table| table.iter())
+        .filter_map(|(_, secret)| secret.get("source")?.as_str())
+        .map(|source| dir.join(source))
+        .collect();
+    (sources, imports)
 }
 
 /// Create a hash of config files and their modification times
