@@ -86,6 +86,7 @@ provenance = "github-attestations"
 version = "2.10.1"
 backend = "packslip:github.com/aubepkg/aube"
 specifiers = ["latest"]
+unsupported_platforms = ["macos-x64"]
 
 [tools.aube."platforms.linux-arm64"]
 checksum = "sha256:c64f55a43ee7ca4a19fbbf3be0eed161c24c9858bdcdaea024b69eafbc71ad15"
@@ -201,6 +202,10 @@ url_api = "https://api.github.com/repos/bitwarden/sdk-sm/releases/assets/4265072
 version = "0.19.6"
 backend = "aqua:foresterre/cargo-msrv"
 specifiers = ["latest"]
+unsupported_platforms = [
+    "linux-arm64",
+    "linux-arm64-musl",
+]
 
 [tools.cargo-msrv."platforms.linux-x64"]
 checksum = "sha256:5fa075586e40d1fb0c57bc1c69e31e6608e2765fa4a16c1920d4e4c1ca76efef"
@@ -231,6 +236,7 @@ url_api = "https://api.github.com/repos/foresterre/cargo-msrv/releases/assets/66
 version = "1.8.0"
 backend = "packslip:github.com/jdx/communique"
 specifiers = ["latest"]
+unsupported_platforms = ["macos-x64"]
 
 [tools.communique."platforms.linux-arm64"]
 checksum = "sha256:365f67f2bb21f31966d265ad42516fb14e423411e36fadab8f99002046a6310e"
@@ -306,6 +312,7 @@ url_api = "https://api.github.com/repos/orhun/git-cliff/releases/assets/57348722
 version = "2.13.0"
 backend = "packslip:github.com/jdx/hk"
 specifiers = ["latest"]
+unsupported_platforms = ["macos-x64"]
 
 [tools.hk."platforms.linux-arm64"]
 checksum = "sha256:490196a4e638991c671f42941d72ade4d00b14750145f34fc64377b49fc070bb"
@@ -438,6 +445,7 @@ provenance = "github-attestations"
 version = "0.0.4"
 backend = "packslip:github.com/jdx/jouet"
 specifiers = ["v0.0.4"]
+unsupported_platforms = ["macos-x64"]
 
 [tools.jouet."platforms.linux-arm64"]
 checksum = "sha256:429a1371699db2bc9aa33c96c6065e3ad6c1874b130904de8aeb63df1061a67b"
@@ -473,6 +481,7 @@ signer = "sigstore-oidc:https://github.com/jdx/jouet/.github/workflows/release.y
 version = "1.30.0"
 backend = "packslip:github.com/jdx/mr-boxington"
 specifiers = ["latest"]
+unsupported_platforms = ["macos-x64"]
 
 [tools.mr-boxington."platforms.linux-arm64"]
 checksum = "sha256:6317bb6780404e78c3b670d95e128c85871809dfc541882b2efaa34120f45e71"
@@ -709,6 +718,7 @@ url_api = "https://api.github.com/repos/mvdan/sh/releases/assets/547320827"
 version = "0.0.15"
 backend = "github:jdx/tak"
 specifiers = ["latest"]
+unsupported_platforms = ["macos-x64"]
 
 [tools.tak."platforms.linux-arm64"]
 checksum = "sha256:fe7b14ea8ee0b7d97c23b2258dea7a90f888e010c391eff1006339f4b4ac4305"
