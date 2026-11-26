@@ -119,51 +119,51 @@ url = "https://github.com/aubepkg/aube/releases/download/v2.11.0/aube-v2.11.0-x8
 signer = "sigstore-oidc:https://github.com/aubepkg/aube/.github/workflows/release.yml"
 
 [[tools.bitwarden]]
-version = "2026.11.0"
+version = "2026.11.1"
 backend = "aqua:bitwarden/clients"
 specifiers = ["latest"]
 
 [tools.bitwarden."platforms.linux-arm64"]
-checksum = "sha256:39e8336376739bbe5306471df0667793757ef1e243df3846461f66be9166e9d8"
+checksum = "sha256:6e85ed7939414a768a58aa40fff53e2ba79584bb7de73e47b97b206bfb532497"
 checksum_source = "mise-versions"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.0/bw-bit-linux-arm64-2026.11.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/768720862"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.1/bw-bit-linux-arm64-2026.11.1.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/788252488"
 
 [tools.bitwarden."platforms.linux-arm64-musl"]
-checksum = "sha256:39e8336376739bbe5306471df0667793757ef1e243df3846461f66be9166e9d8"
+checksum = "sha256:6e85ed7939414a768a58aa40fff53e2ba79584bb7de73e47b97b206bfb532497"
 checksum_source = "mise-versions"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.0/bw-bit-linux-arm64-2026.11.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/768720862"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.1/bw-bit-linux-arm64-2026.11.1.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/788252488"
 
 [tools.bitwarden."platforms.linux-x64"]
-checksum = "sha256:bfc7643cbc20f970bf04b994f96489703fcf77217a2384f1743e43848363b0ba"
+checksum = "sha256:4c074b8d7a4365075d6628a224f65f29e6797d806b0896850973997464346622"
 checksum_source = "mise-versions"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.0/bw-bit-linux-2026.11.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/768720724"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.1/bw-bit-linux-2026.11.1.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/788252334"
 
 [tools.bitwarden."platforms.linux-x64-musl"]
-checksum = "sha256:bfc7643cbc20f970bf04b994f96489703fcf77217a2384f1743e43848363b0ba"
+checksum = "sha256:4c074b8d7a4365075d6628a224f65f29e6797d806b0896850973997464346622"
 checksum_source = "mise-versions"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.0/bw-bit-linux-2026.11.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/768720724"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.1/bw-bit-linux-2026.11.1.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/788252334"
 
 [tools.bitwarden."platforms.macos-arm64"]
-checksum = "sha256:d0e50916faa4bbc26d6f59bbd8986ea0d2f42a5b3a6180d422852ff6a965ee25"
+checksum = "sha256:0447a5c94b5893deb3fbe4f4ac02e8d811e2f9815c27d567d08b4fc70486cff1"
 checksum_source = "mise-versions"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.0/bw-bit-macos-arm64-2026.11.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/768720318"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.1/bw-bit-macos-arm64-2026.11.1.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/788251933"
 
 [tools.bitwarden."platforms.macos-x64"]
-checksum = "sha256:56a2e93edeadcb3a2b7dc109a237261f340a4b50da54b4e637e08a60196eb962"
+checksum = "sha256:3a6960251682d428ca35bb74ebb43f80ae061a5df21651141aa23a8e0b90d0c5"
 checksum_source = "mise-versions"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.0/bw-bit-macos-2026.11.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/768720211"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.1/bw-bit-macos-2026.11.1.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/788251820"
 
 [tools.bitwarden."platforms.windows-x64"]
-checksum = "sha256:44a22b3f81cbb595c2d591d942be73ecbc5252d9a80471906c60823ac00f9abf"
+checksum = "sha256:23a3e34fdd11ec30ad0f5c9f3f89275f26567c64b2cbf7bb9b3d059805afedd4"
 checksum_source = "mise-versions"
-url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.0/bw-bit-windows-2026.11.0.zip"
-url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/768719820"
+url = "https://github.com/bitwarden/clients/releases/download/cli-v2026.11.1/bw-bit-windows-2026.11.1.zip"
+url_api = "https://api.github.com/repos/bitwarden/clients/releases/assets/788251530"
 
 [[tools.bitwarden-secrets-manager]]
 version = "2.1.0"
