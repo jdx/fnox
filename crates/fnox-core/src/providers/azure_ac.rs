@@ -1,10 +1,11 @@
 use crate::error::{FnoxError, Result};
 use crate::providers::azure_shared::{AzureAuth, SERVICE_PRINCIPAL_ENV_VARS};
 use async_trait::async_trait;
-use azure_core::credentials::AccessToken;
+use azure_core::credentials::{AccessToken, TokenCredential};
 use azure_core::time::{Duration, OffsetDateTime};
 use reqwest::Url;
 use serde::Deserialize;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::Mutex;
 
 const PROVIDER_NAME: &str = "Azure App Configuration";
@@ -80,6 +81,7 @@ pub struct AzureAppConfigurationProvider {
     prefix: Option<String>,
     scope: &'static str,
     auth: AzureAuth,
+    credential: OnceLock<Arc<dyn TokenCredential>>,
     token: Mutex<Option<AccessToken>>,
 }
 
@@ -109,6 +111,7 @@ impl AzureAppConfigurationProvider {
             prefix: prefix.filter(|p| !p.is_empty()),
             scope,
             auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id)?,
+            credential: OnceLock::new(),
             token: Mutex::new(None),
         })
     }
@@ -175,7 +178,14 @@ impl AzureAppConfigurationProvider {
             return Ok(token.token.secret().to_string());
         }
 
-        let credential = self.auth.build_credential(PROVIDER_NAME, PROVIDER_URL)?;
+        let credential = match self.credential.get() {
+            Some(credential) => credential,
+            None => {
+                let built = self.auth.build_credential(PROVIDER_NAME, PROVIDER_URL)?;
+                // Only callers holding the token lock reach this, so nothing else sets it.
+                self.credential.get_or_init(|| built)
+            }
+        };
 
         let token =
             credential
@@ -293,17 +303,68 @@ mod tests {
         .unwrap()
     }
 
-    #[tokio::test]
-    async fn unexpired_token_is_reused_without_asking_the_credential() {
-        let provider = provider(None, None);
-        *provider.token.lock().await = Some(AccessToken::new(
-            "cached-token",
-            OffsetDateTime::now_utc() + Duration::hours(1),
-        ));
+    /// Hands out `token-1`, `token-2`, … valid for `lifetime`, counting requests.
+    #[derive(Debug)]
+    struct CountingCredential {
+        calls: std::sync::atomic::AtomicUsize,
+        lifetime: Duration,
+    }
 
-        // Any token the credential returned, or its sign-in error, would differ
-        // from the cached value, so getting it back shows it was not consulted.
-        assert_eq!(provider.get_token().await.unwrap(), "cached-token");
+    #[async_trait]
+    impl TokenCredential for CountingCredential {
+        async fn get_token(
+            &self,
+            _scopes: &[&str],
+            _options: Option<azure_core::credentials::TokenRequestOptions<'_>>,
+        ) -> azure_core::Result<AccessToken> {
+            let n = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            // Give concurrent callers time to pile up behind this fetch.
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            Ok(AccessToken::new(
+                format!("token-{n}"),
+                OffsetDateTime::now_utc() + self.lifetime,
+            ))
+        }
+    }
+
+    fn provider_with_credential(
+        lifetime: Duration,
+    ) -> (AzureAppConfigurationProvider, Arc<CountingCredential>) {
+        let credential = Arc::new(CountingCredential {
+            calls: Default::default(),
+            lifetime,
+        });
+        let provider = provider(None, None);
+        provider.credential.set(credential.clone()).unwrap();
+        (provider, credential)
+    }
+
+    fn calls(credential: &CountingCredential) -> usize {
+        credential.calls.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    #[tokio::test]
+    async fn concurrent_lookups_share_one_token_fetch() {
+        let (provider, credential) = provider_with_credential(Duration::hours(1));
+
+        let tokens = futures::future::join_all((0..10).map(|_| provider.get_token())).await;
+
+        assert!(tokens.iter().all(|t| t.as_deref().unwrap() == "token-1"));
+        assert_eq!(calls(&credential), 1);
+
+        // The fetched token was saved, so a later lookup reuses it too.
+        assert_eq!(provider.get_token().await.unwrap(), "token-1");
+        assert_eq!(calls(&credential), 1);
+    }
+
+    #[tokio::test]
+    async fn token_inside_refresh_margin_is_replaced() {
+        // Every token expires within the margin, so none is worth reusing.
+        let (provider, credential) = provider_with_credential(Duration::minutes(1));
+
+        assert_eq!(provider.get_token().await.unwrap(), "token-1");
+        assert_eq!(provider.get_token().await.unwrap(), "token-2");
+        assert_eq!(calls(&credential), 2);
     }
 
     #[test]
