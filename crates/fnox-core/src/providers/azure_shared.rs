@@ -161,14 +161,25 @@ impl AzureAuth {
 /// keeps using the first tool that returns a token.
 #[cfg(feature = "azure")]
 fn cli_credential_for_tenant(tenant_id: &str) -> azure_core::Result<Arc<TenantCliCredential>> {
+    cli_credential_for_tenant_with(tenant_id, None)
+}
+
+/// [`cli_credential_for_tenant`] with the executor that runs `az` and `azd`;
+/// `None` uses the SDK's default.
+#[cfg(feature = "azure")]
+fn cli_credential_for_tenant_with(
+    tenant_id: &str,
+    executor: Option<Arc<dyn azure_identity::Executor>>,
+) -> azure_core::Result<Arc<TenantCliCredential>> {
     let sources: Vec<Arc<dyn TokenCredential>> = vec![
         AzureCliCredential::new(Some(AzureCliCredentialOptions {
             tenant_id: Some(tenant_id.to_string()),
+            executor: executor.clone(),
             ..Default::default()
         }))?,
         AzureDeveloperCliCredential::new(Some(AzureDeveloperCliCredentialOptions {
             tenant_id: Some(tenant_id.to_string()),
-            ..Default::default()
+            executor,
         }))?,
     ];
     Ok(Arc::new(TenantCliCredential {
@@ -429,5 +440,114 @@ mod tests {
         // The tenant is passed to `az --tenant`, so the SDK rejects anything
         // that isn't a tenant ID or domain.
         assert!(cli_credential_for_tenant("bad tenant; rm").is_err());
+    }
+
+    /// Stands in for the shell that runs `az` and `azd`: records each command
+    /// line and answers it as the tool named in `working` would.
+    #[cfg(all(feature = "azure", unix))]
+    #[derive(Debug)]
+    struct FakeCli {
+        working: &'static [&'static str],
+        commands: std::sync::Mutex<Vec<String>>,
+    }
+
+    #[cfg(all(feature = "azure", unix))]
+    #[async_trait::async_trait]
+    impl azure_identity::Executor for FakeCli {
+        async fn run(
+            &self,
+            _program: &std::ffi::OsStr,
+            args: &[&std::ffi::OsStr],
+        ) -> std::io::Result<std::process::Output> {
+            use std::os::unix::process::ExitStatusExt;
+            // The SDK runs `/bin/sh -c "cd /bin && <tool> ..."`.
+            let command = args.last().unwrap().to_string_lossy().into_owned();
+            self.commands.lock().unwrap().push(command.clone());
+            let tool = command.split("&& ").nth(1).unwrap_or(&command);
+            let tool = tool.split(' ').next().unwrap_or_default();
+            let (code, stdout, stderr): (i32, &str, &str) = match (
+                tool,
+                self.working.contains(&tool),
+            ) {
+                ("az", true) => (
+                    0,
+                    r#"{"accessToken":"az-token","expires_on":4070908800,"tokenType":"Bearer"}"#,
+                    "",
+                ),
+                ("azd", true) => (
+                    0,
+                    r#"{"token":"azd-token","expiresOn":"2099-01-01T00:00:00Z"}"#,
+                    "",
+                ),
+                _ => (1, "", "ERROR: not logged in"),
+            };
+            Ok(std::process::Output {
+                status: std::process::ExitStatus::from_raw(code << 8),
+                stdout: stdout.as_bytes().to_vec(),
+                stderr: stderr.as_bytes().to_vec(),
+            })
+        }
+    }
+
+    #[cfg(all(feature = "azure", unix))]
+    async fn tenant_token(
+        working: &'static [&'static str],
+        requests: usize,
+    ) -> (azure_core::Result<String>, Vec<String>) {
+        let cli = Arc::new(FakeCli {
+            working,
+            commands: Default::default(),
+        });
+        let credential = cli_credential_for_tenant_with("my-tenant", Some(cli.clone())).unwrap();
+        let mut result = Err(azure_core::Error::with_message(
+            azure_core::error::ErrorKind::Other,
+            "no request made",
+        ));
+        for _ in 0..requests {
+            result = credential
+                .get_token(&["https://vault.azure.net/.default"], None)
+                .await
+                .map(|t| t.token.secret().to_string());
+        }
+        let commands = cli.commands.lock().unwrap().clone();
+        (result, commands)
+    }
+
+    #[cfg(all(feature = "azure", unix))]
+    #[tokio::test]
+    async fn test_tenant_credential_passes_tenant_to_az() {
+        let (token, commands) = tenant_token(&["az", "azd"], 1).await;
+        assert_eq!(token.unwrap(), "az-token");
+        assert_eq!(commands.len(), 1, "{commands:?}");
+        assert!(commands[0].contains("az account get-access-token"));
+        assert!(commands[0].contains(" --tenant my-tenant"));
+    }
+
+    #[cfg(all(feature = "azure", unix))]
+    #[tokio::test]
+    async fn test_tenant_credential_falls_back_to_azd_and_keeps_it() {
+        let (token, commands) = tenant_token(&["azd"], 2).await;
+        assert_eq!(token.unwrap(), "azd-token");
+        // az once, then azd; the second request goes straight to azd (or is
+        // answered from the SDK's token cache) and never retries az.
+        assert!(commands[0].contains(" --tenant my-tenant"));
+        assert!(commands[1].contains("azd auth token"));
+        assert!(commands[1].contains(" --tenant-id my-tenant"));
+        assert_eq!(
+            commands.iter().filter(|c| c.contains("az account")).count(),
+            1,
+            "{commands:?}"
+        );
+    }
+
+    #[cfg(all(feature = "azure", unix))]
+    #[tokio::test]
+    async fn test_tenant_credential_reports_both_failures() {
+        let (token, commands) = tenant_token(&[], 1).await;
+        let error = token.unwrap_err().to_string();
+        assert!(error.contains("Neither the Azure CLI"), "{error}");
+        assert!(error.contains("AzureCliCredential"), "{error}");
+        assert!(error.contains("AzureDeveloperCliCredential"), "{error}");
+        assert_eq!(commands.len(), 2, "{commands:?}");
     }
 }
