@@ -29,9 +29,12 @@ often older, rustc — Linux distro packages (`cargo install` against a
 distro-provided toolchain) and nixpkgs (one shared, conservative rustc for the
 whole tree). Raising the MSRV can make fnox unbuildable there.
 
-**Do not raise the MSRV to satisfy a dependency.** If a dependency bump requires
-a newer rustc than our declared MSRV (the `msrv` CI job, `cargo msrv verify`,
-will fail), pin that dependency to its last MSRV-compatible version instead.
+**Prefer raising the MSRV over pinning a dependency.** If a dependency bump
+requires a newer rustc than our declared MSRV (the `msrv` CI job,
+`cargo msrv verify`, will fail), raise `rust-version` to what the dependency
+needs, as long as that is no newer than the default rustc in the latest nixpkgs
+stable release. Pin the dependency to its last MSRV-compatible version only when
+it needs a newer rustc than that.
 `.cargo/config.toml` sets `resolver.incompatible-rust-versions = "fallback"` so
 `cargo update`/`cargo add` prefer MSRV-compatible versions automatically.
 
