@@ -350,6 +350,15 @@ impl Commands {
         }
     }
 
+    /// Whether this command writes to the stdin of a child that may exit
+    /// without reading it, as `fnox push` does when `gh` rejects a token.
+    ///
+    /// Such a command ignores SIGPIPE too, so that the write fails with EPIPE
+    /// and the child's own error is reported, instead of fnox being killed.
+    pub fn feeds_child_stdin(&self) -> bool {
+        matches!(self, Commands::Push(_))
+    }
+
     pub async fn run(&self, cli: &Cli) -> Result<()> {
         match self {
             // Commands that don't need config
@@ -483,6 +492,19 @@ mod tests {
         assert!(!serves(&["daemon", "status"]));
         assert!(!serves(&["daemon", "stop"]));
         assert!(!serves(&["get", "FOO"]));
+        assert!(!serves(&["push", "--force"]));
+    }
+
+    #[test]
+    fn push_ignores_sigpipe_while_feeding_child_stdin() {
+        let feeds = |args: &[&str]| {
+            let argv: Vec<&std::ffi::OsStr> = args.iter().map(std::ffi::OsStr::new).collect();
+            let (cli, _) = Cli::parse_from_with_settings(&argv)
+                .unwrap_or_else(|error| panic!("parse {args:?}: {error:?}"));
+            cli.command.feeds_child_stdin()
+        };
+        assert!(feeds(&["push", "--force"]));
+        assert!(!feeds(&["get", "FOO"]));
     }
 
     #[test]

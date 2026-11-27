@@ -57,12 +57,19 @@ impl Cli {
             .stdin
             .take()
             .ok_or_else(|| self.failed(format!("{} did not expose a piped stdin", self.program)))?;
-        pipe.write_all(stdin.as_bytes()).await.map_err(|e| {
-            self.failed(format!(
-                "failed to write the value to {}: {e}",
-                self.program
-            ))
-        })?;
+        // A CLI that fails early, say on a rejected token, can exit without
+        // reading stdin. The write then hits a closed pipe; its exit status
+        // and stderr below say what went wrong, so carry on to them.
+        match pipe.write_all(stdin.as_bytes()).await {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
+            Err(e) => {
+                return Err(self.failed(format!(
+                    "failed to write the value to {}: {e}",
+                    self.program
+                )));
+            }
+        }
         // Closing stdin marks the end of the value
         drop(pipe);
 
