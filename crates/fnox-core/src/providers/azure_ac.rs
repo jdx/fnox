@@ -1,12 +1,17 @@
 use crate::error::{FnoxError, Result};
 use crate::providers::azure_shared::{AzureAuth, SERVICE_PRINCIPAL_ENV_VARS};
 use async_trait::async_trait;
+use azure_core::credentials::AccessToken;
+use azure_core::time::{Duration, OffsetDateTime};
 use reqwest::Url;
 use serde::Deserialize;
+use tokio::sync::Mutex;
 
 const PROVIDER_NAME: &str = "Azure App Configuration";
 const PROVIDER_URL: &str = "https://fnox.jdx.dev/providers/azure-ac";
 const API_VERSION: &str = "2023-11-01";
+/// Fetch a new token once the cached one has less than this left.
+const TOKEN_REFRESH_MARGIN: Duration = Duration::minutes(5);
 
 /// App Configuration domains and the Entra audience each cloud expects. Sending
 /// a token anywhere else would hand it to whoever the endpoint points at, so an
@@ -75,6 +80,7 @@ pub struct AzureAppConfigurationProvider {
     prefix: Option<String>,
     scope: &'static str,
     auth: AzureAuth,
+    token: Mutex<Option<AccessToken>>,
 }
 
 impl AzureAppConfigurationProvider {
@@ -103,6 +109,7 @@ impl AzureAppConfigurationProvider {
             prefix: prefix.filter(|p| !p.is_empty()),
             scope,
             auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id)?,
+            token: Mutex::new(None),
         })
     }
 
@@ -155,8 +162,19 @@ impl AzureAppConfigurationProvider {
         })
     }
 
-    /// Acquire a Microsoft Entra ID token for the App Configuration data plane
+    /// Acquire a Microsoft Entra ID token for the App Configuration data plane.
+    ///
+    /// The token is reused until it nears expiry. The lock is held while a new
+    /// token is fetched, so concurrent lookups wait for one fetch instead of
+    /// each asking the credential (with Azure CLI sign-in, one `az` process each).
     async fn get_token(&self) -> Result<String> {
+        let mut cached = self.token.lock().await;
+        if let Some(token) = cached.as_ref()
+            && token.expires_on > OffsetDateTime::now_utc() + TOKEN_REFRESH_MARGIN
+        {
+            return Ok(token.token.secret().to_string());
+        }
+
         let credential = self.auth.build_credential(PROVIDER_NAME, PROVIDER_URL)?;
 
         let token =
@@ -170,7 +188,9 @@ impl AzureAppConfigurationProvider {
                     url: PROVIDER_URL.to_string(),
                 })?;
 
-        Ok(token.token.secret().to_string())
+        let secret = token.token.secret().to_string();
+        *cached = Some(token);
+        Ok(secret)
     }
 }
 
@@ -271,6 +291,19 @@ mod tests {
             None,
         )
         .unwrap()
+    }
+
+    #[tokio::test]
+    async fn unexpired_token_is_reused_without_asking_the_credential() {
+        let provider = provider(None, None);
+        *provider.token.lock().await = Some(AccessToken::new(
+            "cached-token",
+            OffsetDateTime::now_utc() + Duration::hours(1),
+        ));
+
+        // Any token the credential returned, or its sign-in error, would differ
+        // from the cached value, so getting it back shows it was not consulted.
+        assert_eq!(provider.get_token().await.unwrap(), "cached-token");
     }
 
     #[test]
