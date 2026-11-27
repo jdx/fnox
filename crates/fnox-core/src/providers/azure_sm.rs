@@ -3,6 +3,7 @@ use crate::providers::azure_shared::{AzureAuth, SERVICE_PRINCIPAL_ENV_VARS};
 use async_trait::async_trait;
 use azure_core::{Error, error::ErrorKind, http::StatusCode};
 use azure_security_keyvault_secrets::{SecretClient, models::SetSecretParameters};
+use tokio::sync::OnceCell;
 
 pub fn env_dependencies() -> &'static [&'static str] {
     SERVICE_PRINCIPAL_ENV_VARS
@@ -42,6 +43,9 @@ pub struct AzureSecretsManagerProvider {
     vault_url: String,
     prefix: Option<String>,
     auth: AzureAuth,
+    /// Built on first use and shared by every lookup, so the client's token
+    /// cache lets one token serve the whole vault.
+    client: OnceCell<SecretClient>,
 }
 
 impl AzureSecretsManagerProvider {
@@ -55,6 +59,7 @@ impl AzureSecretsManagerProvider {
             vault_url,
             prefix,
             auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id)?,
+            client: OnceCell::new(),
         })
     }
 
@@ -65,23 +70,27 @@ impl AzureSecretsManagerProvider {
         }
     }
 
-    /// Create an Azure Key Vault secret client
-    fn create_client(&self) -> Result<SecretClient> {
-        let credential = self.auth.build_credential("Azure Key Vault", URL)?;
+    /// The Azure Key Vault secret client, created on first use
+    async fn client(&self) -> Result<&SecretClient> {
+        self.client
+            .get_or_try_init(|| async {
+                let credential = self.auth.build_credential("Azure Key Vault", URL)?;
 
-        SecretClient::new(&self.vault_url, credential, None).map_err(|e| {
-            FnoxError::ProviderApiError {
-                provider: "Azure Key Vault".to_string(),
-                details: e.to_string(),
-                hint: "Check your Azure Key Vault URL".to_string(),
-                url: URL.to_string(),
-            }
-        })
+                SecretClient::new(&self.vault_url, credential, None).map_err(|e| {
+                    FnoxError::ProviderApiError {
+                        provider: "Azure Key Vault".to_string(),
+                        details: e.to_string(),
+                        hint: "Check your Azure Key Vault URL".to_string(),
+                        url: URL.to_string(),
+                    }
+                })
+            })
+            .await
     }
 
     /// Get a secret value from Azure Key Vault
     async fn get_secret_value(&self, secret_name: &str) -> Result<String> {
-        let client = self.create_client()?;
+        let client = self.client().await?;
 
         let response = client.get_secret(secret_name, None).await.map_err(|e| {
             let err_str = e.to_string();
@@ -135,7 +144,7 @@ impl AzureSecretsManagerProvider {
 
     /// Create or update a secret in Azure Key Vault
     pub async fn put_secret(&self, secret_name: &str, secret_value: &str) -> Result<()> {
-        let client = self.create_client()?;
+        let client = self.client().await?;
 
         let params = SetSecretParameters {
             value: Some(secret_value.to_string()),
@@ -199,7 +208,7 @@ impl crate::providers::Provider for AzureSecretsManagerProvider {
     }
 
     async fn test_connection(&self) -> Result<()> {
-        let client = self.create_client()?;
+        let client = self.client().await?;
 
         // Probe the read path without requiring list or write permissions
         // A missing connection-test secret still confirms authenticated vault access

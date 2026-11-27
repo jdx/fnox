@@ -1,12 +1,18 @@
 use crate::error::{FnoxError, Result};
 use crate::providers::azure_shared::{AzureAuth, SERVICE_PRINCIPAL_ENV_VARS};
 use async_trait::async_trait;
+use azure_core::credentials::{AccessToken, TokenCredential};
+use azure_core::time::{Duration, OffsetDateTime};
 use reqwest::Url;
 use serde::Deserialize;
+use std::sync::{Arc, OnceLock};
+use tokio::sync::Mutex;
 
 const PROVIDER_NAME: &str = "Azure App Configuration";
 const PROVIDER_URL: &str = "https://fnox.jdx.dev/providers/azure-ac";
 const API_VERSION: &str = "2023-11-01";
+/// Fetch a new token once the cached one has less than this left.
+const TOKEN_REFRESH_MARGIN: Duration = Duration::minutes(5);
 
 /// App Configuration domains and the Entra audience each cloud expects. Sending
 /// a token anywhere else would hand it to whoever the endpoint points at, so an
@@ -75,6 +81,8 @@ pub struct AzureAppConfigurationProvider {
     prefix: Option<String>,
     scope: &'static str,
     auth: AzureAuth,
+    credential: OnceLock<Arc<dyn TokenCredential>>,
+    token: Mutex<Option<AccessToken>>,
 }
 
 impl AzureAppConfigurationProvider {
@@ -103,6 +111,8 @@ impl AzureAppConfigurationProvider {
             prefix: prefix.filter(|p| !p.is_empty()),
             scope,
             auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id)?,
+            credential: OnceLock::new(),
+            token: Mutex::new(None),
         })
     }
 
@@ -155,9 +165,27 @@ impl AzureAppConfigurationProvider {
         })
     }
 
-    /// Acquire a Microsoft Entra ID token for the App Configuration data plane
+    /// Acquire a Microsoft Entra ID token for the App Configuration data plane.
+    ///
+    /// The token is reused until it nears expiry. The lock is held while a new
+    /// token is fetched, so concurrent lookups wait for one fetch instead of
+    /// each asking the credential (with Azure CLI sign-in, one `az` process each).
     async fn get_token(&self) -> Result<String> {
-        let credential = self.auth.build_credential(PROVIDER_NAME, PROVIDER_URL)?;
+        let mut cached = self.token.lock().await;
+        if let Some(token) = cached.as_ref()
+            && token.expires_on > OffsetDateTime::now_utc() + TOKEN_REFRESH_MARGIN
+        {
+            return Ok(token.token.secret().to_string());
+        }
+
+        let credential = match self.credential.get() {
+            Some(credential) => credential,
+            None => {
+                let built = self.auth.build_credential(PROVIDER_NAME, PROVIDER_URL)?;
+                // Only callers holding the token lock reach this, so nothing else sets it.
+                self.credential.get_or_init(|| built)
+            }
+        };
 
         let token =
             credential
@@ -170,7 +198,9 @@ impl AzureAppConfigurationProvider {
                     url: PROVIDER_URL.to_string(),
                 })?;
 
-        Ok(token.token.secret().to_string())
+        let secret = token.token.secret().to_string();
+        *cached = Some(token);
+        Ok(secret)
     }
 }
 
@@ -271,6 +301,70 @@ mod tests {
             None,
         )
         .unwrap()
+    }
+
+    /// Hands out `token-1`, `token-2`, … valid for `lifetime`, counting requests.
+    #[derive(Debug)]
+    struct CountingCredential {
+        calls: std::sync::atomic::AtomicUsize,
+        lifetime: Duration,
+    }
+
+    #[async_trait]
+    impl TokenCredential for CountingCredential {
+        async fn get_token(
+            &self,
+            _scopes: &[&str],
+            _options: Option<azure_core::credentials::TokenRequestOptions<'_>>,
+        ) -> azure_core::Result<AccessToken> {
+            let n = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            // Give concurrent callers time to pile up behind this fetch.
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            Ok(AccessToken::new(
+                format!("token-{n}"),
+                OffsetDateTime::now_utc() + self.lifetime,
+            ))
+        }
+    }
+
+    fn provider_with_credential(
+        lifetime: Duration,
+    ) -> (AzureAppConfigurationProvider, Arc<CountingCredential>) {
+        let credential = Arc::new(CountingCredential {
+            calls: Default::default(),
+            lifetime,
+        });
+        let provider = provider(None, None);
+        provider.credential.set(credential.clone()).unwrap();
+        (provider, credential)
+    }
+
+    fn calls(credential: &CountingCredential) -> usize {
+        credential.calls.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    #[tokio::test]
+    async fn concurrent_lookups_share_one_token_fetch() {
+        let (provider, credential) = provider_with_credential(Duration::hours(1));
+
+        let tokens = futures::future::join_all((0..10).map(|_| provider.get_token())).await;
+
+        assert!(tokens.iter().all(|t| t.as_deref().unwrap() == "token-1"));
+        assert_eq!(calls(&credential), 1);
+
+        // The fetched token was saved, so a later lookup reuses it too.
+        assert_eq!(provider.get_token().await.unwrap(), "token-1");
+        assert_eq!(calls(&credential), 1);
+    }
+
+    #[tokio::test]
+    async fn token_inside_refresh_margin_is_replaced() {
+        // Every token expires within the margin, so none is worth reusing.
+        let (provider, credential) = provider_with_credential(Duration::minutes(1));
+
+        assert_eq!(provider.get_token().await.unwrap(), "token-1");
+        assert_eq!(provider.get_token().await.unwrap(), "token-2");
+        assert_eq!(calls(&credential), 2);
     }
 
     #[test]
