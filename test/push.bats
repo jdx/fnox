@@ -171,6 +171,31 @@ TOML
 	assert_output "gh secret set DB_URL --repo jdx/fnox --env production|postgres://db"
 }
 
+@test "push reports a CLI that exits without reading a value larger than a pipe holds" {
+	# The write blocks once the pipe is full, so it always meets the closed
+	# end of a CLI that fails without reading stdin
+	big=$(head -c 100000 /dev/zero | tr '\0' x)
+	cat >fnox.toml <<TOML
+[providers.plain]
+type = "plain"
+
+[targets.gh]
+type = "github-actions"
+repo = "jdx/fnox"
+
+[secrets]
+BIG = { provider = "plain", value = "$big", push = ["gh"] }
+SMALL = { provider = "plain", value = "ok", push = ["gh"] }
+TOML
+	export STUB_FAIL="gh secret set BIG"
+	run "$FNOX_BIN" push --force
+	assert_failure
+	assert_output --partial "refused gh secret set BIG"
+	assert_output --partial "pushed 1 of 2"
+	run cat "$STUB_LOG"
+	assert_output "gh secret set SMALL --repo jdx/fnox|ok"
+}
+
 @test "push uses the active profile's targets" {
 	cat >>fnox.toml <<'TOML'
 

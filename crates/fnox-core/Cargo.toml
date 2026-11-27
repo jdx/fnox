@@ -70,6 +70,7 @@ keepass = { workspace = true }
 keeper-secrets-manager-core = { workspace = true, optional = true }
 keyring-core = { workspace = true }
 kube = { workspace = true, optional = true }
+libc = { workspace = true }
 libloading = { workspace = true }
 mlua = { workspace = true }
 miette = { workspace = true }

@@ -167,12 +167,8 @@ async fn run(argv: Vec<std::ffi::OsString>) -> miette::Result<()> {
     // `fnox proxy run` and leave its child pointed at a dead proxy. Ignored,
     // the write fails with EPIPE and only that connection ends. Children still
     // start with SIG_DFL, because std resets SIGPIPE when it spawns them.
-    //
-    // `fnox push` hands each value to a CLI on stdin, and a CLI that fails
-    // before reading it closes the pipe. Ignored, the write fails with EPIPE
-    // and push reports the CLI's own error and moves on to the next target.
     #[cfg(unix)]
-    if cli.command.serves_connections() || cli.command.feeds_child_stdin() {
+    if cli.command.serves_connections() {
         set_sigpipe(nix::sys::signal::SigHandler::SigIgn);
     }
 
