@@ -5,6 +5,7 @@ use azure_security_keyvault_keys::{
     KeyClient,
     models::{EncryptionAlgorithm, KeyOperationParameters},
 };
+use tokio::sync::OnceCell;
 
 pub fn env_dependencies() -> &'static [&'static str] {
     SERVICE_PRINCIPAL_ENV_VARS
@@ -16,6 +17,9 @@ pub struct AzureKeyVaultProvider {
     vault_url: String,
     key_name: String,
     auth: AzureAuth,
+    /// Built on first use and shared by every operation, so the client's token
+    /// cache lets one token serve all of them.
+    client: OnceCell<KeyClient>,
 }
 
 impl AzureKeyVaultProvider {
@@ -30,24 +34,31 @@ impl AzureKeyVaultProvider {
             vault_url,
             key_name,
             auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id, tenant_id)?,
+            client: OnceCell::new(),
         })
     }
 
-    /// Create an Azure Key Vault key client
-    fn create_client(&self) -> Result<KeyClient> {
-        let credential = self.auth.build_credential("Azure Key Vault", URL)?;
+    /// The Azure Key Vault key client, created on first use
+    async fn client(&self) -> Result<&KeyClient> {
+        self.client
+            .get_or_try_init(|| async {
+                let credential = self.auth.build_credential("Azure Key Vault", URL)?;
 
-        KeyClient::new(&self.vault_url, credential, None).map_err(|e| FnoxError::ProviderApiError {
-            provider: "Azure Key Vault".to_string(),
-            details: e.to_string(),
-            hint: "Check your Azure Key Vault URL".to_string(),
-            url: URL.to_string(),
-        })
+                KeyClient::new(&self.vault_url, credential, None).map_err(|e| {
+                    FnoxError::ProviderApiError {
+                        provider: "Azure Key Vault".to_string(),
+                        details: e.to_string(),
+                        hint: "Check your Azure Key Vault URL".to_string(),
+                        url: URL.to_string(),
+                    }
+                })
+            })
+            .await
     }
 
     /// Decrypt a ciphertext value using Azure Key Vault
     async fn decrypt(&self, ciphertext_base64: &str) -> Result<String> {
-        let client = self.create_client()?;
+        let client = self.client().await?;
 
         // Decode from base64
         let ciphertext_bytes = base64::Engine::decode(
@@ -150,7 +161,7 @@ impl crate::providers::Provider for AzureKeyVaultProvider {
     }
 
     async fn encrypt(&self, plaintext: &str) -> Result<String> {
-        let client = self.create_client()?;
+        let client = self.client().await?;
 
         // Create encrypt parameters with RSA-OAEP-256 algorithm
         let params = KeyOperationParameters {
@@ -219,7 +230,7 @@ impl crate::providers::Provider for AzureKeyVaultProvider {
     }
 
     async fn test_connection(&self) -> Result<()> {
-        let client = self.create_client()?;
+        let client = self.client().await?;
 
         // Try to get the key to verify access
         client.get_key(&self.key_name, None).await.map_err(|e| {
