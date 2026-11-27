@@ -84,6 +84,7 @@ impl AzureAppConfigurationProvider {
         prefix: Option<String>,
         auth: Option<String>,
         managed_identity_client_id: Option<String>,
+        tenant_id: Option<String>,
     ) -> Result<Self> {
         let url = Url::parse(&endpoint).map_err(|e| invalid_endpoint(&endpoint, &e.to_string()))?;
         if url.scheme() != "https" {
@@ -102,7 +103,7 @@ impl AzureAppConfigurationProvider {
             label: label.filter(|l| !l.is_empty()),
             prefix: prefix.filter(|p| !p.is_empty()),
             scope,
-            auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id)?,
+            auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id, tenant_id)?,
         })
     }
 
@@ -269,6 +270,7 @@ mod tests {
             prefix.map(String::from),
             None,
             None,
+            None,
         )
         .unwrap()
     }
@@ -315,6 +317,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .unwrap();
         assert_eq!(with_path.endpoint, "https://store.azconfig.io");
@@ -335,8 +338,15 @@ mod tests {
             "not a url",
         ] {
             assert!(
-                AzureAppConfigurationProvider::new(endpoint.to_string(), None, None, None, None)
-                    .is_err(),
+                AzureAppConfigurationProvider::new(
+                    endpoint.to_string(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None
+                )
+                .is_err(),
                 "expected {endpoint} to be rejected"
             );
         }

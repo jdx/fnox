@@ -230,6 +230,10 @@ pub enum LeaseBackendConfig {
         /// Client ID of a user-assigned managed identity; requires `auth = "managed-identity"`
         #[serde(default, skip_serializing_if = "Option::is_none")]
         managed_identity_client_id: Option<String>,
+        /// Tenant the Azure CLI login requests tokens from, whatever subscription
+        /// the CLI has selected; default mode only
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tenant_id: Option<String>,
     },
     /// Cloudflare API Token
     Cloudflare {
@@ -441,8 +445,13 @@ impl LeaseBackendConfig {
             LeaseBackendConfig::AzureToken {
                 auth,
                 managed_identity_client_id,
+                tenant_id,
                 ..
-            } => azure_token::check_prerequisites(auth.as_deref(), managed_identity_client_id),
+            } => azure_token::check_prerequisites(
+                auth.as_deref(),
+                managed_identity_client_id,
+                tenant_id,
+            ),
             LeaseBackendConfig::Cloudflare { .. } => cloudflare::check_prerequisites(),
             LeaseBackendConfig::GithubApp {
                 private_key_file, ..
@@ -631,12 +640,14 @@ impl LeaseBackendConfig {
                 env_var,
                 auth,
                 managed_identity_client_id,
+                tenant_id,
                 ..
             } => Ok(Box::new(azure_token::AzureTokenBackend::new(
                 scope.clone(),
                 env_var.clone(),
                 auth.as_deref(),
                 managed_identity_client_id.clone(),
+                tenant_id.clone(),
             )?)),
             #[cfg(not(feature = "azure"))]
             LeaseBackendConfig::AzureToken { .. } => Err(crate::error::FnoxError::not_in_build(

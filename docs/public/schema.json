@@ -277,6 +277,10 @@
             "managed_identity_client_id": {
               "description": "Client ID of a user-assigned managed identity; requires `auth = \"managed-identity\"`",
               "type": ["string", "null"]
+            },
+            "tenant_id": {
+              "description": "Tenant the Azure CLI login requests tokens from, whatever subscription\nthe CLI has selected; default mode only",
+              "type": ["string", "null"]
             }
           },
           "required": ["type", "scope"]
@@ -1197,6 +1201,9 @@
             "managed_identity_client_id": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "tenant_id": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },
@@ -1346,6 +1353,9 @@
             "managed_identity_client_id": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
+            "tenant_id": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
             "auth_command": {
               "type": ["string", "null"]
             },
@@ -1379,6 +1389,9 @@
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "managed_identity_client_id": {
+              "$ref": "#/$defs/OptionStringOrSecretRef"
+            },
+            "tenant_id": {
               "$ref": "#/$defs/OptionStringOrSecretRef"
             },
             "auth_command": {
@@ -1816,6 +1829,10 @@
             },
             "managed_identity_client_id": {
               "description": "Client ID of a user-assigned managed identity (with `auth = \"managed-identity\"`)",
+              "type": ["string", "null"]
+            },
+            "tenant_id": {
+              "description": "Tenant the Azure CLI login requests tokens from (default mode only)",
               "type": ["string", "null"]
             }
           },

@@ -64,12 +64,13 @@ Without `managed_identity_client_id`, fnox uses the system-assigned identity. Se
 
 ## Configuration
 
-| Field                        | Required | Default     | Description                                                                          |
-| ---------------------------- | -------- | ----------- | ------------------------------------------------------------------------------------ |
-| `vault_url`                  | Yes      | None        | Vault URL, such as `https://myapp-vault.vault.azure.net/`.                           |
-| `key_name`                   | Yes      | None        | Name of the RSA key. fnox uses its current version.                                  |
-| `auth`                       | No       | `"default"` | `"default"` (service principal or developer CLI) or `"managed-identity"`.            |
-| `managed_identity_client_id` | No       | None        | Client ID of a user-assigned managed identity. Requires `auth = "managed-identity"`. |
+| Field                        | Required | Default     | Description                                                                                                                                                                                                                                    |
+| ---------------------------- | -------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vault_url`                  | Yes      | None        | Vault URL, such as `https://myapp-vault.vault.azure.net/`.                                                                                                                                                                                     |
+| `key_name`                   | Yes      | None        | Name of the RSA key. fnox uses its current version.                                                                                                                                                                                            |
+| `auth`                       | No       | `"default"` | `"default"` (service principal or developer CLI) or `"managed-identity"`.                                                                                                                                                                      |
+| `managed_identity_client_id` | No       | None        | Client ID of a user-assigned managed identity. Requires `auth = "managed-identity"`.                                                                                                                                                           |
+| `tenant_id`                  | No       | None        | Tenant ID or domain the Azure CLI or Developer CLI login requests tokens from, whatever subscription the CLI has selected. Not used with `auth = "managed-identity"` or service principal variables. See [Tenant](/providers/azure-sm#tenant). |
 
 All fields accept `{ secret = "NAME" }`. Every provider also accepts [`auth_command` and `daemon_cache`](/reference/configuration#provider-configuration).
 

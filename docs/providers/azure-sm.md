@@ -68,6 +68,19 @@ A service principal signs in through the public-cloud authority, `https://login.
 
 When authentication fails in an interactive terminal, fnox offers to run `az login`. Change that command with [`auth_command`](/reference/configuration#auth-command).
 
+### Tenant
+
+The Azure CLI requests tokens from the tenant of its selected subscription. If you switch `az account set` between subscriptions in different tenants, Key Vault rejects tokens from the wrong tenant with `AKV10032: Invalid issuer`. Set `tenant_id` to the vault's tenant so fnox always asks the CLI for a token from that tenant:
+
+```toml
+[providers.azure]
+type = "azure-sm"
+vault_url = "https://myapp-vault.vault.azure.net/"
+tenant_id = "00000000-0000-0000-0000-000000000000" # or a domain such as contoso.onmicrosoft.com
+```
+
+`tenant_id` only affects the Azure CLI and Azure Developer CLI login. You must have signed in to that tenant (`az login --tenant <tenant>`), but its subscription does not need to be selected. A service principal or workload identity uses `AZURE_TENANT_ID` instead. To have fnox's sign-in prompt log in to the right tenant, set [`auth_command`](/reference/configuration#auth-command) to `az login --tenant <tenant>`.
+
 ### Managed identity
 
 On an Azure host, set `auth = "managed-identity"` to use the host's managed identity:
@@ -84,16 +97,17 @@ Managed identity is never tried automatically: it is selected only by `auth = "m
 
 Managed identity works on Azure VMs and virtual machine scale sets, and on App Service, Azure Functions and Container Apps. The Azure SDK for Rust does not support the Azure Arc, Service Fabric, Cloud Shell or Azure Machine Learning managed identity endpoints.
 
-The same `auth` and `managed_identity_client_id` settings apply to the [Azure Key Vault Keys](/providers/azure-kms) and [Azure App Configuration](/providers/azure-ac) providers.
+The same `auth`, `managed_identity_client_id` and `tenant_id` settings apply to the [Azure Key Vault Keys](/providers/azure-kms) and [Azure App Configuration](/providers/azure-ac) providers.
 
 ## Configuration
 
-| Field                        | Required | Default   | Description                                                                                                          |
-| ---------------------------- | -------- | --------- | -------------------------------------------------------------------------------------------------------------------- |
-| `vault_url`                  | Yes      |           | Key Vault URL, such as `https://myapp-vault.vault.azure.net/`.                                                       |
-| `prefix`                     | No       |           | Prepended to every secret name, for reads and for `fnox set`.                                                        |
-| `auth`                       | No       | `default` | `default` (service principal or workload identity variables, then Azure CLI or Developer CLI) or `managed-identity`. |
-| `managed_identity_client_id` | No       |           | Client ID of a user-assigned managed identity. Requires `auth = "managed-identity"`.                                 |
+| Field                        | Required | Default   | Description                                                                                                                                                                                                                                    |
+| ---------------------------- | -------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vault_url`                  | Yes      |           | Key Vault URL, such as `https://myapp-vault.vault.azure.net/`.                                                                                                                                                                                 |
+| `prefix`                     | No       |           | Prepended to every secret name, for reads and for `fnox set`.                                                                                                                                                                                  |
+| `auth`                       | No       | `default` | `default` (service principal or workload identity variables, then Azure CLI or Developer CLI) or `managed-identity`.                                                                                                                           |
+| `managed_identity_client_id` | No       |           | Client ID of a user-assigned managed identity. Requires `auth = "managed-identity"`.                                                                                                                                                           |
+| `tenant_id`                  | No       |           | Tenant ID or domain the Azure CLI or Developer CLI login requests tokens from, whatever subscription the CLI has selected. Not used with `auth = "managed-identity"` or service principal variables. See [Tenant](/providers/azure-sm#tenant). |
 
 Every field accepts `{ secret = "NAME" }` to take its value from another fnox secret. The options shared by all providers, `auth_command` and `daemon_cache`, are in the [configuration reference](/reference/configuration#provider-configuration).
 

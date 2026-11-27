@@ -32,14 +32,15 @@ fnox push --target api --force
 
 ## Configuration
 
-| Field                        | Default            | Description                                                                      |
-| ---------------------------- | ------------------ | -------------------------------------------------------------------------------- |
-| `subscription`               | required           | Subscription ID that holds the container app.                                    |
-| `resource_group`             | required           | Resource group that holds the container app.                                     |
-| `app`                        | required           | Container app name.                                                              |
-| `container`                  | the only container | Container to set the variables in. Required when the app has several.            |
-| `auth`                       | `"default"`        | `"default"` or `"managed-identity"`.                                             |
-| `managed_identity_client_id` | none               | Client ID of a user-assigned managed identity, with `auth = "managed-identity"`. |
+| Field                        | Default            | Description                                                                                                              |
+| ---------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `subscription`               | required           | Subscription ID that holds the container app.                                                                            |
+| `resource_group`             | required           | Resource group that holds the container app.                                                                             |
+| `app`                        | required           | Container app name.                                                                                                      |
+| `container`                  | the only container | Container to set the variables in. Required when the app has several.                                                    |
+| `auth`                       | `"default"`        | `"default"` or `"managed-identity"`.                                                                                     |
+| `managed_identity_client_id` | none               | Client ID of a user-assigned managed identity, with `auth = "managed-identity"`.                                         |
+| `tenant_id`                  | none               | Tenant ID or domain the Azure CLI or Developer CLI login requests tokens from. See [Tenant](/providers/azure-sm#tenant). |
 
 ## Authentication
 

@@ -50,11 +50,12 @@ impl AzureSecretsManagerProvider {
         prefix: Option<String>,
         auth: Option<String>,
         managed_identity_client_id: Option<String>,
+        tenant_id: Option<String>,
     ) -> Result<Self> {
         Ok(Self {
             vault_url,
             prefix,
-            auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id)?,
+            auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id, tenant_id)?,
         })
     }
 
