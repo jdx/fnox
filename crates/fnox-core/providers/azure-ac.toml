@@ -41,3 +41,9 @@ type = "optional"
 placeholder = "00000000-0000-0000-0000-000000000000"
 label = "User-assigned managed identity client ID (optional):"
 wizard = false
+
+[fields.tenant_id]
+type = "optional"
+placeholder = "00000000-0000-0000-0000-000000000000"
+label = "Tenant for the Azure CLI login (optional):"
+wizard = false

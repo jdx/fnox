@@ -21,13 +21,14 @@ pub const CONSUMED_ENV_VARS: &[&str] = azure_shared::SERVICE_PRINCIPAL_ENV_VARS;
 pub fn check_prerequisites(
     auth: Option<&str>,
     managed_identity_client_id: &Option<String>,
+    tenant_id: &Option<String>,
 ) -> Option<String> {
-    match AzureAuth::from_config(auth, managed_identity_client_id.clone()) {
+    match AzureAuth::from_config(auth, managed_identity_client_id.clone(), tenant_id.clone()) {
         // Managed identity never needs `az` or a service principal.
         Ok(AzureAuth::ManagedIdentity { .. }) => return None,
         // Invalid settings are reported when the backend is created.
         Err(_) => return None,
-        Ok(AzureAuth::Default) => {}
+        Ok(AzureAuth::Default { .. }) => {}
     }
     default_mode_prerequisite(
         azure_shared::has_env_credentials(),
@@ -77,6 +78,7 @@ impl AzureTokenBackend {
         env_var: String,
         auth: Option<&str>,
         managed_identity_client_id: Option<String>,
+        tenant_id: Option<String>,
     ) -> Result<Self> {
         // An empty ID would silently select the system-assigned identity.
         if managed_identity_client_id.as_deref() == Some("") {
@@ -88,7 +90,7 @@ impl AzureTokenBackend {
         Ok(Self {
             scope,
             env_var,
-            auth: AzureAuth::from_config(auth, managed_identity_client_id)?,
+            auth: AzureAuth::from_config(auth, managed_identity_client_id, tenant_id)?,
         })
     }
 
@@ -175,7 +177,7 @@ mod tests {
 
     #[test]
     fn managed_identity_skips_prerequisites() {
-        assert!(check_prerequisites(Some("managed-identity"), &None).is_none());
+        assert!(check_prerequisites(Some("managed-identity"), &None, &None).is_none());
     }
 
     #[test]
@@ -193,6 +195,7 @@ mod tests {
             "T".into(),
             Some("managed-identity"),
             Some("abc-123".into()),
+            None,
         )
         .unwrap();
         assert!(
@@ -201,7 +204,8 @@ mod tests {
                 .contains("user-assigned identity abc-123")
         );
         let system =
-            AzureTokenBackend::new("s".into(), "T".into(), Some("managed-identity"), None).unwrap();
+            AzureTokenBackend::new("s".into(), "T".into(), Some("managed-identity"), None, None)
+                .unwrap();
         assert!(!system.failure_hint().contains("user-assigned"));
     }
 
@@ -212,7 +216,8 @@ mod tests {
                 "s".into(),
                 "T".into(),
                 Some("managed-identity"),
-                Some(String::new())
+                Some(String::new()),
+                None,
             )
             .is_err()
         );
@@ -220,9 +225,29 @@ mod tests {
 
     #[test]
     fn rejects_client_id_without_managed_identity() {
-        assert!(AzureTokenBackend::new("s".into(), "T".into(), None, Some("abc".into())).is_err());
         assert!(
-            AzureTokenBackend::new("s".into(), "T".into(), Some("managed-identity"), None).is_ok()
+            AzureTokenBackend::new("s".into(), "T".into(), None, Some("abc".into()), None).is_err()
+        );
+        assert!(
+            AzureTokenBackend::new("s".into(), "T".into(), Some("managed-identity"), None, None)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn rejects_tenant_with_managed_identity() {
+        assert!(
+            AzureTokenBackend::new(
+                "s".into(),
+                "T".into(),
+                Some("managed-identity"),
+                None,
+                Some("t".into())
+            )
+            .is_err()
+        );
+        assert!(
+            AzureTokenBackend::new("s".into(), "T".into(), None, None, Some("t".into())).is_ok()
         );
     }
 }

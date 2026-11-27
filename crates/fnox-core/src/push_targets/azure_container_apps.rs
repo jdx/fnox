@@ -50,6 +50,9 @@ pub struct AzureContainerApps {
     /// Client ID of a user-assigned managed identity (with `auth = "managed-identity"`)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub managed_identity_client_id: Option<String>,
+    /// Tenant the Azure CLI login requests tokens from (default mode only)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenant_id: Option<String>,
 }
 
 impl AzureContainerApps {
@@ -66,6 +69,7 @@ impl AzureContainerApps {
         AzureAuth::from_config(
             self.auth.as_deref(),
             self.managed_identity_client_id.clone(),
+            self.tenant_id.clone(),
         )
     }
 

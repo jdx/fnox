@@ -28,11 +28,12 @@ impl AzureKeyVaultProvider {
         key_name: String,
         auth: Option<String>,
         managed_identity_client_id: Option<String>,
+        tenant_id: Option<String>,
     ) -> Result<Self> {
         Ok(Self {
             vault_url,
             key_name,
-            auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id)?,
+            auth: AzureAuth::from_config(auth.as_deref(), managed_identity_client_id, tenant_id)?,
             client: OnceCell::new(),
         })
     }
