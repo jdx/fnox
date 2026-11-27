@@ -13,6 +13,11 @@
       "description": "The perf-runner image sets the toolchain every perf baseline is measured on; review bumps instead of automerging them.",
       "matchPackageNames": ["ghcr.io/jdx/perf-runner"],
       "automerge": false
+    },
+    {
+      "description": "kube 5.1 and later need rustc 1.95, above fnox's MSRV (see AGENTS.md). Hold kube at 5.0 until the MSRV moves.",
+      "matchPackageNames": ["kube"],
+      "allowedVersions": "<5.1"
     }
   ]
 }
