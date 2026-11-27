@@ -8,11 +8,11 @@ edition = "2024"
 authors = ["@jdx"]
 license = "MIT"
 repository = "https://github.com/jdx/fnox"
-# MSRV is kept deliberately behind latest-stable so fnox stays buildable from
-# source by distro/nixpkgs packagers that provide an older, shared rustc. Do
-# NOT raise this just to satisfy a dependency (e.g. an aws-sdk bump) — pin the
-# dependency to an MSRV-compatible version instead. See AGENTS.md.
-rust-version = "1.91.1"
+# MSRV is kept behind latest-stable so fnox stays buildable from source by
+# packagers with an older, shared rustc. Raise it when a dependency needs a
+# newer rustc, but no further than the rustc in the latest nixpkgs stable
+# release. Prefer that over pinning the dependency. See AGENTS.md.
+rust-version = "1.95"
 
 [workspace.dependencies]
 cc = "1"
@@ -73,7 +73,7 @@ libloading = "0.9"
 mlua = { version = "0.12", features = ["lua54", "vendored", "async", "send", "serialize"] }
 miette = { version = "7", features = ["fancy"] }
 miniz_oxide = "0.9"
-nix = { version = "0.31", features = ["signal", "process"] }
+nix = { version = "0.32", features = ["signal", "process"] }
 openssl-sys = { version = "0.9", features = ["vendored"] }
 pluralizer = "0.6"
 proc-macro2 = "1"
@@ -88,7 +88,7 @@ rmcp = { version = "3", features = ["server", "transport-io", "macros", "elicita
 rmp-serde = "1"
 # age loads its translations through rust-embed, which in debug builds reads them from the cargo registry at runtime; embed them so a debug binary run on another machine does not panic
 rust-embed = { version = "8", features = ["debug-embed"] }
-rusqlite = { version = "0.42", features = ["bundled-sqlcipher-vendored-openssl"] }
+rusqlite = { version = "0.43", features = ["bundled-sqlcipher-vendored-openssl"] }
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std"] }
 rustls-native-certs = "0.8"
 schemars = { version = "1", features = ["indexmap2"] }

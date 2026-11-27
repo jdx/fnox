@@ -24,6 +24,7 @@ ignore = [
   { id = "RUSTSEC-2026-0099", reason = "rustls-webpki 0.101 wildcard name constraints - transitive via rustls 0.21 in aws-smithy-http-client; the fix is only in 0.103" },
   { id = "RUSTSEC-2026-0104", reason = "rustls-webpki 0.101 CRL parsing panic - transitive via rustls 0.21 in aws-smithy-http-client; the fix is only in 0.103" },
   { id = "RUSTSEC-2026-0382", reason = "rustls-webpki 0.101 distrusted intermediates - transitive via rustls 0.21 in aws-smithy-http-client; the fix is only in 0.103" },
+  { id = "RUSTSEC-2026-0600", reason = "kube openssl-tls connector trusts the default CA store - fnox builds kube with rustls-tls only (no openssl-tls), so not affected; the fixed kube 5.2 needs Rust 1.95, above fnox's MSRV" },
   { id = "RUSTSEC-2026-0502", reason = "sqlcipher-src bundled SQLite CVE - pinned to 419 by libsqlite3-sys via rusqlite 0.41; waits on a rusqlite release that uses sqlcipher-src 420" },
 ]
 
