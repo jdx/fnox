@@ -257,6 +257,9 @@ pub struct DescribeDocument {
     /// Absent in documents from fnox versions that predate this field, which reads as `false`.
     #[serde(default)]
     pub daemon_enabled: bool,
+    /// The user-scoped daemon address, when this project uses one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub daemon_socket: Option<String>,
 }
 
 impl DescribeDocument {
@@ -273,6 +276,7 @@ impl DescribeDocument {
             keys,
             dynamic_leases,
             daemon_enabled,
+            daemon_socket: None,
         }
     }
 }
@@ -452,6 +456,7 @@ mod tests {
             ],
             dynamic_leases: keys(&["build_token"]),
             daemon_enabled: false,
+            daemon_socket: None,
         };
         assert_eq!(
             serde_json::to_string(&doc).unwrap(),

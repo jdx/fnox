@@ -72,10 +72,11 @@ pub use path::{CliFlags, RuntimeEnv, SocketKey};
 /// serves, so a daemon from before that cannot silently skip them.
 /// Version 8 adds `cache_ttl` and `max_cache_ttl` config fields and the
 /// `entries` list in `status`, which a daemon from before that rejects or omits.
-pub const WIRE_VERSION: u8 = 8;
+/// Version 9 adds daemon socket scope and cross-command cache configuration.
+pub const WIRE_VERSION: u8 = 9;
 
 /// The oldest protocol this crate talks to.
-pub const MIN_PROTOCOL: u32 = 8;
+pub const MIN_PROTOCOL: u32 = 9;
 
 /// Whether fnox's daemon runs on this platform: Linux, macOS, FreeBSD, OpenBSD
 /// and Windows.

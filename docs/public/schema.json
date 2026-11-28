@@ -2400,6 +2400,21 @@
           "description": "Enable daemon-backed resolution for supported read commands.",
           "type": ["boolean", "null"]
         },
+        "share_across_commands": {
+          "description": "Reuse cached values across eligible read commands.",
+          "type": ["boolean", "null"]
+        },
+        "socket_scope": {
+          "description": "Choose a socket per invocation context or one shared by the user.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DaemonSocketScope"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "idle_timeout": {
           "description": "Idle timeout before the daemon exits, such as \"8h\", \"30m\", or \"300s\".",
           "type": ["string", "null"]
@@ -2414,6 +2429,10 @@
         }
       },
       "additionalProperties": false
+    },
+    "DaemonSocketScope": {
+      "type": "string",
+      "enum": ["context", "user"]
     },
     "ProxyConfig": {
       "description": "Credential proxy configuration.",

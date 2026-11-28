@@ -496,10 +496,27 @@
           },
           "serve": {
             "full_cmd": ["daemon", "serve"],
-            "usage": "daemon serve",
+            "usage": "daemon serve [--socket-scope <SOCKET_SCOPE>]",
             "subcommands": {},
             "args": [],
             "flags": [
+              {
+                "name": "socket-scope",
+                "usage": "--socket-scope <SOCKET_SCOPE>",
+                "help": "Socket scope passed by the process that starts the daemon.",
+                "help_first_line": "Socket scope passed by the process that starts the daemon.",
+                "short": [],
+                "long": ["socket-scope"],
+                "hide": false,
+                "global": false,
+                "arg": {
+                  "name": "SOCKET_SCOPE",
+                  "usage": "<SOCKET_SCOPE>",
+                  "required": true,
+                  "double_dash": "Optional",
+                  "hide": false
+                }
+              },
               {
                 "name": "help",
                 "usage": "-h --help",

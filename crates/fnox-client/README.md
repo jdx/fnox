@@ -29,6 +29,10 @@ no `cfg`.
 
 ## Example
 
+Run `fnox env --json --describe` with the same arguments and environment as
+the CLI fallback. If it reports `daemon_enabled: true`, use its optional
+`daemon_socket` with the client.
+
 ```rust
 use fnox_client::document::EnvScope;
 use fnox_client::{CliFlags, Client, EnvOutcome, EnvRequest, RuntimeEnv, SocketKey};
@@ -41,10 +45,12 @@ let env: Vec<(String, String)> = std::env::vars_os()
 let get = |k: &str| env.iter().find(|(key, _)| key == k).map(|(_, v)| v.clone());
 
 let flags = CliFlags::default();
+// Read this from DescribeDocument::daemon_socket.
+let daemon_socket: Option<&str> = None;
 let client = Client::new(
     SocketKey::from_cli_env(&flags, &get),
     &RuntimeEnv::from_env(&get),
-);
+).with_socket_path(daemon_socket.map(Path::new));
 
 let keys = vec!["DATABASE_URL".to_string()];
 match client.resolve_env(&EnvRequest {
@@ -67,8 +73,9 @@ with `with_timeout`). Async callers use `spawn_blocking`.
 
 ```text
 flags = CliFlags { profile, ..Default::default() }
-if interactive && platform_supported():
+if interactive && platform_supported() && description.daemon_enabled:
     client = Client::new(SocketKey::from_cli_env(&flags, &get(env)), &RuntimeEnv::from_env(&get(env)))
+        .with_socket_path(description.daemon_socket)
     match client.resolve_env(&EnvRequest{cwd: root, config: "fnox.toml", scope: Exec, keys, env}):
         Hit(doc) => use doc; Rejected(r) => error; otherwise fall through
 argv = ["fnox", *flags.to_args(), *(interactive ? [] : ["--non-interactive","--no-daemon"]),
@@ -107,6 +114,8 @@ and `RuntimeEnv::from_env` read `FNOX_PROFILE`, `FNOX_NO_DEFAULTS`,
 `FNOX_IF_MISSING`, `FNOX_AGE_KEY_FILE`, `FNOX_DAEMON_SOCKET_DIR` and `XDG_RUNTIME_DIR` from it. `TMPDIR` is
 not read: without `XDG_RUNTIME_DIR` the sockets live under `/tmp`, or on macOS the
 per-user `confstr` directory, so tools that rewrite `TMPDIR` share one daemon.
+When the describe document supplies `daemon_socket`, that address takes priority
+and the request still uses the settings from `SocketKey`.
 
 The daemon reads fnox's global config file (`~/.config/fnox/config.toml`) on
 every request, but locates it once, from its own environment. A request whose
