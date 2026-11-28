@@ -82,6 +82,19 @@ jobs:
         with:
           token: ${{ secrets.FNOX_GH_TOKEN }}
           persist-credentials: false
+      # `touch_id = true` only works through the provisioned Fnox.app helper,
+      # so a macOS release without it ships a broken feature. Fail before the
+      # build rather than after it.
+      - name: Require the Touch ID provisioning profile
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        env:
+          PROFILE_BASE64: ${{ secrets.FNOX_KEYCHAIN_PROFILE_BASE64 }}
+        run: |
+          if [ -z "$PROFILE_BASE64" ]; then
+            echo "::error title=Touch ID provisioning profile missing::Set FNOX_KEYCHAIN_PROFILE_BASE64 to a base64-encoded Developer ID provisioning profile for dev.jdx.fnox that authorizes a Keychain access group. macOS releases need it to ship Fnox.app."
+            exit 1
+          fi
       - if: matrix.os == 'macos-latest'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
@@ -113,20 +126,8 @@ jobs:
           # Apple will not notarize a binary without the hardened runtime.
           codesign_options: runtime
           dry-run: true # Always dry-run to just build without uploading
-      - id: touch-id-profile
-        if: matrix.os == 'macos-latest'
-        name: Check for the Touch ID provisioning profile
-        shell: bash
-        env:
-          PROFILE_BASE64: ${{ secrets.FNOX_KEYCHAIN_PROFILE_BASE64 }}
-        run: |
-          if [ -n "$PROFILE_BASE64" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
       - name: Build provisioned Touch ID app bundle
-        if: matrix.os == 'macos-latest' && steps.touch-id-profile.outputs.available == 'true'
+        if: matrix.os == 'macos-latest'
         shell: bash
         env:
           PROFILE_BASE64: ${{ secrets.FNOX_KEYCHAIN_PROFILE_BASE64 }}
@@ -240,9 +241,6 @@ jobs:
             ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" \
               "fnox-touch-id-${TARGET}.zip"
           fi
-      - name: Report unavailable Touch ID app bundle
-        if: matrix.os == 'macos-latest' && steps.touch-id-profile.outputs.available != 'true'
-        run: echo "::warning::Skipping the biometric Keychain app bundle; configure FNOX_KEYCHAIN_PROFILE_BASE64 with a Developer ID provisioning profile that authorizes a Keychain access group."
       - name: Check the Linux GNU binary is linked non-PIE
         if: contains(matrix.target, '-linux-gnu')
         shell: bash
@@ -488,6 +486,12 @@ jobs:
         run: |
           shopt -s nullglob
           touch_id_assets=(release-assets/fnox-touch-id-*.zip)
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            if [ ! -f "release-assets/fnox-touch-id-${target}.zip" ]; then
+              echo "::error::release-assets/fnox-touch-id-${target}.zip is missing; touch_id needs the Fnox.app helper"
+              exit 1
+            fi
+          done
           {
             for asset in "${touch_id_assets[@]}"; do
               printf '[[artifact]]\npath = "%s"\nbin = ["Fnox.app/Contents/MacOS/fnox"]\n\n' "$asset"
