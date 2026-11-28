@@ -196,6 +196,7 @@ Use the exact model and version identifiers exposed by the runtime. Never infer 
 `unavailable` when either value is not exposed.
 
 <!-- entire-agent:begin -->
+
 Read .entire/agent-guide.md for this repository's workflow, source inspection, and verification guidance.
 @.entire/agent-guide.md
 <!-- entire-agent:end -->
