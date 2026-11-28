@@ -77,3 +77,49 @@ EOF
 	assert_success
 	assert_output ""
 }
+
+@test "git-credential get: uses the backend that serves the host, not another with the same env var" {
+	start_gitlab_server
+	# Both backends produce GITLAB_TOKEN; the later one must not answer for the
+	# mock server's host (it would fail, as nothing listens there).
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[leases.gl]
+type = "gitlab"
+url = "http://127.0.0.1:$MOCK_PORT"
+project = "group/app"
+
+[leases.other]
+type = "gitlab"
+url = "https://gitlab.invalid"
+project = "group/app"
+EOF
+
+	run bash -c "printf 'protocol=http\nhost=127.0.0.1:$MOCK_PORT\n\n' | fnox git-credential get"
+	assert_success
+	assert_line "password=glpat-child"
+}
+
+@test "git-credential get: plain HTTP to a non-loopback host gets no token" {
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[leases.gl]
+type = "gitlab"
+project = "group/app"
+EOF
+
+	run bash -c "printf 'protocol=http\nhost=gitlab.com\n\n' | fnox git-credential get"
+	assert_success
+	assert_output ""
+}
+
+@test "git-credential get: no config anywhere prints nothing" {
+	rm -f "$FNOX_CONFIG_FILE"
+	cd "$TEST_TEMP_DIR"
+
+	run bash -c "printf 'protocol=https\nhost=github.com\n\n' | fnox git-credential get"
+	assert_success
+	assert_output ""
+}

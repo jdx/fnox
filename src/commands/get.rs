@@ -287,7 +287,7 @@ impl GetCommand {
     /// Check if the requested key is produced by a lease backend.
     /// If so, resolve the lease and return the credential value alongside
     /// the profile secrets map (to avoid a redundant `get_secrets` call).
-    pub(crate) async fn resolve_from_lease(
+    async fn resolve_from_lease(
         &self,
         cli: &Cli,
         config: &Config,
@@ -306,145 +306,156 @@ impl GetCommand {
         let Some((name, lease_config)) = matching_lease else {
             return Ok(None);
         };
+        resolve_named_lease(cli, config, profile, name, lease_config, self.key()).await
+    }
+}
 
-        let project_dir = lease::project_dir_from_config(config, &cli.config);
-        let config_hash = lease_config.config_hash();
+/// Resolve `key` from the lease backend `name`, reusing a cached lease when one
+/// is valid. Returns the value alongside the profile secrets map (to avoid a
+/// redundant `get_secrets` call).
+pub(crate) async fn resolve_named_lease(
+    cli: &Cli,
+    config: &Config,
+    profile: &[String],
+    name: &str,
+    lease_config: &crate::lease_backends::LeaseBackendConfig,
+    key: &str,
+) -> Result<Option<(String, IndexMap<String, SecretConfig>)>> {
+    let project_dir = lease::project_dir_from_config(config, &cli.config);
+    let config_hash = lease_config.config_hash();
 
-        // Cache-first fast path for plaintext cached entries: no secret
-        // resolution or env injection needed, so we can return immediately.
-        // Encrypted entries are deferred until after secret injection below,
-        // since the encryption provider may need credentials from profile
-        // secrets (e.g. VAULT_TOKEN stored as a secret).
-        let cached_entry = {
-            let _lock = LeaseLedger::lock(&project_dir)?;
-            let ledger = LeaseLedger::load(&project_dir)?;
-            lease::find_cached_entry(&ledger, name, &config_hash)
-        };
+    // Cache-first fast path for plaintext cached entries: no secret
+    // resolution or env injection needed, so we can return immediately.
+    // Encrypted entries are deferred until after secret injection below,
+    // since the encryption provider may need credentials from profile
+    // secrets (e.g. VAULT_TOKEN stored as a secret).
+    let cached_entry = {
+        let _lock = LeaseLedger::lock(&project_dir)?;
+        let ledger = LeaseLedger::load(&project_dir)?;
+        lease::find_cached_entry(&ledger, name, &config_hash)
+    };
 
-        if let Some(ref entry) = cached_entry
-            && entry.encryption_provider.is_none()
-        {
-            tracing::debug!(
-                "Reusing cached plaintext lease '{}' for backend '{}'",
-                entry.lease_id,
-                name
-            );
-            let all_secrets = config.get_secrets(profile).unwrap_or_default();
-            return self.extract_key_from_creds(name, entry.credentials.clone(), all_secrets);
-        }
-
-        // Only an encrypted cache entry is left to stand in for a backend left
-        // out of this build; without one, name the missing feature before any
-        // consumed secret is resolved.
-        if cached_entry.is_none() {
-            lease_config.ensure_in_build()?;
-        }
-
-        // Resolve consumed secrets and inject them as env vars so that:
-        // 1. The encryption provider can initialize (e.g. VAULT_TOKEN)
-        // 2. The backend SDK can authenticate for fresh lease creation
-        // A backend left out of this build (the case above) can only serve the
-        // encrypted cache, which needs the encryption provider's inputs alone.
-        let mut consumed: std::collections::HashSet<&str> = match lease_config.ensure_in_build() {
-            Ok(()) => lease_config.consumed_env_vars().iter().copied().collect(),
-            Err(_) => Default::default(),
-        };
-
-        // Always include the default encryption provider's env deps so that
-        // create_and_record_lease can encrypt cached credentials even on a cold
-        // start (no cached_entry). Without this, the provider's credentials
-        // (e.g. VAULT_TOKEN) would never be injected and encryption would fail
-        // permanently, forcing a fresh API call on every invocation.
-        if let Ok(Some(ref default_provider_name)) = config.get_default_provider(profile) {
-            let providers_map = config.get_providers(profile)?;
-            if let Some(provider_config) = providers_map.get(default_provider_name) {
-                for dep in provider_config.env_dependencies() {
-                    consumed.insert(dep);
-                }
-            }
-        }
-
-        // When consumed is empty the backend needs no profile secrets (e.g. it
-        // authenticates via instance metadata). Avoid aborting on a transient
-        // secrets-config read error that would be irrelevant in that case.
-        let all_secrets = if consumed.is_empty() {
-            config.get_secrets(profile).unwrap_or_default()
-        } else {
-            config.get_secrets(profile)?
-        };
-        let consumed_secrets: indexmap::IndexMap<_, _> = all_secrets
-            .iter()
-            .filter(|(k, _)| consumed.contains(k.as_str()))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        // Add what those secrets must read: a `default` that is the secret's
-        // only source (such as `default = "${BASE_TOKEN}"`) and its provider's
-        // credentials. A fallback behind a provider is left out, so an unused
-        // backup cannot block the read.
-        let needed_secrets = crate::secret_resolver::with_read_dependencies(
-            config,
-            profile,
-            &consumed_secrets,
-            &|_| false,
+    if let Some(ref entry) = cached_entry
+        && entry.encryption_provider.is_none()
+    {
+        tracing::debug!(
+            "Reusing cached plaintext lease '{}' for backend '{}'",
+            entry.lease_id,
+            name
         );
-        let resolved_secrets =
-            crate::secret_resolver::resolve_secrets_batch(config, profile, &needed_secrets).await?;
-
-        let mut temp_env_guard = lease::TempEnvGuard::default();
-        let _temp_files =
-            lease::set_secrets_as_env(&resolved_secrets, &needed_secrets, &mut temp_env_guard)?;
-
-        // Now that credentials are in the environment, attempt encrypted cache
-        // decryption. This must happen after set_secrets_as_env so the
-        // encryption provider (e.g. Vault) can find its credentials.
-        // On failure, fall through to create a fresh lease — matching exec's
-        // behaviour. create_and_record_lease handles encryption failure
-        // gracefully by storing (None, None) for cached credentials.
-        if let Some(entry) = cached_entry {
-            // entry.encryption_provider is guaranteed Some here (plaintext
-            // was handled above), so resolve_cached_entry will attempt decrypt.
-            if let Some(creds) = lease::resolve_cached_entry(entry, config, profile, name).await {
-                return self.extract_key_from_creds(name, creds, all_secrets.clone());
-            }
-        }
-
-        // check_prerequisites is intentionally called after set_secrets_as_env:
-        // profile secrets (e.g. AWS_ACCESS_KEY_ID) are already injected into the
-        // process env, so prerequisites that are met via profile secrets will pass.
-        // This matches exec.rs behaviour.
-        let prereq_missing = lease_config.check_prerequisites();
-
-        // skip_cache: true — we already performed the full cache lookup and
-        // decryption attempt above (with encryption-provider credentials
-        // injected). Skipping avoids a redundant network round-trip to the
-        // encryption provider on cache-miss.
-        let creds = lease::resolve_lease(
-            name,
-            lease_config,
-            config,
-            profile,
-            &project_dir,
-            prereq_missing.as_deref(),
-            "get",
-            true,
-        )
-        .await?;
-
-        self.extract_key_from_creds(name, creds, all_secrets)
+        let all_secrets = config.get_secrets(profile).unwrap_or_default();
+        return extract_key_from_creds(key, name, entry.credentials.clone(), all_secrets);
     }
 
-    fn extract_key_from_creds(
-        &self,
-        name: &str,
-        creds: IndexMap<String, String>,
-        all_secrets: IndexMap<String, SecretConfig>,
-    ) -> Result<Option<(String, IndexMap<String, SecretConfig>)>> {
-        match creds.get(self.key()) {
-            Some(value) => Ok(Some((value.clone(), all_secrets))),
-            None => Err(FnoxError::LeaseContractViolation {
-                lease: name.to_string(),
-                key: self.key().to_string(),
-            }),
+    // Only an encrypted cache entry is left to stand in for a backend left
+    // out of this build; without one, name the missing feature before any
+    // consumed secret is resolved.
+    if cached_entry.is_none() {
+        lease_config.ensure_in_build()?;
+    }
+
+    // Resolve consumed secrets and inject them as env vars so that:
+    // 1. The encryption provider can initialize (e.g. VAULT_TOKEN)
+    // 2. The backend SDK can authenticate for fresh lease creation
+    // A backend left out of this build (the case above) can only serve the
+    // encrypted cache, which needs the encryption provider's inputs alone.
+    let mut consumed: std::collections::HashSet<&str> = match lease_config.ensure_in_build() {
+        Ok(()) => lease_config.consumed_env_vars().iter().copied().collect(),
+        Err(_) => Default::default(),
+    };
+
+    // Always include the default encryption provider's env deps so that
+    // create_and_record_lease can encrypt cached credentials even on a cold
+    // start (no cached_entry). Without this, the provider's credentials
+    // (e.g. VAULT_TOKEN) would never be injected and encryption would fail
+    // permanently, forcing a fresh API call on every invocation.
+    if let Ok(Some(ref default_provider_name)) = config.get_default_provider(profile) {
+        let providers_map = config.get_providers(profile)?;
+        if let Some(provider_config) = providers_map.get(default_provider_name) {
+            for dep in provider_config.env_dependencies() {
+                consumed.insert(dep);
+            }
         }
+    }
+
+    // When consumed is empty the backend needs no profile secrets (e.g. it
+    // authenticates via instance metadata). Avoid aborting on a transient
+    // secrets-config read error that would be irrelevant in that case.
+    let all_secrets = if consumed.is_empty() {
+        config.get_secrets(profile).unwrap_or_default()
+    } else {
+        config.get_secrets(profile)?
+    };
+    let consumed_secrets: indexmap::IndexMap<_, _> = all_secrets
+        .iter()
+        .filter(|(k, _)| consumed.contains(k.as_str()))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    // Add what those secrets must read: a `default` that is the secret's
+    // only source (such as `default = "${BASE_TOKEN}"`) and its provider's
+    // credentials. A fallback behind a provider is left out, so an unused
+    // backup cannot block the read.
+    let needed_secrets =
+        crate::secret_resolver::with_read_dependencies(config, profile, &consumed_secrets, &|_| {
+            false
+        });
+    let resolved_secrets =
+        crate::secret_resolver::resolve_secrets_batch(config, profile, &needed_secrets).await?;
+
+    let mut temp_env_guard = lease::TempEnvGuard::default();
+    let _temp_files =
+        lease::set_secrets_as_env(&resolved_secrets, &needed_secrets, &mut temp_env_guard)?;
+
+    // Now that credentials are in the environment, attempt encrypted cache
+    // decryption. This must happen after set_secrets_as_env so the
+    // encryption provider (e.g. Vault) can find its credentials.
+    // On failure, fall through to create a fresh lease — matching exec's
+    // behaviour. create_and_record_lease handles encryption failure
+    // gracefully by storing (None, None) for cached credentials.
+    if let Some(entry) = cached_entry {
+        // entry.encryption_provider is guaranteed Some here (plaintext
+        // was handled above), so resolve_cached_entry will attempt decrypt.
+        if let Some(creds) = lease::resolve_cached_entry(entry, config, profile, name).await {
+            return extract_key_from_creds(key, name, creds, all_secrets.clone());
+        }
+    }
+
+    // check_prerequisites is intentionally called after set_secrets_as_env:
+    // profile secrets (e.g. AWS_ACCESS_KEY_ID) are already injected into the
+    // process env, so prerequisites that are met via profile secrets will pass.
+    // This matches exec.rs behaviour.
+    let prereq_missing = lease_config.check_prerequisites();
+
+    // skip_cache: true — we already performed the full cache lookup and
+    // decryption attempt above (with encryption-provider credentials
+    // injected). Skipping avoids a redundant network round-trip to the
+    // encryption provider on cache-miss.
+    let creds = lease::resolve_lease(
+        name,
+        lease_config,
+        config,
+        profile,
+        &project_dir,
+        prereq_missing.as_deref(),
+        "get",
+        true,
+    )
+    .await?;
+
+    extract_key_from_creds(key, name, creds, all_secrets)
+}
+
+fn extract_key_from_creds(
+    key: &str,
+    name: &str,
+    creds: IndexMap<String, String>,
+    all_secrets: IndexMap<String, SecretConfig>,
+) -> Result<Option<(String, IndexMap<String, SecretConfig>)>> {
+    match creds.get(key) {
+        Some(value) => Ok(Some((value.clone(), all_secrets))),
+        None => Err(FnoxError::LeaseContractViolation {
+            lease: name.to_string(),
+            key: key.to_string(),
+        }),
     }
 }

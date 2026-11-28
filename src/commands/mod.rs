@@ -396,7 +396,7 @@ impl Commands {
             Commands::Export(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Files(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Get(cmd) => cmd.run(cli, self.load_config(cli)?).await,
-            Commands::GitCredential(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::GitCredential(cmd) => cmd.run(cli).await,
             Commands::Import(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Lease(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::List(cmd) => cmd.run(cli, self.load_config(cli)?).await,

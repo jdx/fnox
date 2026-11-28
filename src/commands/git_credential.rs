@@ -1,7 +1,7 @@
-use crate::commands::Cli;
-use crate::commands::get::GetCommand;
+use crate::commands::get::resolve_named_lease;
+use crate::commands::{Cli, load_read_config};
 use crate::config::Config;
-use crate::error::Result;
+use crate::error::{FnoxError, Result};
 use crate::lease_backends::LeaseBackendConfig;
 use std::io::{Read, Write};
 
@@ -18,10 +18,12 @@ use std::io::{Read, Write};
 /// host of `url` for GitLab backends (`gitlab.com` by default). When no backend
 /// matches, fnox prints nothing and exits 0, so git falls through to its next
 /// helper. `store` and `erase` do nothing, because leases expire on their own.
+/// Tokens are returned only for HTTPS requests, or plain HTTP to a loopback
+/// address, so they never cross a network in cleartext.
 ///
 /// git runs the helper from the repository's directory, so a project's
 /// `fnox.toml` applies. Outside a project, define the backend in the global
-/// config or pass `-c`.
+/// config or pass `-c`; with no config at all, fnox prints nothing.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     name = "git-credential",
@@ -65,7 +67,7 @@ fn parse_request(input: &str) -> Request {
         }
         match line.split_once('=') {
             Some(("protocol", value)) => request.protocol = Some(value.to_string()),
-            Some(("host", value)) => request.host = Some(value.to_ascii_lowercase()),
+            Some(("host", value)) => request.host = Some(value.to_string()),
             _ => {}
         }
     }
@@ -73,21 +75,38 @@ fn parse_request(input: &str) -> Request {
 }
 
 /// `host[:port]` of a URL, lowercased, with the scheme's default port dropped.
-fn authority(url: &str) -> Option<String> {
-    let (scheme, rest) = url.split_once("://")?;
-    let authority = rest.split(['/', '?', '#']).next()?;
-    let authority = authority.rsplit('@').next()?.to_ascii_lowercase();
-    let default_port = match scheme {
-        "https" => ":443",
-        "http" => ":80",
-        _ => "",
-    };
-    let authority = authority
-        .strip_suffix(default_port)
-        .filter(|_| !default_port.is_empty())
-        .map(str::to_string)
-        .unwrap_or(authority);
-    (!authority.is_empty()).then_some(authority)
+fn authority(url: &url::Url) -> Option<String> {
+    let host = url.host_str()?.to_ascii_lowercase();
+    Some(match url.port() {
+        Some(port) => format!("{host}:{port}"),
+        None => host,
+    })
+}
+
+fn url_authority(value: &str) -> Option<String> {
+    authority(&url::Url::parse(value).ok()?)
+}
+
+/// The host git asks about, normalized like a backend URL, or `None` when the
+/// request must not receive a token. Tokens go only over HTTPS, or over plain
+/// HTTP to a loopback address, so they never cross a network in cleartext.
+fn request_authority(request: &Request) -> Option<String> {
+    let protocol = request.protocol.as_deref()?;
+    if !matches!(protocol, "http" | "https") {
+        return None;
+    }
+    let url = url::Url::parse(&format!("{protocol}://{}/", request.host.as_deref()?)).ok()?;
+    if protocol == "http" {
+        let loopback = match url.host()? {
+            url::Host::Domain(domain) => domain.eq_ignore_ascii_case("localhost"),
+            url::Host::Ipv4(ip) => ip.is_loopback(),
+            url::Host::Ipv6(ip) => ip.is_loopback(),
+        };
+        if !loopback {
+            return None;
+        }
+    }
+    authority(&url)
 }
 
 /// The git host a backend's tokens authenticate against, with the username git
@@ -102,25 +121,30 @@ fn git_endpoint(config: &LeaseBackendConfig) -> Option<(String, &'static str)> {
             Some((github_host(api_base), "x-access-token"))
         }
         LeaseBackendConfig::Gitlab { url, .. } => Some((
-            authority(url.as_deref().unwrap_or("https://gitlab.com"))?,
+            url_authority(url.as_deref().unwrap_or("https://gitlab.com"))?,
             "oauth2",
         )),
         _ => None,
     }
 }
 
-/// `https://api.github.com` serves `github.com`; a GitHub Enterprise API base
-/// such as `https://ghe.example.com/api/v3` serves its own host.
+/// The git host an API base serves: `api.github.com` serves `github.com`, a
+/// GitHub Enterprise Cloud API such as `api.acme.ghe.com` serves `acme.ghe.com`,
+/// and a GitHub Enterprise Server API such as `https://ghe.example.com/api/v3`
+/// serves its own host.
 fn github_host(api_base: &str) -> String {
-    match authority(api_base) {
+    match url_authority(api_base) {
         Some(host) if host == "api.github.com" => "github.com".to_string(),
+        Some(host) if host.ends_with(".ghe.com") && host.starts_with("api.") => {
+            host["api.".len()..].to_string()
+        }
         Some(host) => host,
         None => "github.com".to_string(),
     }
 }
 
 impl GitCredentialCommand {
-    pub async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
+    pub async fn run(&self, cli: &Cli) -> Result<()> {
         // Git sends its request on stdin for every operation; read it so git
         // never sees a broken pipe.
         let mut input = String::new();
@@ -128,26 +152,28 @@ impl GitCredentialCommand {
         if self.operation != "get" {
             return Ok(());
         }
-
-        let request = parse_request(&input);
-        if !matches!(request.protocol.as_deref(), Some("http" | "https")) {
-            return Ok(());
-        }
-        let Some(host) = request.host else {
+        let Some(host) = request_authority(&parse_request(&input)) else {
             return Ok(());
         };
 
+        // A globally registered helper also runs outside fnox projects; with
+        // no config there is no backend, so let git try its next helper.
+        let config = match load_read_config(cli) {
+            Ok(config) => config,
+            Err(FnoxError::ConfigNotFound { .. }) => return Ok(()),
+            Err(error) => return Err(error),
+        };
         let profile = Config::get_profiles(cli.profile.as_slice());
         let leases = config.get_leases(&profile)?;
-        let selected = leases.iter().rfind(|(name, lease)| {
-            self.backend.as_deref().is_none_or(|wanted| wanted == *name)
-                && git_endpoint(lease).is_some_and(|(served, _)| served == host)
+        let selected = leases.iter().rev().find_map(|(name, lease)| {
+            if self.backend.as_deref().is_some_and(|wanted| wanted != name) {
+                return None;
+            }
+            let (served, username) = git_endpoint(lease)?;
+            (served == host).then_some((name, lease, username))
         });
-        let Some((name, lease)) = selected else {
+        let Some((name, lease, username)) = selected else {
             tracing::debug!("no lease backend serves git host '{host}'");
-            return Ok(());
-        };
-        let Some((_, username)) = git_endpoint(lease) else {
             return Ok(());
         };
         let Some(key) = lease.produced_env_vars().first().map(|key| key.to_string()) else {
@@ -155,15 +181,11 @@ impl GitCredentialCommand {
         };
 
         tracing::debug!("serving git host '{host}' from lease backend '{name}'");
-        let getter = GetCommand {
-            key: Some(key),
-            base64_decode: false,
-            file: None,
-            refresh: false,
-        };
         // A failure surfaces as a nonzero exit with the error on stderr, which
         // git shows to the user; stdout stays empty so git tries its next helper.
-        if let Some((token, _)) = getter.resolve_from_lease(cli, &config, &profile).await? {
+        if let Some((token, _)) =
+            resolve_named_lease(cli, &config, &profile, name, lease, &key).await?
+        {
             let mut out = std::io::stdout().lock();
             let _ = write!(out, "username={username}\npassword={token}\n");
             let _ = out.flush();
@@ -176,34 +198,66 @@ impl GitCredentialCommand {
 mod tests {
     use super::*;
 
+    fn request(protocol: &str, host: &str) -> Option<String> {
+        request_authority(&Request {
+            protocol: Some(protocol.into()),
+            host: Some(host.into()),
+        })
+    }
+
     #[test]
     fn parses_the_request_until_the_blank_line() {
         let request = parse_request("protocol=https\nhost=GitHub.com\npath=a/b\n\nhost=other\n");
         assert_eq!(request.protocol.as_deref(), Some("https"));
-        assert_eq!(request.host.as_deref(), Some("github.com"));
+        assert_eq!(request.host.as_deref(), Some("GitHub.com"));
     }
 
     #[test]
-    fn authority_drops_default_ports_and_userinfo() {
-        assert_eq!(authority("https://GitLab.com/"), Some("gitlab.com".into()));
+    fn request_hosts_are_normalized() {
+        assert_eq!(request("https", "GitHub.com"), Some("github.com".into()));
         assert_eq!(
-            authority("https://gl.example.com:443"),
-            Some("gl.example.com".into())
+            request("https", "github.com:443"),
+            Some("github.com".into())
         );
         assert_eq!(
-            authority("http://127.0.0.1:8080/api"),
+            request("https", "gl.example.com:8443"),
+            Some("gl.example.com:8443".into())
+        );
+    }
+
+    #[test]
+    fn cleartext_requests_get_tokens_only_on_loopback() {
+        assert_eq!(request("http", "gitlab.com"), None);
+        assert_eq!(
+            request("http", "127.0.0.1:8080"),
             Some("127.0.0.1:8080".into())
         );
+        assert_eq!(request("http", "localhost"), Some("localhost".into()));
+        assert_eq!(request("http", "[::1]:8080"), Some("[::1]:8080".into()));
+        assert_eq!(request("ssh", "github.com"), None);
+    }
+
+    #[test]
+    fn backend_urls_drop_default_ports_and_userinfo() {
         assert_eq!(
-            authority("https://u:p@gl.example.com/x"),
+            url_authority("https://GitLab.com/"),
+            Some("gitlab.com".into())
+        );
+        assert_eq!(
+            url_authority("https://gl.example.com:443"),
             Some("gl.example.com".into())
         );
-        assert_eq!(authority("not a url"), None);
+        assert_eq!(
+            url_authority("https://u:p@gl.example.com/x"),
+            Some("gl.example.com".into())
+        );
+        assert_eq!(url_authority("not a url"), None);
     }
 
     #[test]
     fn github_api_bases_map_to_git_hosts() {
         assert_eq!(github_host("https://api.github.com"), "github.com");
+        assert_eq!(github_host("https://api.acme.ghe.com"), "acme.ghe.com");
         assert_eq!(
             github_host("https://ghe.example.com/api/v3"),
             "ghe.example.com"

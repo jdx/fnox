@@ -549,9 +549,9 @@ Git credential helper that serves short-lived GitHub and GitLab tokens
 
 Lets git (and tools that use git's credential protocol, such as cargo and go) authenticate with a token from a `github-app`, `github-oauth`, or `gitlab` lease backend, so no personal access token sits on disk. Configure it with `git config --global credential.helper '!fnox git-credential'`; git then runs `fnox git-credential get` and passes the request on stdin.
 
-fnox picks the lease backend whose host matches the request: `github.com` for GitHub backends (the host of `api_base` for GitHub Enterprise) and the host of `url` for GitLab backends (`gitlab.com` by default). When no backend matches, fnox prints nothing and exits 0, so git falls through to its next helper. `store` and `erase` do nothing, because leases expire on their own.
+fnox picks the lease backend whose host matches the request: `github.com` for GitHub backends (the host of `api_base` for GitHub Enterprise) and the host of `url` for GitLab backends (`gitlab.com` by default). When no backend matches, fnox prints nothing and exits 0, so git falls through to its next helper. `store` and `erase` do nothing, because leases expire on their own. Tokens are returned only for HTTPS requests, or plain HTTP to a loopback address, so they never cross a network in cleartext.
 
-git runs the helper from the repository's directory, so a project's `fnox.toml` applies. Outside a project, define the backend in the global config or pass `-c`.
+git runs the helper from the repository's directory, so a project's `fnox.toml` applies. Outside a project, define the backend in the global config or pass `-c`; with no config at all, fnox prints nothing.
 """#
     after_long_help #"""
 See also:

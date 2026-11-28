@@ -8,11 +8,11 @@ description: "Use fnox as a git credential helper so git, cargo, and go authenti
 
 It serves tokens from these lease backends:
 
-| Backend                                | Git host                                                      | Username sent    |
-| -------------------------------------- | ------------------------------------------------------------- | ---------------- |
-| [`github-app`](/leases/github-app)     | `github.com`, or the host of `api_base` for GitHub Enterprise | `x-access-token` |
-| [`github-oauth`](/leases/github-oauth) | `github.com`, or the host of `api_base` for GitHub Enterprise | `x-access-token` |
-| [`gitlab`](/leases/gitlab)             | The host of `url` (`gitlab.com` by default)                   | `oauth2`         |
+| Backend                                | Git host                                                                                                     | Username sent    |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------- |
+| [`github-app`](/leases/github-app)     | `github.com`, or the git host of `api_base` for GitHub Enterprise (`api.acme.ghe.com` serves `acme.ghe.com`) | `x-access-token` |
+| [`github-oauth`](/leases/github-oauth) | `github.com`, or the git host of `api_base` for GitHub Enterprise (`api.acme.ghe.com` serves `acme.ghe.com`) | `x-access-token` |
+| [`gitlab`](/leases/gitlab)             | The host of `url` (`gitlab.com` by default)                                                                  | `oauth2`         |
 
 ## Set up
 
@@ -41,7 +41,9 @@ fnox picks the backend whose host matches the request. If several backends serve
 git config credential.https://github.com.helper '!fnox git-credential --backend work'
 ```
 
-When no backend serves the host, fnox prints nothing and exits 0, so git moves on to its next helper. `store` and `erase` do nothing, because leases expire on their own.
+When no backend serves the host, or no fnox config is found, fnox prints nothing and exits 0, so git moves on to its next helper. `store` and `erase` do nothing, because leases expire on their own.
+
+fnox returns tokens only for HTTPS requests, or plain HTTP to `localhost`, `127.0.0.1` or `::1`, so a token never crosses a network in cleartext.
 
 ## Try it by hand
 
