@@ -265,6 +265,16 @@ The environment variables set by `fnox proxy run` have to cross the boundary too
 
 With `audit = true` (the default), fnox logs each request's method, domain, path, and which secret or lease was injected (a lease as `lease:<name>`), and each refused request with its reason. It never logs headers, bodies, or values.
 
+#### GitLab CI with the Docker executor
+
+Docker's default seccomp profile can block Bubblewrap from creating namespaces even when the runner host allows unprivileged user namespaces. If `fnox proxy run --sandbox` fails at startup for this reason, the runner administrator can provide the isolation instead:
+
+1. **Run fnox in a trusted launcher.** Have `fnox proxy run --no-sandbox` start a trusted wrapper that launches the review agent in a separate container. Keep provider credentials, fnox config, and GitLab job credentials in the trusted environment. Give the agent only the input files it needs, and keep the Docker socket and credential directories out of its mounts.
+2. **Give the agent one reachable endpoint.** Have the runner enforce a default-deny network policy for the agent container, with an exception for a TCP forwarder on a private interface facing the agent. Run the forwarder in the same network namespace as fnox and point it at fnox's loopback listener. The trusted side needs its own outbound access for proxied requests. GitLab's [per-job bridge network](https://docs.gitlab.com/runner/executors/docker/#create-a-network-for-each-job) gives jobs separate networks, but the runner still needs to block direct egress from the agent, including external DNS, and access to unrelated runner or service endpoints.
+3. **Pass the proxy settings explicitly.** In the wrapper, replace the host and port in the proxy URL with the forwarder's address and port, preserving the generated username and password. Pass that URL in the proxy environment variables your client uses and pass the placeholder values for the configured rules. Mount the CA certificate file named by `SSL_CERT_FILE` read-only and set the client's CA variable to the path inside the agent container. Keep the authenticated proxy URL out of CI logs.
+
+From inside the agent container, send a request that matches a proxy rule and check the fnox audit log for the expected injection. Then repeat with a client that ignores the proxy settings and confirm that a direct connection to a known reachable external IP fails. Also check that the agent cannot reach other runner or service endpoints or resolve external DNS names directly.
+
 ## See also
 
 - [MCP server](/guide/mcp): let an agent fetch secrets or run commands through MCP.
