@@ -1,5 +1,81 @@
 # Changelog
 
+## [1.51.0](https://github.com/jdx/fnox/compare/v1.50.0..v1.51.0) - 2026-11-28
+
+### 🚀 Features
+
+- **(azure-sm)** add tenant_id to pin the Azure CLI login tenant by [@jdx](https://github.com/jdx) in [#1246](https://github.com/jdx/fnox/pull/1246)
+- **(config)** add fnox rename to rename a secret without changing its value by [@jdx](https://github.com/jdx) in [#1225](https://github.com/jdx/fnox/pull/1225)
+- **(config)** keep a secret's ciphertext in a separate source file by [@jdx](https://github.com/jdx) in [#1231](https://github.com/jdx/fnox/pull/1231)
+- **(daemon)** share cached secrets across commands and flag sets by [@jdx](https://github.com/jdx) in [#1259](https://github.com/jdx/fnox/pull/1259)
+- **(lease)** add git credential helper for GitHub and GitLab lease tokens by [@jdx](https://github.com/jdx) in [#1255](https://github.com/jdx/fnox/pull/1255)
+- **(passage)** add passage provider for age-encrypted pass stores by [@jdx](https://github.com/jdx) in [#1200](https://github.com/jdx/fnox/pull/1200)
+
+### 🐛 Bug Fixes
+
+- **(bitwarden)** check the vault is unlocked in provider test by [@jdx](https://github.com/jdx) in [#1213](https://github.com/jdx/fnox/pull/1213)
+- **(config)** omit empty parent tables when creating profile secrets by [@jdx](https://github.com/jdx) in [#1224](https://github.com/jdx/fnox/pull/1224)
+- **(pass)** preserve whitespace of stored values on read by [@jdx](https://github.com/jdx) in [#1219](https://github.com/jdx/fnox/pull/1219)
+- **(provider)** reuse one Azure token per provider instead of one per secret by [@jdx](https://github.com/jdx) in [#1245](https://github.com/jdx/fnox/pull/1245)
+- **(provider)** route gcp-kms requests through HTTPS_PROXY by [@jdx](https://github.com/jdx) in [#1252](https://github.com/jdx/fnox/pull/1252)
+- **(push)** report a CLI's error when it exits without reading the value by [@jdx](https://github.com/jdx) in [#1249](https://github.com/jdx/fnox/pull/1249)
+- **(set)** keep formatting and field order when updating an existing secret by [@jdx](https://github.com/jdx) in [#1212](https://github.com/jdx/fnox/pull/1212)
+
+### 📚 Documentation
+
+- **(config)** note that a bare -c fnox.toml still searches directories by [@jdx](https://github.com/jdx) in [#1214](https://github.com/jdx/fnox/pull/1214)
+- **(fnox-client)** update MSRV note to Rust 1.95 by [@jdx](https://github.com/jdx) in [#1250](https://github.com/jdx/fnox/pull/1250)
+- **(proxy)** explain docker runner isolation in ci by [@jdx](https://github.com/jdx) in [#1261](https://github.com/jdx/fnox/pull/1261)
+- remove obsolete Touch ID preview and session concept pages by [@jdx](https://github.com/jdx) in [#1204](https://github.com/jdx/fnox/pull/1204)
+- explain the fnox threat model by [@jdx](https://github.com/jdx) in [#1229](https://github.com/jdx/fnox/pull/1229)
+
+### 🛡️ Security
+
+- **(deps)** update mise tools by [@renovate[bot]](https://github.com/renovate[bot]) in [#1203](https://github.com/jdx/fnox/pull/1203)
+- **(keychain)** recognize stored Touch ID items in the current-set check by [@jdx](https://github.com/jdx) in [#1257](https://github.com/jdx/fnox/pull/1257)
+- remove the pull_request_target workflows by [@jdx](https://github.com/jdx) in [#1210](https://github.com/jdx/fnox/pull/1210)
+
+### 🔍 Other Changes
+
+- **(deny)** ignore RUSTSEC-2026-0600 (fnox doesn't use kube's openssl-tls) by [@jdx](https://github.com/jdx) in [#1247](https://github.com/jdx/fnox/pull/1247)
+- **(deny)** drop RUSTSEC-2026-0600 ignore by [@jdx](https://github.com/jdx) in [#1251](https://github.com/jdx/fnox/pull/1251)
+- **(deps)** update url to 2.5.9 by [@jdx](https://github.com/jdx) in [#1227](https://github.com/jdx/fnox/pull/1227)
+- **(entire)** remove trail runners by [@jdx](https://github.com/jdx) in [ade7666](https://github.com/jdx/fnox/commit/ade7666a05b84b9d61f2fce93295346f13037df4)
+- **(release)** fail macOS releases that lack the Touch ID helper by [@jdx](https://github.com/jdx) in [#1254](https://github.com/jdx/fnox/pull/1254)
+- **(release)** stop crediting @jdx in release notes and show commit coverage by [@jdx](https://github.com/jdx) in [#1262](https://github.com/jdx/fnox/pull/1262)
+- use jdx/workflows link-discussions by [@claude](https://github.com/claude) in [c44e535](https://github.com/jdx/fnox/commit/c44e535facd3d33e5a16edea3a0f7803af71f98f)
+- add caller concurrency to link-discussions by [@claude](https://github.com/claude) in [15cfce1](https://github.com/jdx/fnox/commit/15cfce12451c81eaa6fc13e77ea2cd1d34e6b31e)
+- add GitHub Actions workflow lockfile by [@claude](https://github.com/claude) in [e8015d8](https://github.com/jdx/fnox/commit/e8015d84df33828230b5369e1d56de7b921727ef)
+- set up Entire graph, brain and search for agents by [@jdx](https://github.com/jdx) in [#1253](https://github.com/jdx/fnox/pull/1253)
+- remove jouet by [@jdx](https://github.com/jdx) in [#1263](https://github.com/jdx/fnox/pull/1263)
+
+### 📦️ Dependency Updates
+
+- update rust crate rusqlite to 0.42 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1205](https://github.com/jdx/fnox/pull/1205)
+- update jdx/mise-action action to v5.2.7 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1202](https://github.com/jdx/fnox/pull/1202)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1206](https://github.com/jdx/fnox/pull/1206)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1211](https://github.com/jdx/fnox/pull/1211)
+- update rust crate google-cloud-secretmanager-v1 to v2 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1215](https://github.com/jdx/fnox/pull/1215)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1216](https://github.com/jdx/fnox/pull/1216)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1217](https://github.com/jdx/fnox/pull/1217)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1221](https://github.com/jdx/fnox/pull/1221)
+- update jdx/packslip action to v1.11.4 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1220](https://github.com/jdx/fnox/pull/1220)
+- update rust crate usage-rs to v7.4.1 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1230](https://github.com/jdx/fnox/pull/1230)
+- update rust crate jsonwebtoken to v12 by [@renovate[bot]](https://github.com/renovate[bot]) in [#1237](https://github.com/jdx/fnox/pull/1237)
+- update github actions by [@renovate[bot]](https://github.com/renovate[bot]) in [#1234](https://github.com/jdx/fnox/pull/1234)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1238](https://github.com/jdx/fnox/pull/1238)
+- update mise tools by [@renovate[bot]](https://github.com/renovate[bot]) in [#1235](https://github.com/jdx/fnox/pull/1235)
+- update github actions by [@renovate[bot]](https://github.com/renovate[bot]) in [#1240](https://github.com/jdx/fnox/pull/1240)
+- lock file maintenance by [@renovate[bot]](https://github.com/renovate[bot]) in [#1241](https://github.com/jdx/fnox/pull/1241)
+- update jdx/renovate-config workflows to v1.2.1 by jdx in [ba2a88f](https://github.com/jdx/fnox/commit/ba2a88f59f3cb691f26ed99f463375b1a5da38d3)
+- update rust crates and raise MSRV to 1.95 by [@jdx](https://github.com/jdx) in [#1248](https://github.com/jdx/fnox/pull/1248)
+- install Bitwarden CLI from the published release archives by [@jdx](https://github.com/jdx) in [#1260](https://github.com/jdx/fnox/pull/1260)
+
+### New Contributors
+
+- @claude made their first contribution
+- @ made their first contribution
+
 ## [1.50.0](https://github.com/jdx/fnox/compare/v1.49.0..v1.50.0) - 2026-11-18
 
 ### 🚀 Features
@@ -10,10 +86,15 @@
 ### 🐛 Bug Fixes
 
 - **(check)** report providers that cannot be configured and add --strict by [@jdx](https://github.com/jdx) in [#1187](https://github.com/jdx/fnox/pull/1187)
+- **(exec)** fail when a provider's own settings don't resolve by [@jdx](https://github.com/jdx) in [#1199](https://github.com/jdx/fnox/pull/1199)
 
 ### 🛡️ Security
 
 - add cargo-deny advisories and sources checks by [@jdx](https://github.com/jdx) in [#1197](https://github.com/jdx/fnox/pull/1197)
+
+### 🔍 Other Changes
+
+- publish unsigned Windows binaries until SignPath is configured by [@jdx](https://github.com/jdx) in [#1198](https://github.com/jdx/fnox/pull/1198)
 
 ### 📦️ Dependency Updates
 
