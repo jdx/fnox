@@ -5,8 +5,9 @@
 //! kernel to restrict the command, which any process may do:
 //!
 //! - **Files**: Landlock. The command may read everything but the hidden
-//!   paths, `/tmp`, `/run` and `/dev/shm`, and may write only a private
-//!   temporary directory, `sandbox_allow_write` and a few devices. Landlock
+//!   paths, `/tmp`, `/run` and most of `/dev`, and may write only a private
+//!   temporary directory, `sandbox_allow_write` and a few devices. Only
+//!   standard input, output and error are passed on to it. Landlock
 //!   can only grant access, so it could not keep a writable working directory's
 //!   `fnox.toml` or `.git/hooks` from being replaced; the working directory is
 //!   therefore read-only, and a writable path that contains a protected one is
@@ -57,6 +58,9 @@ const DEVICES: &[&str] = &[
     "/dev/tty",
     "/dev/ptmx",
 ];
+
+/// `close_range` marks the descriptors close-on-exec instead of closing them.
+const CLOSE_RANGE_CLOEXEC: u32 = 1 << 2;
 
 #[cfg(target_arch = "x86_64")]
 const AUDIT_ARCH: u32 = 0xC000_003E;
@@ -128,7 +132,12 @@ impl Confinement {
         // to init, so fnox can still read its connect() address (which Yama
         // allows only to an ancestor) and stop it when the command exits.
         // SAFETY: prctl takes only integer arguments.
-        unsafe { libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) };
+        if unsafe { libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) } < 0 {
+            return Err(FnoxError::Config(format!(
+                "the landlock sandbox could not make fnox a subreaper: {}",
+                io::Error::last_os_error()
+            )));
+        }
         let (ours, theirs) = channel()?;
         let ruleset = self.ruleset.as_raw_fd();
         let filter = self.filter.clone();
@@ -221,8 +230,15 @@ impl Confinement {
             }
         })();
         let mut status = 0;
-        // SAFETY: waits for the child forked above.
-        unsafe { libc::waitpid(pid, &mut status, 0) };
+        // SAFETY: kills and waits for the child forked above. A child whose
+        // connection was not answered would otherwise wait in connect()
+        // forever.
+        unsafe {
+            if outcome.is_err() {
+                libc::kill(pid, libc::SIGKILL);
+            }
+            libc::waitpid(pid, &mut status, 0);
+        }
         outcome.map_err(fail)?;
         if !libc::WIFEXITED(status) || libc::WEXITSTATUS(status) != 0 {
             return Err(fail(format!(
@@ -362,11 +378,18 @@ fn ruleset(policy: &SandboxPolicy, dir: &Path) -> Result<OwnedFd> {
             .map(|path| (path, read)),
     );
     // As under `bwrap`, which mounts it back over its empty /tmp, the
-    // working directory stays readable even inside an always-hidden path.
-    if ALWAYS_HIDDEN
+    // working directory stays readable even inside /tmp or /run, and even if
+    // it is one of them. /dev, with its terminals, gets no such exception.
+    if let Some(root) = ["/tmp", "/run"]
         .iter()
-        .any(|always| policy.cwd.starts_with(always))
+        .map(Path::new)
+        .find(|root| policy.cwd.starts_with(root))
     {
+        let hidden: Vec<PathBuf> = hidden
+            .iter()
+            .filter(|path| *path != root)
+            .cloned()
+            .collect();
         rules.extend(
             read_roots(&policy.cwd, &hidden)
                 .into_iter()
@@ -630,6 +653,7 @@ enum Step {
     Landlock,
     Seccomp,
     Channel,
+    Descriptors,
 }
 
 impl Step {
@@ -640,7 +664,8 @@ impl Step {
             3 => Self::NoNewPrivileges,
             4 => Self::Landlock,
             5 => Self::Seccomp,
-            _ => Self::Channel,
+            6 => Self::Channel,
+            _ => Self::Descriptors,
         }
     }
 
@@ -652,6 +677,7 @@ impl Step {
             Self::Landlock => "entering the Landlock domain",
             Self::Seccomp => "installing the seccomp filter",
             Self::Channel => "handing the seccomp listener to fnox",
+            Self::Descriptors => "closing inherited descriptors",
         }
     }
 }
@@ -747,6 +773,12 @@ unsafe fn confine_self(
         libc::close(listener);
         if !sent {
             return Err((Step::Channel, errno()));
+        }
+        // Landlock only checks new opens, so a descriptor fnox inherited
+        // without close-on-exec would carry its access into the command.
+        // Only standard input, output and error are passed on.
+        if libc::syscall(libc::SYS_close_range, 3u32, u32::MAX, CLOSE_RANGE_CLOEXEC) < 0 {
+            return Err((Step::Descriptors, errno()));
         }
     }
     Ok(())
@@ -1001,7 +1033,9 @@ fn answer(listener: RawFd, proxy: SocketAddrV4) -> io::Result<Answer> {
 
 /// Connects a socket of fnox's own to the proxy and installs it as the
 /// command's `fd`, with the flags the command gave its own socket. Socket
-/// options the command set before connecting are not carried over.
+/// options the command set before connecting are not carried over, and a
+/// copy of the socket the command made with `dup` before connecting still
+/// refers to the old, unconnected socket.
 fn connect_in_place(
     listener: RawFd,
     id: u64,
@@ -1020,7 +1054,9 @@ fn connect_in_place(
             0,
         )),
     };
-    let stream = TcpStream::connect(address)?;
+    // The proxy is fnox's own and on loopback, so it accepts at once unless
+    // it is overwhelmed; a stalled connect would hold up every other one.
+    let stream = TcpStream::connect_timeout(&address, CONNECT_TIMEOUT)?;
     if flags & libc::O_NONBLOCK != 0 {
         stream.set_nonblocking(true)?;
     }
@@ -1038,6 +1074,9 @@ fn connect_in_place(
     Ok(())
 }
 
+/// How long fnox waits for the proxy to accept a connection for the command.
+const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// The `open` flags of the command's `fd`, as `/proc` reports them.
 fn file_flags(tid: libc::pid_t, fd: RawFd) -> io::Result<i32> {
     let info = std::fs::read_to_string(format!("/proc/{tid}/fdinfo/{fd}"))?;
@@ -1048,19 +1087,28 @@ fn file_flags(tid: libc::pid_t, fd: RawFd) -> io::Result<i32> {
 }
 
 /// Kills what the command left behind. Its processes, which have one more
-/// seccomp filter than fnox, are handed to fnox when their parent exits.
+/// seccomp filter than fnox, are handed to fnox when their parent exits, so
+/// each round kills the processes the last round's left fnox.
 pub fn stop_remaining() {
     // SAFETY: getpid takes no arguments.
     let me = unsafe { libc::getpid() };
     let Some(own) = seccomp_filters(me) else {
         return;
     };
-    for _ in 0..100 {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
         let stragglers: Vec<libc::pid_t> = children(me)
             .into_iter()
             .filter(|pid| seccomp_filters(*pid).is_some_and(|filters| filters > own))
             .collect();
         if stragglers.is_empty() {
+            return;
+        }
+        if std::time::Instant::now() > deadline {
+            tracing::warn!(
+                "fnox proxy sandbox: {} processes the command left behind are still running",
+                stragglers.len()
+            );
             return;
         }
         for pid in stragglers {

@@ -139,12 +139,23 @@ time.sleep(60)' >listener.port &
 		sleep 0.1
 	done
 	OPEN_PORT="$(cat listener.port)"
+	[[ "$OPEN_PORT" =~ ^[0-9]+$ ]] || fail "the listener did not start"
 	export OPEN_PORT
+	# The port is open outside the sandbox, so being blocked inside means
+	# the sandbox refused it.
+	(exec 3<>/dev/tcp/127.0.0.1/"$OPEN_PORT") || fail "the listener is not reachable"
 	run "$FNOX_BIN" proxy run --sandbox-backend landlock -- bash -c '
 		(exec 3<>/dev/tcp/127.0.0.1/"$OPEN_PORT") 2>/dev/null && echo direct-open || echo direct-blocked
 		port="${HTTPS_PROXY##*:}"
 		(exec 3<>/dev/tcp/127.0.0.1/"$port") 2>/dev/null && echo proxy-reached || echo proxy-unreachable
-		python3 -c "import socket; socket.socket(socket.AF_INET, socket.SOCK_DGRAM)" 2>/dev/null && echo udp-open || echo udp-blocked
+		python3 -c "
+import socket
+try:
+    socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    print(\"udp-open\")
+except PermissionError:
+    print(\"udp-blocked\")
+"
 		test -r "$SSL_CERT_FILE" && echo ca-readable
 	'
 	kill "$listener" 2>/dev/null || true
@@ -172,11 +183,59 @@ time.sleep(60)' >listener.port &
 }
 
 @test "interrupting the landlock sandbox exits with the signal" {
-	"$FNOX_BIN" proxy run --sandbox-backend landlock -- sleep 30 &
+	"$FNOX_BIN" proxy run --sandbox-backend landlock -- sh -c 'touch out/ready; exec sleep 30' &
 	local pid=$!
-	sleep 1
+	for _ in $(seq 1 100); do
+		[[ -e out/ready ]] && break
+		sleep 0.1
+	done
+	[[ -e out/ready ]] || fail "the sandboxed command did not start"
 	kill -INT "$pid"
 	local status=0
+	for _ in $(seq 1 100); do
+		kill -0 "$pid" 2>/dev/null || break
+		sleep 0.1
+	done
+	if kill -0 "$pid" 2>/dev/null; then
+		kill -KILL "$pid"
+		fail "fnox did not exit after SIGINT"
+	fi
 	wait "$pid" || status=$?
 	assert_equal "$status" 130
+}
+
+@test "landlock sandbox keeps a working directory in or of /tmp readable" {
+	local dir
+	dir="$(mktemp -d /tmp/fnox-landlock-cwd.XXXXXX)"
+	cp fnox.toml "$dir/"
+	echo "tmp-contents" >"$dir/readme.txt"
+	cd "$dir"
+	run "$FNOX_BIN" proxy run --sandbox-backend landlock -- sh -c '
+		cat readme.txt
+		cat fnox.toml >/dev/null 2>&1 && echo config-readable || echo config-hidden
+	'
+	cd /tmp
+	local inside="$output"
+	run "$FNOX_BIN" -c "$dir/fnox.toml" proxy run --sandbox-backend landlock -- sh -c "
+		cat '$dir/readme.txt'
+		cat '$dir/fnox.toml' >/dev/null 2>&1 && echo config-readable || echo config-hidden
+	"
+	local status_of_tmp="$status" of_tmp="$output"
+	cd "$TEST_TEMP_DIR"
+	rm -r "$dir"
+	output="$inside"
+	assert_line "tmp-contents"
+	assert_line "config-hidden"
+	assert_equal "$status_of_tmp" 0
+	output="$of_tmp"
+	assert_line "tmp-contents"
+	assert_line "config-hidden"
+}
+
+@test "landlock sandbox passes on only standard descriptors" {
+	run "$FNOX_BIN" proxy run --sandbox-backend landlock -- sh -c '
+		(: <&7) 2>/dev/null && echo fd-inherited || echo fd-closed
+	' 7<decoy.txt
+	assert_success
+	assert_line "fd-closed"
 }
