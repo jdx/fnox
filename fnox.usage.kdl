@@ -219,6 +219,9 @@ See also:
         example "fnox daemon clear API_TOKEN DB_PASSWORD" header="Evict two secrets"
     }
     cmd serve help="Run the daemon server in the foreground" hide=#true {
+        flag --socket-scope help="Socket scope passed by the process that starts the daemon." {
+            arg <SOCKET_SCOPE>
+        }
         flag "-h --help" help="Print help" action=help builtin=#true
     }
     cmd start help="Start the daemon in the background" {

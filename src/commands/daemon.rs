@@ -45,7 +45,11 @@ enum DaemonSubcommand {
     },
     /// Run the daemon server in the foreground
     #[usage(hide)]
-    Serve,
+    Serve {
+        /// Socket scope passed by the process that starts the daemon.
+        #[usage(long)]
+        socket_scope: Option<String>,
+    },
     /// Start the daemon in the background
     ///
     /// Starts the per-user daemon unless it is already running. Commands use it
@@ -96,7 +100,7 @@ enum DaemonSubcommand {
 
 impl DaemonCommand {
     pub(crate) fn serves_connections(&self) -> bool {
-        matches!(self.command, DaemonSubcommand::Serve)
+        matches!(self.command, DaemonSubcommand::Serve { .. })
     }
 
     pub async fn run(&self, cli: &Cli) -> Result<()> {
@@ -110,14 +114,24 @@ impl DaemonCommand {
                 }
                 Ok(())
             }
-            DaemonSubcommand::Serve => {
+            DaemonSubcommand::Serve { socket_scope } => {
                 let timeout = std::env::var("FNOX_DAEMON_IDLE_TIMEOUT")
                     .ok()
                     .unwrap_or_else(|| {
                         crate::config::DaemonConfig::DEFAULT_IDLE_TIMEOUT.to_string()
                     });
                 let timeout = daemon::parse_duration(&timeout)?;
-                daemon::serve(cli, timeout).await
+                let user_socket = match socket_scope.as_deref() {
+                    None => None,
+                    Some("user") => Some(true),
+                    Some("context") => Some(false),
+                    Some(value) => {
+                        return Err(crate::error::FnoxError::Config(format!(
+                            "Invalid daemon socket scope: {value}"
+                        )));
+                    }
+                };
+                daemon::serve(cli, timeout, user_socket).await
             }
             DaemonSubcommand::Start => {
                 let config = Config::load_smart(&cli.config).ok();

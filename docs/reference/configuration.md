@@ -451,12 +451,14 @@ cache_ttl = "30m"
 max_cache_ttl = "4h"
 ```
 
-| Field           | Type     | Default | Description                                                                                          |
-| --------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------- |
-| `enabled`       | boolean  | `false` | Resolve secrets through the per-user daemon. `FNOX_DAEMON` overrides it.                             |
-| `idle_timeout`  | duration | `"8h"`  | How long the daemon runs without requests before it exits.                                           |
-| `cache_ttl`     | duration | unset   | Sliding TTL for each cached secret; each read restarts it. Unset means no expiry from inactivity.    |
-| `max_cache_ttl` | duration | unset   | Absolute TTL for each cached secret, counted from when it was stored. Unset means no absolute limit. |
+| Field                   | Type     | Default     | Description                                                                                                                            |
+| ----------------------- | -------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`               | boolean  | `false`     | Resolve secrets through the per-user daemon. `FNOX_DAEMON` overrides it.                                                               |
+| `share_across_commands` | boolean  | `false`     | Let eligible read commands reuse the same cached value.                                                                                |
+| `socket_scope`          | string   | `"context"` | Use separate daemons by invocation context, or set `"user"` to share one for this user's global configuration and runtime directories. |
+| `idle_timeout`          | duration | `"8h"`      | How long the daemon runs without requests before it exits.                                                                             |
+| `cache_ttl`             | duration | unset       | Sliding TTL for each cached secret; each read restarts it. Unset means no expiry from inactivity.                                      |
+| `max_cache_ttl`         | duration | unset       | Absolute TTL for each cached secret, counted from when it was stored. Unset means no absolute limit.                                   |
 
 A secret or provider can override both TTLs; see the tables below.
 

@@ -89,6 +89,14 @@ impl Client {
         }
     }
 
+    /// Use the `daemon_socket` address from `fnox env --json --describe`, if present.
+    pub fn with_socket_path(mut self, path: Option<&Path>) -> Self {
+        if let Some(path) = path {
+            self.socket_path = path.to_path_buf();
+        }
+        self
+    }
+
     /// The read and write timeout. The default is 5 seconds.
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;

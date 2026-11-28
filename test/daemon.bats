@@ -623,7 +623,7 @@ EOF
 	assert_output --partial "export FOO=bar"
 }
 
-@test "daemon cache hits when a top-level env is set" {
+counting_pass_provider() {
 	mkdir -p "$TEST_TEMP_DIR/bin"
 	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF2'
 #!/bin/sh
@@ -633,6 +633,10 @@ EOF2
 	chmod +x "$TEST_TEMP_DIR/bin/pass"
 	export PATH="$TEST_TEMP_DIR/bin:$PATH"
 	export PASS_CALLS_FILE="$TEST_TEMP_DIR/pass-calls"
+}
+
+@test "daemon cache hits when a top-level env is set" {
+	counting_pass_provider
 
 	cat >fnox.toml <<'EOF2'
 root = true
@@ -658,4 +662,83 @@ EOF2
 
 	# The second get is served from the daemon cache, not the provider
 	assert_equal "$(wc -l <"$PASS_CALLS_FILE" | tr -d ' ')" "1"
+}
+
+@test "user-scoped daemon shares a warmed value across read commands and missing-value flags" {
+	counting_pass_provider
+	mkdir -p "$HOME/.config/fnox"
+	cat >"$HOME/.config/fnox/config.toml" <<'EOF'
+[daemon]
+share_across_commands = true
+socket_scope = "user"
+EOF
+	cat >fnox.toml <<'EOF'
+root = true
+
+[daemon]
+enabled = true
+
+[providers.pass]
+type = "password-store"
+
+[secrets]
+FOO = { provider = "pass", value = "foo" }
+EOF
+
+	"$FNOX_BIN" export --all >/dev/null
+	run "$FNOX_BIN" daemon status
+	assert_success
+	assert_output --partial "cached_entries: 1"
+	local pid
+	pid="$(printf '%s\n' "$output" | sed -n 's/^pid: //p')"
+	[ -n "$pid" ]
+
+	run "$FNOX_BIN" --if-missing error get FOO
+	assert_success
+	assert_output "foreground-value"
+	run "$FNOX_BIN" --if-missing error --non-interactive exec -- sh -c 'test "$FOO" = foreground-value'
+	assert_success
+	run "$FNOX_BIN" --if-missing error daemon status
+	assert_success
+	assert_line "pid: $pid"
+	assert_line "cached_entries: 1"
+	assert_equal "$(wc -l <"$PASS_CALLS_FILE" | tr -d ' ')" "1"
+
+	run "$FNOX_BIN" --if-missing error check --all
+	assert_success
+	assert_equal "$(wc -l <"$PASS_CALLS_FILE" | tr -d ' ')" "2"
+}
+
+@test "user-scoped daemon isolates profile, no-defaults, and relative age key contexts" {
+	counting_pass_provider
+	cat >fnox.toml <<'EOF'
+root = true
+
+[daemon]
+enabled = true
+socket_scope = "user"
+
+[providers.pass]
+type = "password-store"
+
+[secrets]
+FOO = { provider = "pass", value = "foo" }
+
+[profiles.dev.secrets]
+FOO = { provider = "pass", value = "foo" }
+EOF
+	local config="$PWD/fnox.toml"
+	mkdir -p one two
+
+	(cd one && "$FNOX_BIN" -c "$config" --age-key-file age.txt get FOO >/dev/null)
+	(cd two && "$FNOX_BIN" -c "$config" --age-key-file age.txt get FOO >/dev/null)
+	run "$FNOX_BIN" --profile dev --age-key-file one/age.txt get FOO
+	assert_success
+	run "$FNOX_BIN" --profile dev --no-defaults --age-key-file one/age.txt get FOO
+	assert_success
+
+	run "$FNOX_BIN" daemon status
+	assert_success
+	assert_line "cached_entries: 4"
+	assert_equal "$(wc -l <"$PASS_CALLS_FILE" | tr -d ' ')" "4"
 }

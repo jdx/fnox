@@ -108,6 +108,15 @@ impl SocketKey {
 
     /// The socket a daemon for this key listens on.
     pub fn socket_path(&self, rt: &RuntimeEnv) -> PathBuf {
+        self.socket_path_with_config_dir(rt, None)
+    }
+
+    /// The shared socket for this user and global config directory.
+    pub fn user_socket_path(rt: &RuntimeEnv, config_dir: &Path) -> PathBuf {
+        Self::new(&[], false, None, None).socket_path_with_config_dir(rt, Some(config_dir))
+    }
+
+    fn socket_path_with_config_dir(&self, rt: &RuntimeEnv, config_dir: Option<&Path>) -> PathBuf {
         fn field(hasher: &mut blake3::Hasher, s: &[u8]) {
             hasher.update(&(s.len() as u64).to_le_bytes());
             hasher.update(s);
@@ -127,14 +136,19 @@ impl SocketKey {
         let mut hasher = blake3::Hasher::new();
         hasher.update(b"fnoxd-socket\0");
         hasher.update(&[WIRE_VERSION]);
-        field(&mut hasher, self.profile.join(",").as_bytes());
-        field(&mut hasher, if self.no_defaults { b"1" } else { b"0" });
-        opt(&mut hasher, self.if_missing.as_deref());
-        let age_key_file = self
-            .age_key_file
-            .as_ref()
-            .map(|path| path.to_string_lossy().into_owned());
-        opt(&mut hasher, age_key_file.as_deref());
+        if let Some(config_dir) = config_dir {
+            hasher.update(b"user");
+            field(&mut hasher, config_dir.as_os_str().as_encoded_bytes());
+        } else {
+            field(&mut hasher, self.profile.join(",").as_bytes());
+            field(&mut hasher, if self.no_defaults { b"1" } else { b"0" });
+            opt(&mut hasher, self.if_missing.as_deref());
+            let age_key_file = self
+                .age_key_file
+                .as_ref()
+                .map(|path| path.to_string_lossy().into_owned());
+            opt(&mut hasher, age_key_file.as_deref());
+        }
         let hash = hasher.finalize().to_hex();
         #[cfg(windows)]
         {

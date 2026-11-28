@@ -22,6 +22,33 @@ fnox daemon status
 fnox daemon stop
 ```
 
+## Prewarm the cache for several commands
+
+By default, each read command has its own cache entries. To let `get`, `exec`, and
+shell integration reuse values from `export`, put this in `~/.config/fnox/config.toml`:
+
+```toml
+[daemon]
+enabled = true
+share_across_commands = true
+socket_scope = "user"
+```
+
+Run `fnox export --all >/dev/null` from the project while you can answer any
+provider prompts. Later, `fnox --if-missing error get API_TOKEN` can reuse the
+warmed value. Every command still applies its own environment filtering, and
+each audit record identifies the command that performed the read. The
+`PURPOSE` column in daemon status shows which command filled the entry.
+`check --all` still reads from providers, and cache exclusions and TTLs still apply.
+
+The settings are independent. `share_across_commands` shares entries within a
+daemon. `socket_scope = "user"` shares the daemon process across profiles and
+flags for the same global configuration directory and socket directory. Cache
+entries still distinguish profiles, `--no-defaults`, and age key paths. With
+`socket_scope = "context"` (the default), those settings and `--if-missing`
+select separate daemons. In user scope, the first caller to start the daemon
+sets the process idle timeout.
+
 ## Refresh a changed secret
 
 The daemon doesn't know when a value changes in your vault. After rotating a secret, refresh just that one:
@@ -99,8 +126,8 @@ On a cache miss, fnox resolves the secret in your terminal and hands the result 
 
 For a local sync cache encrypted with Apple's Secure Enclave, the first read of
 an uncached secret runs `age-plugin-se` and may show macOS's Touch ID prompt.
-When caching is allowed, later reads for the same purpose can reuse a matching
-entry. Profile, configuration, credential, or relevant environment changes can
+When caching is allowed, later reads can reuse a matching entry. Profile,
+configuration, credential, or relevant environment changes can
 cause a miss; `--refresh` evicts the entry before reading. Secrets or original
 providers with `daemon_cache = false` are not cached and may prompt again.
 Clearing the cache, stopping the daemon, or its idle timeout also removes cached
@@ -138,6 +165,8 @@ Tools that start processes themselves, such as mise, can read the daemon's cache
 Rules for client authors:
 
 - Run `fnox env --json --describe` first, and talk to the daemon only if it reports `daemon_enabled: true`.
+- Use the `daemon_socket` address from that document when present. Pass it to
+  `Client::with_socket_path` with the usual request settings.
 - The client only reads: it never starts the daemon, stores values, or triggers provider calls. On a miss, run `fnox env --json` yourself; that resolves in the user's terminal and fills the cache.
 - Send exactly the environment you would give `fnox env --json`. The cache is keyed on `FNOX_*` and provider credential variables, so a different environment always misses.
 - A `disabled` answer means this project, or `FNOX_DAEMON=off` in the request, doesn't use the daemon. Resolve directly.

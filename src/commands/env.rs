@@ -131,12 +131,13 @@ impl EnvCommand {
         if self.describe {
             let files = child_env::DefinitionFiles::new(&config, &profile)
                 .map_err(|e| failure(ErrorKind::Config, e))?;
-            let doc = DescribeDocument::new(
+            let mut doc = DescribeDocument::new(
                 profile,
                 child_env::describe(&secrets, &leases, &files, sel.requested.as_deref()),
                 child_env::dynamic_leases(&leases),
                 crate::daemon::config_enables_daemon(&config),
             );
+            doc.daemon_socket = crate::daemon::described_socket(&config);
             return print_document(&doc).map_err(|e| failure(ErrorKind::Resolution, e));
         }
 

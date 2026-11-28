@@ -628,11 +628,11 @@ pub fn format_entries(entries: &[CacheEntryInfo]) -> String {
 }
 
 pub async fn status(cli: &Cli) -> Result<Option<DaemonStatus>> {
-    status_for_context(&ResolveContext::from_cli(cli)).await
+    status_at(socket_path(cli)).await
 }
 
-async fn status_for_context(ctx: &ResolveContext) -> Result<Option<DaemonStatus>> {
-    match call(socket_path_for_context(ctx)?, Request::Status).await {
+async fn status_at(path: PathBuf) -> Result<Option<DaemonStatus>> {
+    match call(path, Request::Status).await {
         Ok(Response::Status {
             pid,
             cached_entries,
@@ -656,7 +656,7 @@ async fn status_for_context(ctx: &ResolveContext) -> Result<Option<DaemonStatus>
 pub async fn clear(cli: &Cli, keys: &[String]) -> Result<()> {
     let paths = daemon_socket_paths()?;
     if paths.is_empty() {
-        clear_socket(socket_path(cli)?, keys, false, false).await?;
+        clear_socket(socket_path(cli), keys, false, false).await?;
         return Ok(());
     }
 
@@ -666,7 +666,7 @@ pub async fn clear(cli: &Cli, keys: &[String]) -> Result<()> {
     }
 
     if !cleared {
-        clear_socket(socket_path(cli)?, keys, false, false).await?;
+        clear_socket(socket_path(cli), keys, false, false).await?;
     }
     Ok(())
 }
@@ -679,7 +679,13 @@ pub async fn refresh(cli: &Cli, config: &Config, keys: &[String]) -> Result<()> 
     if keys.is_empty() || !should_use_daemon(&ctx, config) {
         return Ok(());
     }
-    clear_socket(socket_path_for_context(&ctx)?, keys, true, false).await?;
+    clear_socket(
+        socket_path_for_context(&ctx, uses_user_socket(config)),
+        keys,
+        true,
+        false,
+    )
+    .await?;
     Ok(())
 }
 
@@ -694,7 +700,13 @@ pub async fn refresh_with_context(
     if keys.is_empty() || !should_use_daemon(ctx, config) {
         return Ok(());
     }
-    clear_socket(socket_path_for_context(ctx)?, keys, true, true).await?;
+    clear_socket(
+        socket_path_for_context(ctx, uses_user_socket(config)),
+        keys,
+        true,
+        true,
+    )
+    .await?;
     Ok(())
 }
 
@@ -753,7 +765,7 @@ fn daemon_socket_paths() -> Result<Vec<PathBuf>> {
 }
 
 pub async fn shutdown(cli: &Cli) -> Result<()> {
-    match call(socket_path(cli)?, Request::Shutdown).await {
+    match call(socket_path(cli), Request::Shutdown).await {
         Ok(Response::Ok) => Ok(()),
         Ok(Response::Error { message }) => Err(FnoxError::Config(message)),
         Ok(_) => Err(FnoxError::Config(
@@ -772,7 +784,9 @@ async fn start_background_for_context(
     ctx: &ResolveContext,
     config: Option<&Config>,
 ) -> Result<bool> {
-    if status_for_context(ctx).await?.is_some() {
+    let user_socket = config.is_some_and(uses_user_socket);
+    let path = socket_path_for_context(ctx, user_socket);
+    if status_at(path.clone()).await?.is_some() {
         return Ok(false);
     }
 
@@ -794,7 +808,13 @@ async fn start_background_for_context(
     if let Some(age_key_file) = &ctx.age_key_file {
         cmd.arg("--age-key-file").arg(age_key_file);
     }
-    cmd.arg("daemon").arg("serve");
+    // The detached process starts outside the caller's project.
+    cmd.args(["daemon", "serve", "--socket-scope"])
+        .arg(if user_socket { "user" } else { "context" });
+    if user_socket {
+        // Keep the daemon's config directory aligned with its socket namespace.
+        cmd.env("FNOX_CONFIG_DIR", &*crate::env::FNOX_CONFIG_DIR);
+    }
     if let Some(config) = config
         && let Some(daemon) = &config.daemon
     {
@@ -832,10 +852,9 @@ async fn start_background_for_context(
     cmd.spawn()
         .map_err(|e| FnoxError::Config(format!("Failed to start fnox daemon: {e}")))?;
 
-    let path = socket_path_for_context(ctx)?;
     for _ in 0..50 {
         // A named pipe is no file, so on Windows only a status call can tell.
-        if (cfg!(windows) || path.exists()) && status_for_context(ctx).await?.is_some() {
+        if (cfg!(windows) || path.exists()) && status_at(path.clone()).await?.is_some() {
             return Ok(true);
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -846,7 +865,15 @@ async fn start_background_for_context(
     ))
 }
 
-pub async fn serve(cli: &Cli, idle_timeout: Duration) -> Result<()> {
+pub async fn serve(cli: &Cli, idle_timeout: Duration, user_socket: Option<bool>) -> Result<()> {
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        windows
+    )))]
+    let _ = user_socket;
     #[cfg(not(any(unix, windows)))]
     {
         let _ = cli;
@@ -881,7 +908,12 @@ pub async fn serve(cli: &Cli, idle_timeout: Duration) -> Result<()> {
         windows
     ))]
     {
-        let path = socket_path(cli)?;
+        let path = match user_socket {
+            Some(user_socket) => {
+                socket_path_for_context(&ResolveContext::from_cli(cli), user_socket)
+            }
+            None => socket_path(cli),
+        };
         let mut listener = Listener::bind(&path).await?;
 
         let state = std::sync::Arc::new(Mutex::new(DaemonState::default()));
@@ -1111,6 +1143,23 @@ fn daemon_enabled(config: &Config, env_override: Option<bool>) -> bool {
     env_override.unwrap_or_else(|| config.daemon.as_ref().is_some_and(|d| d.enabled()))
 }
 
+fn uses_user_socket(config: &Config) -> bool {
+    config
+        .daemon
+        .as_ref()
+        .and_then(|daemon| daemon.socket_scope)
+        == Some(crate::config::DaemonSocketScope::User)
+}
+
+pub(crate) fn described_socket(config: &Config) -> Option<String> {
+    if !uses_user_socket(config) {
+        return None;
+    }
+    user_socket_path(&RuntimeEnv::from_process())
+        .to_str()
+        .map(str::to_owned)
+}
+
 async fn call_or_start(
     ctx: &ResolveContext,
     config: &Config,
@@ -1128,7 +1177,7 @@ async fn call_or_start(
 
     #[cfg(any(unix, windows))]
     {
-        let path = socket_path_for_context(ctx)?;
+        let path = socket_path_for_context(ctx, uses_user_socket(config));
         match call(path.clone(), request.clone()).await {
             Ok(response) => Ok(response),
             Err(e) if e.is_socket_missing() => {
@@ -1562,7 +1611,7 @@ async fn resolve_env_response(
     }
 
     let purpose = child_env::scope_purpose(req.scope).as_str();
-    let fingerprint = config_fingerprint(config, &req.env)?;
+    let fingerprint = request_fingerprint(config, &req.env, &req.cwd, req.age_key_file.as_deref())?;
     let providers = config.get_providers(&req.profile)?;
     let default_provider = cache_policy_default_provider(config, &req.profile, &providers);
     let mut resolved = IndexMap::new();
@@ -1580,7 +1629,7 @@ async fn resolve_env_response(
                     key,
                     secret,
                     req.no_defaults,
-                    purpose,
+                    cache_purpose(config, purpose),
                 );
                 state.get(&cache_key)
             });
@@ -1655,7 +1704,7 @@ async fn foreground_resolution_if_needed(
         return Ok(None);
     }
 
-    let fingerprint = config_fingerprint(config, &req.env)?;
+    let fingerprint = request_fingerprint(config, &req.env, &req.cwd, req.age_key_file.as_deref())?;
     let providers = config.get_providers(profile)?;
     let default_provider = cache_policy_default_provider(config, profile, &providers);
     let mut state = state.lock().await;
@@ -1673,7 +1722,7 @@ async fn foreground_resolution_if_needed(
                 key,
                 secret,
                 req.no_defaults,
-                &req.purpose,
+                cache_purpose(config, &req.purpose),
             ))
         {
             cached_values.insert(key.clone(), Some(value));
@@ -1704,7 +1753,7 @@ async fn store_resolved_values(
     mut values: IndexMap<String, Option<String>>,
     state: std::sync::Arc<Mutex<DaemonState>>,
 ) -> Result<()> {
-    let fingerprint = config_fingerprint(config, &req.env)?;
+    let fingerprint = request_fingerprint(config, &req.env, &req.cwd, req.age_key_file.as_deref())?;
     if fingerprint != expected_fingerprint {
         tracing::debug!("config changed during foreground resolution; skipping daemon cache fill");
         return Ok(());
@@ -1727,7 +1776,7 @@ async fn store_resolved_values(
                 key,
                 secret,
                 req.no_defaults,
-                &req.purpose,
+                cache_purpose(config, &req.purpose),
             );
             let ttls = cache_ttls(config, &providers, default_provider, secret)?;
             state.insert(cache_key, value, profile, &req.purpose, ttls);
@@ -1776,7 +1825,7 @@ async fn resolve_with_cache_tracking(
     req: &ResolveBatchRequest,
     state: std::sync::Arc<Mutex<DaemonState>>,
 ) -> Result<(IndexMap<String, Option<String>>, HashSet<String>)> {
-    let fingerprint = config_fingerprint(config, &req.env)?;
+    let fingerprint = request_fingerprint(config, &req.env, &req.cwd, req.age_key_file.as_deref())?;
     let providers = config.get_providers(profile)?;
     let default_provider = cache_policy_default_provider(config, profile, &providers);
     let mut results = IndexMap::new();
@@ -1795,7 +1844,7 @@ async fn resolve_with_cache_tracking(
                     key,
                     secret,
                     req.no_defaults,
-                    &req.purpose,
+                    cache_purpose(config, &req.purpose),
                 );
                 if let Some(value) = state.get(&cache_key) {
                     results.insert(key.clone(), Some(value));
@@ -1933,6 +1982,19 @@ fn provider_daemon_cache_enabled(
     source_allows_cache && sync_allows_cache
 }
 
+fn cache_purpose<'a>(config: &Config, purpose: &'a str) -> &'a str {
+    if config
+        .daemon
+        .as_ref()
+        .and_then(|daemon| daemon.share_across_commands)
+        .unwrap_or(false)
+    {
+        ""
+    } else {
+        purpose
+    }
+}
+
 fn cache_key(
     fingerprint: &str,
     profile: &[String],
@@ -1959,6 +2021,24 @@ fn cache_key(
         secret: key.to_string(),
         hash: hasher.finalize().to_hex().to_string(),
     }
+}
+
+fn request_fingerprint(
+    config: &Config,
+    env: &[(String, String)],
+    cwd: &Path,
+    age_key_file: Option<&Path>,
+) -> Result<String> {
+    let fingerprint = config_fingerprint(config, env)?;
+    let Some(age_key_file) = age_key_file else {
+        return Ok(fingerprint);
+    };
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(fingerprint.as_bytes());
+    hasher.update(b"\0age-key-file\0");
+    // The same relative path can select different identities in different directories.
+    hasher.update(cwd.join(age_key_file).as_os_str().as_encoded_bytes());
+    Ok(hasher.finalize().to_hex().to_string())
 }
 
 fn config_fingerprint(config: &Config, env: &[(String, String)]) -> Result<String> {
@@ -2073,12 +2153,24 @@ fn provider_env_key(key: &str) -> bool {
     )
 }
 
-fn socket_path(cli: &Cli) -> Result<PathBuf> {
-    socket_path_for_context(&ResolveContext::from_cli(cli))
+fn socket_path(cli: &Cli) -> PathBuf {
+    let user_socket = Config::load_smart(&cli.config)
+        .as_ref()
+        .is_ok_and(uses_user_socket);
+    socket_path_for_context(&ResolveContext::from_cli(cli), user_socket)
 }
 
-fn socket_path_for_context(ctx: &ResolveContext) -> Result<PathBuf> {
-    Ok(ctx.socket_key().socket_path(&RuntimeEnv::from_process()))
+fn socket_path_for_context(ctx: &ResolveContext, user_socket: bool) -> PathBuf {
+    let runtime = RuntimeEnv::from_process();
+    if user_socket {
+        user_socket_path(&runtime)
+    } else {
+        ctx.socket_key().socket_path(&runtime)
+    }
+}
+
+fn user_socket_path(runtime: &RuntimeEnv) -> PathBuf {
+    SocketKey::user_socket_path(runtime, &crate::env::FNOX_CONFIG_DIR)
 }
 
 #[cfg(unix)]

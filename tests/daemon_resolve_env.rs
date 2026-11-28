@@ -9,7 +9,7 @@
     )
 ))]
 
-use fnox_client::document::EnvScope;
+use fnox_client::document::{DescribeDocument, EnvScope};
 use fnox_client::wire::{CallOptions, Request, ResolveEnvRequest, Response};
 use fnox_client::{CliFlags, Client, EnvOutcome, EnvRequest, RuntimeEnv, SocketKey};
 use std::os::unix::fs::PermissionsExt;
@@ -132,6 +132,38 @@ impl Drop for StopDaemon<'_> {
     fn drop(&mut self) {
         let _ = self.0.fnox(&self.0.p, &["daemon", "stop"]);
     }
+}
+
+#[test]
+fn the_client_reads_export_warmed_values_from_the_user_socket() {
+    let f = Fixture::new();
+    let _stop = StopDaemon(&f);
+    let config = f.p.join("fnox.toml");
+    let updated = std::fs::read_to_string(&config).unwrap().replace(
+        "[daemon]",
+        "[daemon]\nshare_across_commands = true\nsocket_scope = \"user\"",
+    );
+    std::fs::write(config, updated).unwrap();
+
+    assert!(f.fnox(&f.p, &["export", "--all"]).status.success());
+    let out = f.fnox(&f.p, &["env", "--json", "--describe"]);
+    assert!(out.status.success());
+    let description: DescribeDocument = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(description.daemon_enabled);
+    let socket = Path::new(description.daemon_socket.as_deref().unwrap());
+    let client = f.client(&f.env).with_socket_path(Some(socket));
+    let EnvOutcome::Hit(doc) = client.resolve_env(&EnvRequest {
+        cwd: &f.p,
+        config: Path::new("fnox.toml"),
+        scope: EnvScope::Exec,
+        keys: Some(&["FOO".to_string(), "BAR".to_string()]),
+        env: &f.env,
+    }) else {
+        panic!("expected a hit from the user-scoped socket");
+    };
+    assert_eq!(doc.set["FOO"].expose(), "foo");
+    assert_eq!(doc.set["BAR"].expose(), "bar");
+    assert!(doc.remove.contains(&"HID".to_string()));
 }
 
 #[test]

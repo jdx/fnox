@@ -576,6 +576,14 @@ pub struct DaemonConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
 
+    /// Reuse cached values across eligible read commands.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share_across_commands: Option<bool>,
+
+    /// Choose a socket per invocation context or one shared by the user.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub socket_scope: Option<DaemonSocketScope>,
+
     /// Idle timeout before the daemon exits, such as "8h", "30m", or "300s".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idle_timeout: Option<String>,
@@ -589,6 +597,13 @@ pub struct DaemonConfig {
     /// stored. Reads never extend it. Unset means no absolute limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_cache_ttl: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum DaemonSocketScope {
+    Context,
+    User,
 }
 
 /// Local access audit log configuration
@@ -1483,6 +1498,12 @@ impl Config {
             let base_daemon = merged.daemon.get_or_insert_with(DaemonConfig::default);
             if overlay_daemon.enabled.is_some() {
                 base_daemon.enabled = overlay_daemon.enabled;
+            }
+            if overlay_daemon.share_across_commands.is_some() {
+                base_daemon.share_across_commands = overlay_daemon.share_across_commands;
+            }
+            if overlay_daemon.socket_scope.is_some() {
+                base_daemon.socket_scope = overlay_daemon.socket_scope;
             }
             if overlay_daemon.idle_timeout.is_some() {
                 base_daemon.idle_timeout = overlay_daemon.idle_timeout;
