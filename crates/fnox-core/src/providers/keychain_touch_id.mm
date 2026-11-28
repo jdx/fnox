@@ -70,6 +70,33 @@ static NSString *fnox_current_process_team_identifier(void) {
   return [team isKindOfClass:[NSString class]] && team.length > 0 ? team : nil;
 }
 
+// Security has no public accessor for an access control's policy, so these
+// private (but long-standing) functions expose its protection and constraints.
+extern "C" CFTypeRef SecAccessControlGetProtection(SecAccessControlRef access_control);
+extern "C" CFDictionaryRef SecAccessControlGetConstraints(SecAccessControlRef access_control);
+
+// When an item is stored, Keychain fills the biometry constraint with the
+// enrolled set's identifiers (`pbioc`, `pbioh`), which a fresh policy leaves
+// empty. Compare the constraints' structure and require those values instead.
+static BOOL fnox_constraints_match(id stored, id expected) {
+  if ([expected isKindOfClass:[NSDictionary class]]) {
+    if (![stored isKindOfClass:[NSDictionary class]] ||
+        ![[NSSet setWithArray:[stored allKeys]] isEqualToSet:[NSSet setWithArray:[expected allKeys]]]) {
+      return NO;
+    }
+    for (id key in expected) {
+      id stored_value = stored[key];
+      if ([key isEqual:@"pbioc"] || [key isEqual:@"pbioh"]) {
+        if (![stored_value isKindOfClass:[NSData class]] || [stored_value length] == 0) return NO;
+      } else if (!fnox_constraints_match(stored_value, expected[key])) {
+        return NO;
+      }
+    }
+    return YES;
+  }
+  return [stored isEqual:expected];
+}
+
 static BOOL fnox_is_biometry_current_set(id access_control) {
   if (!access_control || CFGetTypeID((__bridge CFTypeRef)access_control) != SecAccessControlGetTypeID()) return NO;
   CFErrorRef error = NULL;
@@ -77,7 +104,14 @@ static BOOL fnox_is_biometry_current_set(id access_control) {
       kCFAllocatorDefault, kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
       kSecAccessControlBiometryCurrentSet, &error);
   if (!expected) { if (error) CFRelease(error); return NO; }
-  BOOL matches = CFEqual((__bridge CFTypeRef)access_control, expected);
+  SecAccessControlRef stored = (__bridge SecAccessControlRef)access_control;
+  CFTypeRef stored_protection = SecAccessControlGetProtection(stored);
+  CFDictionaryRef stored_constraints = SecAccessControlGetConstraints(stored);
+  CFDictionaryRef expected_constraints = SecAccessControlGetConstraints(expected);
+  BOOL matches = stored_protection && stored_constraints && expected_constraints &&
+                 CFEqual(stored_protection, kSecAttrAccessibleWhenUnlockedThisDeviceOnly) &&
+                 fnox_constraints_match((__bridge NSDictionary *)stored_constraints,
+                                        (__bridge NSDictionary *)expected_constraints);
   CFRelease(expected);
   if (error) CFRelease(error);
   return matches;
