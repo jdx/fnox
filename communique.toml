@@ -2,6 +2,8 @@ context = "fnox is a secrets management CLI that encrypts and manages secrets in
 
 system_extra = """
 Do NOT include a "Sponsor fnox" / "Sponsor" / "Sponsorship" / "Support" section, donation links, or any jdx.dev / GitHub Sponsors blurb in the release body. The release workflow appends a canonical sponsor section after generation; including one here produces a duplicate. Style references from prior releases that contain a sponsor section are showing you the appended block — ignore that block when matching tone and structure.
+
+Credit only people other than @jdx. @jdx maintains fnox and writes most changes, so a bullet for a change he wrote ends with its PR link and no username: never add "(@jdx)", "by @jdx", or thanks to @jdx. When someone else wrote a change, or is named in its description as a co-author or as the person who reported the problem, credit them by username.
 """
 
 [defaults]

@@ -545,7 +545,10 @@ jobs:
           else
             TAG_NAME="${GITHUB_REF_NAME}"
           fi
-          communique generate "$TAG_NAME" --github-release
+          communique generate "$TAG_NAME" --github-release --review-report "$RUNNER_TEMP/communique-coverage.md"
+          if [[ -f "$RUNNER_TEMP/communique-coverage.md" ]]; then
+            cat "$RUNNER_TEMP/communique-coverage.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           INPUTS_VERSION: ${{ inputs.version }}
