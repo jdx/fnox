@@ -26,9 +26,8 @@ enpass = ["dep:rusqlite", "dep:openssl-sys"]
 # fido2 provider. Needs libudev on Linux at build and run time, and is never
 # built for Linux musl targets.
 fido2 = ["dep:ctap-hid-fido2"]
-# gcp-kms and gcp-sm providers, gcp-iam lease backend (pulls in a vendored
-# OpenSSL on Linux)
-gcp = ["dep:gcp_auth", "dep:google-cloud-kms", "dep:google-cloud-secretmanager-v1", "dep:openssl-sys"]
+# gcp-kms and gcp-sm providers, gcp-iam lease backend
+gcp = ["dep:gcp_auth", "dep:google-cloud-kms-v1", "dep:google-cloud-secretmanager-v1"]
 # keeper-sm provider
 keeper = ["dep:keeper-secrets-manager-core"]
 # kubernetes provider and lease backend
@@ -58,7 +57,7 @@ dirs = { workspace = true }
 fnox-client = { workspace = true }
 futures = { workspace = true }
 gcp_auth = { workspace = true, optional = true }
-google-cloud-kms = { workspace = true, optional = true }
+google-cloud-kms-v1 = { workspace = true, optional = true }
 google-cloud-secretmanager-v1 = { workspace = true, optional = true }
 hex = { workspace = true }
 hkdf = { workspace = true }

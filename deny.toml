@@ -12,7 +12,6 @@ ignore = [
   { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained - all versions affected, no safe upgrade available" },
   { id = "RUSTSEC-2026-0374", reason = "basic-toml unmaintained - transitive via age (i18n-config), no safe upgrade available" },
   { id = "RUSTSEC-2026-0441", reason = "pin-utils unmaintained - transitive via aws-smithy-http, no safe upgrade available" },
-  { id = "RUSTSEC-2025-0134", reason = "rustls-pemfile unmaintained - transitive via tonic 0.12 (google-cloud-kms), no safe upgrade available" },
   { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml unmaintained - transitive via serde_yaml, no safe upgrade available" },
   # Pinned by dependencies fnox cannot move on its own; revisit when they bump.
   { id = "RUSTSEC-2023-0071", reason = "rsa Marvin attack - transitive via age; no patched rsa is available for the 0.9 line age uses" },
