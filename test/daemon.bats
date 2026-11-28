@@ -685,7 +685,7 @@ type = "password-store"
 FOO = { provider = "pass", value = "foo" }
 EOF
 
-	"$FNOX_BIN" export --all >/dev/null
+	"$FNOX_BIN" --if-missing error export --all >/dev/null
 	run "$FNOX_BIN" daemon status
 	assert_success
 	assert_output --partial "cached_entries: 1"
@@ -741,4 +741,57 @@ EOF
 	assert_success
 	assert_line "cached_entries: 4"
 	assert_equal "$(wc -l <"$PASS_CALLS_FILE" | tr -d ' ')" "4"
+}
+
+@test "user-scoped daemon applies a stricter missing policy to dependencies of warmed values" {
+	counting_pass_provider
+	printf '#!/bin/sh\nexit 1\n' >"$TEST_TEMP_DIR/bin/pass"
+	cat >fnox.toml <<'EOF'
+root = true
+
+[daemon]
+enabled = true
+socket_scope = "user"
+
+[providers.pass]
+type = "password-store"
+
+[secrets]
+MISSING_USER = { provider = "pass", value = "missing" }
+DEMO_URL = { default = "postgres://${MISSING_USER}@localhost/db" }
+EOF
+
+	run "$FNOX_BIN" --if-missing ignore get DEMO_URL
+	assert_success
+	assert_output "postgres://@localhost/db"
+	run "$FNOX_BIN" --if-missing error get DEMO_URL
+	assert_failure
+	assert_output --partial "MISSING_USER"
+}
+
+@test "daemon stop checks both scopes when configuration is broken" {
+	daemon_config
+	"$FNOX_BIN" daemon start >/dev/null
+	cat >fnox.toml <<'EOF'
+[daemon]
+enabled = true
+socket_scope = "user"
+EOF
+	"$FNOX_BIN" daemon start >/dev/null
+	printf 'invalid = [\n' >fnox.toml
+
+	run "$FNOX_BIN" daemon stop
+	assert_success
+	run "$FNOX_BIN" daemon status
+	assert_success
+	assert_output "fnox daemon not running"
+
+	cat >fnox.toml <<'EOF'
+[daemon]
+enabled = true
+socket_scope = "user"
+EOF
+	run "$FNOX_BIN" daemon status
+	assert_success
+	assert_output "fnox daemon not running"
 }

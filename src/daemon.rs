@@ -765,7 +765,19 @@ fn daemon_socket_paths() -> Result<Vec<PathBuf>> {
 }
 
 pub async fn shutdown(cli: &Cli) -> Result<()> {
-    match call(socket_path(cli), Request::Shutdown).await {
+    let ctx = ResolveContext::from_cli(cli);
+    match Config::load_smart(&cli.config) {
+        Ok(config) => shutdown_at(socket_path_for_context(&ctx, uses_user_socket(&config))).await,
+        Err(_) => {
+            let context = shutdown_at(socket_path_for_context(&ctx, false)).await;
+            let user = shutdown_at(socket_path_for_context(&ctx, true)).await;
+            context.and(user)
+        }
+    }
+}
+
+async fn shutdown_at(path: PathBuf) -> Result<()> {
+    match call(path, Request::Shutdown).await {
         Ok(Response::Ok) => Ok(()),
         Ok(Response::Error { message }) => Err(FnoxError::Config(message)),
         Ok(_) => Err(FnoxError::Config(
@@ -1611,7 +1623,13 @@ async fn resolve_env_response(
     }
 
     let purpose = child_env::scope_purpose(req.scope).as_str();
-    let fingerprint = request_fingerprint(config, &req.env, &req.cwd, req.age_key_file.as_deref())?;
+    let fingerprint = request_fingerprint(
+        config,
+        &req.env,
+        &req.cwd,
+        req.age_key_file.as_deref(),
+        req.if_missing.as_deref(),
+    )?;
     let providers = config.get_providers(&req.profile)?;
     let default_provider = cache_policy_default_provider(config, &req.profile, &providers);
     let mut resolved = IndexMap::new();
@@ -1704,7 +1722,13 @@ async fn foreground_resolution_if_needed(
         return Ok(None);
     }
 
-    let fingerprint = request_fingerprint(config, &req.env, &req.cwd, req.age_key_file.as_deref())?;
+    let fingerprint = request_fingerprint(
+        config,
+        &req.env,
+        &req.cwd,
+        req.age_key_file.as_deref(),
+        req.if_missing.as_deref(),
+    )?;
     let providers = config.get_providers(profile)?;
     let default_provider = cache_policy_default_provider(config, profile, &providers);
     let mut state = state.lock().await;
@@ -1753,7 +1777,13 @@ async fn store_resolved_values(
     mut values: IndexMap<String, Option<String>>,
     state: std::sync::Arc<Mutex<DaemonState>>,
 ) -> Result<()> {
-    let fingerprint = request_fingerprint(config, &req.env, &req.cwd, req.age_key_file.as_deref())?;
+    let fingerprint = request_fingerprint(
+        config,
+        &req.env,
+        &req.cwd,
+        req.age_key_file.as_deref(),
+        req.if_missing.as_deref(),
+    )?;
     if fingerprint != expected_fingerprint {
         tracing::debug!("config changed during foreground resolution; skipping daemon cache fill");
         return Ok(());
@@ -1825,7 +1855,13 @@ async fn resolve_with_cache_tracking(
     req: &ResolveBatchRequest,
     state: std::sync::Arc<Mutex<DaemonState>>,
 ) -> Result<(IndexMap<String, Option<String>>, HashSet<String>)> {
-    let fingerprint = request_fingerprint(config, &req.env, &req.cwd, req.age_key_file.as_deref())?;
+    let fingerprint = request_fingerprint(
+        config,
+        &req.env,
+        &req.cwd,
+        req.age_key_file.as_deref(),
+        req.if_missing.as_deref(),
+    )?;
     let providers = config.get_providers(profile)?;
     let default_provider = cache_policy_default_provider(config, profile, &providers);
     let mut results = IndexMap::new();
@@ -2028,16 +2064,24 @@ fn request_fingerprint(
     env: &[(String, String)],
     cwd: &Path,
     age_key_file: Option<&Path>,
+    if_missing: Option<&str>,
 ) -> Result<String> {
     let fingerprint = config_fingerprint(config, env)?;
-    let Some(age_key_file) = age_key_file else {
+    if age_key_file.is_none() && if_missing.is_none() {
         return Ok(fingerprint);
-    };
+    }
     let mut hasher = blake3::Hasher::new();
     hasher.update(fingerprint.as_bytes());
-    hasher.update(b"\0age-key-file\0");
-    // The same relative path can select different identities in different directories.
-    hasher.update(cwd.join(age_key_file).as_os_str().as_encoded_bytes());
+    if let Some(age_key_file) = age_key_file {
+        hasher.update(b"\0age-key-file\0");
+        // Relative paths can select different identities in different directories.
+        hasher.update(cwd.join(age_key_file).as_os_str().as_encoded_bytes());
+    }
+    if let Some(if_missing) = if_missing {
+        // A permissive request may have cached a value with missing dependencies.
+        hasher.update(b"\0if-missing\0");
+        hasher.update(if_missing.as_bytes());
+    }
     Ok(hasher.finalize().to_hex().to_string())
 }
 

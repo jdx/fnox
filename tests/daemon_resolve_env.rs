@@ -12,6 +12,7 @@
 use fnox_client::document::{DescribeDocument, EnvScope};
 use fnox_client::wire::{CallOptions, Request, ResolveEnvRequest, Response};
 use fnox_client::{CliFlags, Client, EnvOutcome, EnvRequest, RuntimeEnv, SocketKey};
+use fnox_client::{MIN_PROTOCOL, WIRE_VERSION};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -227,8 +228,8 @@ fn the_client_reads_what_the_cli_cached() {
 
     // 7. hello.
     let info = f.client(&f.env).hello().unwrap();
-    assert_eq!(info.protocol, 8);
-    assert_eq!(info.min_protocol, 8);
+    assert_eq!(info.protocol, u32::from(WIRE_VERSION));
+    assert_eq!(info.min_protocol, MIN_PROTOCOL);
     assert_eq!(info.fnox_version, env!("CARGO_PKG_VERSION"));
     assert!(info.pid > 0);
 
@@ -255,7 +256,7 @@ fn an_undeclared_profile_is_an_error_not_a_hit() {
 
     let client = f.client(&f.env);
     let request = Request::ResolveEnv(ResolveEnvRequest {
-        protocol: 8,
+        protocol: u32::from(WIRE_VERSION),
         cwd: f.p.clone(),
         config: PathBuf::from("fnox.toml"),
         profile: vec!["nope".to_string()],

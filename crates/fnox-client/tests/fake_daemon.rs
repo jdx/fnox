@@ -1,6 +1,7 @@
 #![cfg(unix)]
 //! The client against a scripted daemon: a std `UnixListener` on a thread.
 
+use fnox_client::WIRE_VERSION;
 use fnox_client::document::EnvScope;
 use fnox_client::wire::MAX_LINE_BYTES;
 use fnox_client::{CallError, CliFlags, Client, EnvOutcome, EnvRequest, RuntimeEnv, SocketKey};
@@ -114,7 +115,7 @@ fn env_is_a_hit_and_the_request_carries_what_it_should() {
 
     let request: serde_json::Value = serde_json::from_str(&server.join().unwrap()).unwrap();
     assert_eq!(request["type"], "resolve_env");
-    assert_eq!(request["protocol"], 8);
+    assert_eq!(request["protocol"], WIRE_VERSION);
     assert_eq!(request["scope"], "exec");
     assert_eq!(request["cwd"], "/p");
     assert_eq!(request["config"], "fnox.toml");
@@ -348,7 +349,7 @@ fn hello_reports_the_daemon() {
     assert_eq!(info.pid, 123);
     assert_eq!(
         server.join().unwrap().trim(),
-        r#"{"type":"hello","protocol":8}"#
+        format!(r#"{{"type":"hello","protocol":{WIRE_VERSION}}}"#)
     );
 }
 
