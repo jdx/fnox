@@ -1628,6 +1628,80 @@
           }
         }
       },
+      "git-credential": {
+        "full_cmd": ["git-credential"],
+        "usage": "git-credential [--backend <BACKEND>] <OPERATION>",
+        "subcommands": {},
+        "args": [
+          {
+            "name": "OPERATION",
+            "usage": "<OPERATION>",
+            "help": "Operation git requests: `get`, `store`, or `erase`",
+            "help_long": "Operation git requests: `get`, `store`, or `erase`\n\nOnly `get` returns credentials; the others, and any operation git adds later, are accepted and ignored.",
+            "help_first_line": "Operation git requests: `get`, `store`, or `erase`",
+            "required": true,
+            "double_dash": "Optional",
+            "hide": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "backend",
+            "usage": "--backend <BACKEND>",
+            "help": "Use this lease backend instead of choosing one by host",
+            "help_long": "Use this lease backend instead of choosing one by host\n\nNeeded when several backends serve the same host, for example two GitHub App installations. Without it, the last matching backend wins.",
+            "help_first_line": "Use this lease backend instead of choosing one by host",
+            "short": [],
+            "long": ["backend"],
+            "hide": false,
+            "global": false,
+            "arg": {
+              "name": "BACKEND",
+              "usage": "<BACKEND>",
+              "required": true,
+              "double_dash": "Optional",
+              "hide": false
+            }
+          },
+          {
+            "name": "help",
+            "usage": "-h --help",
+            "help": "Print help",
+            "help_first_line": "Print help",
+            "short": ["h"],
+            "long": ["help"],
+            "hide": false,
+            "global": false,
+            "action": "help",
+            "builtin": true
+          }
+        ],
+        "mounts": [],
+        "unknown_flags": null,
+        "hide": false,
+        "args_override_self": true,
+        "help": "Git credential helper that serves short-lived GitHub and GitLab tokens",
+        "help_long": "Git credential helper that serves short-lived GitHub and GitLab tokens\n\nLets git (and tools that use git's credential protocol, such as cargo and go) authenticate with a token from a `github-app`, `github-oauth`, or `gitlab` lease backend, so no personal access token sits on disk. Configure it with `git config --global credential.helper '!fnox git-credential'`; git then runs `fnox git-credential get` and passes the request on stdin.\n\nfnox picks the lease backend whose host matches the request: `github.com` for GitHub backends (the host of `api_base` for GitHub Enterprise) and the host of `url` for GitLab backends (`gitlab.com` by default). When no backend matches, fnox prints nothing and exits 0, so git falls through to its next helper. `store` and `erase` do nothing, because leases expire on their own.\n\ngit runs the helper from the repository's directory, so a project's `fnox.toml` applies. Outside a project, define the backend in the global config or pass `-c`.",
+        "name": "git-credential",
+        "aliases": [],
+        "hidden_aliases": [],
+        "after_help_long": "See also:\n- Git credential helper: https://fnox.jdx.dev/guide/git-credential\n- Credential leases: https://fnox.jdx.dev/guide/leases",
+        "examples": [
+          {
+            "code": "git config --global credential.helper '!fnox git-credential'",
+            "header": "Let git use fnox's lease tokens",
+            "help": null,
+            "lang": ""
+          },
+          {
+            "code": "printf 'protocol=https\\nhost=github.com\\n\\n' | fnox git-credential get",
+            "header": "See what git would receive",
+            "help": null,
+            "lang": ""
+          }
+        ],
+        "headings": []
+      },
       "hook-env": {
         "full_cmd": ["hook-env"],
         "usage": "hook-env [-s --shell <SHELL>]",

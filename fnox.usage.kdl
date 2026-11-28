@@ -543,6 +543,40 @@ Looks PATH up in the files of the active profiles (see `fnox files`).
     example "fnox -P staging get DATABASE_URL" header="Read from another profile"
     example "fnox get TLS_CERT --base64-decode > cert.pem" header="Decode a base64 value into a file"
 }
+cmd git-credential help="Git credential helper that serves short-lived GitHub and GitLab tokens" {
+    long_help #"""
+Git credential helper that serves short-lived GitHub and GitLab tokens
+
+Lets git (and tools that use git's credential protocol, such as cargo and go) authenticate with a token from a `github-app`, `github-oauth`, or `gitlab` lease backend, so no personal access token sits on disk. Configure it with `git config --global credential.helper '!fnox git-credential'`; git then runs `fnox git-credential get` and passes the request on stdin.
+
+fnox picks the lease backend whose host matches the request: `github.com` for GitHub backends (the host of `api_base` for GitHub Enterprise) and the host of `url` for GitLab backends (`gitlab.com` by default). When no backend matches, fnox prints nothing and exits 0, so git falls through to its next helper. `store` and `erase` do nothing, because leases expire on their own.
+
+git runs the helper from the repository's directory, so a project's `fnox.toml` applies. Outside a project, define the backend in the global config or pass `-c`.
+"""#
+    after_long_help #"""
+See also:
+- Git credential helper: https://fnox.jdx.dev/guide/git-credential
+- Credential leases: https://fnox.jdx.dev/guide/leases
+"""#
+    flag --backend help="Use this lease backend instead of choosing one by host" {
+        long_help #"""
+Use this lease backend instead of choosing one by host
+
+Needed when several backends serve the same host, for example two GitHub App installations. Without it, the last matching backend wins.
+"""#
+        arg <BACKEND>
+    }
+    flag "-h --help" help="Print help" action=help builtin=#true
+    arg <OPERATION> help="Operation git requests: `get`, `store`, or `erase`" {
+        long_help #"""
+Operation git requests: `get`, `store`, or `erase`
+
+Only `get` returns credentials; the others, and any operation git adds later, are accepted and ignored.
+"""#
+    }
+    example "git config --global credential.helper '!fnox git-credential'" header="Let git use fnox's lease tokens"
+    example "printf 'protocol=https\\nhost=github.com\\n\\n' | fnox git-credential get" header="See what git would receive"
+}
 cmd hook-env help="Internal command used by shell hooks to load secrets" hide=#true {
     flag "-s --shell" help="Shell type (bash, zsh, fish, nu, pwsh)" {
         arg <SHELL>

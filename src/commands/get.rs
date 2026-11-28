@@ -287,7 +287,7 @@ impl GetCommand {
     /// Check if the requested key is produced by a lease backend.
     /// If so, resolve the lease and return the credential value alongside
     /// the profile secrets map (to avoid a redundant `get_secrets` call).
-    async fn resolve_from_lease(
+    pub(crate) async fn resolve_from_lease(
         &self,
         cli: &Cli,
         config: &Config,
