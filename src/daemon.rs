@@ -1626,7 +1626,6 @@ async fn resolve_env_response(
     let fingerprint = request_fingerprint(
         config,
         &req.env,
-        &req.cwd,
         req.age_key_file.as_deref(),
         req.if_missing.as_deref(),
     )?;
@@ -1725,7 +1724,6 @@ async fn foreground_resolution_if_needed(
     let fingerprint = request_fingerprint(
         config,
         &req.env,
-        &req.cwd,
         req.age_key_file.as_deref(),
         req.if_missing.as_deref(),
     )?;
@@ -1780,7 +1778,6 @@ async fn store_resolved_values(
     let fingerprint = request_fingerprint(
         config,
         &req.env,
-        &req.cwd,
         req.age_key_file.as_deref(),
         req.if_missing.as_deref(),
     )?;
@@ -1858,7 +1855,6 @@ async fn resolve_with_cache_tracking(
     let fingerprint = request_fingerprint(
         config,
         &req.env,
-        &req.cwd,
         req.age_key_file.as_deref(),
         req.if_missing.as_deref(),
     )?;
@@ -2065,7 +2061,6 @@ fn cache_key(
 fn request_fingerprint(
     config: &Config,
     env: &[(String, String)],
-    cwd: &Path,
     age_key_file: Option<&Path>,
     if_missing: Option<&str>,
 ) -> Result<String> {
@@ -2076,15 +2071,20 @@ fn request_fingerprint(
     }
     let mut hasher = blake3::Hasher::new();
     hasher.update(fingerprint.as_bytes());
-    if shared {
-        // Providers can interpret relative paths from the caller's working directory.
-        hasher.update(b"\0cwd\0");
-        hasher.update(cwd.as_os_str().as_encoded_bytes());
-    }
-    if let Some(age_key_file) = age_key_file {
-        hasher.update(b"\0age-key-file\0");
-        // Relative paths can select different identities in different directories.
-        hasher.update(cwd.join(age_key_file).as_os_str().as_encoded_bytes());
+    if shared || age_key_file.is_some() {
+        // CwdGuard has already entered the caller's directory. Resolve its
+        // physical path so that a symlinked spelling shares the same cache.
+        let cwd = Path::new(".").canonicalize().map_err(|e| {
+            FnoxError::Config(format!("Failed to resolve request working directory: {e}"))
+        })?;
+        if shared {
+            hasher.update(b"\0cwd\0");
+            hasher.update(cwd.as_os_str().as_encoded_bytes());
+        }
+        if let Some(age_key_file) = age_key_file {
+            hasher.update(b"\0age-key-file\0");
+            hasher.update(cwd.join(age_key_file).as_os_str().as_encoded_bytes());
+        }
     }
     if let Some(if_missing) = if_missing {
         // A permissive request may have cached a value with missing dependencies.

@@ -153,18 +153,22 @@ fn the_client_reads_export_warmed_values_from_the_user_socket() {
     assert!(description.daemon_enabled);
     let socket = Path::new(description.daemon_socket.as_deref().unwrap());
     let client = f.client(&f.env).with_socket_path(Some(socket));
-    let EnvOutcome::Hit(doc) = client.resolve_env(&EnvRequest {
-        cwd: &f.p,
-        config: Path::new("fnox.toml"),
-        scope: EnvScope::Exec,
-        keys: Some(&["FOO".to_string(), "BAR".to_string()]),
-        env: &f.env,
-    }) else {
-        panic!("expected a hit from the user-scoped socket");
-    };
-    assert_eq!(doc.set["FOO"].expose(), "foo");
-    assert_eq!(doc.set["BAR"].expose(), "bar");
-    assert!(doc.remove.contains(&"HID".to_string()));
+    let alias = f.p.with_file_name("project-alias");
+    std::os::unix::fs::symlink(&f.p, &alias).unwrap();
+    for cwd in [&f.p, &alias] {
+        let EnvOutcome::Hit(doc) = client.resolve_env(&EnvRequest {
+            cwd,
+            config: Path::new("fnox.toml"),
+            scope: EnvScope::Exec,
+            keys: Some(&["FOO".to_string(), "BAR".to_string()]),
+            env: &f.env,
+        }) else {
+            panic!("expected a hit from the user-scoped socket for {cwd:?}");
+        };
+        assert_eq!(doc.set["FOO"].expose(), "foo");
+        assert_eq!(doc.set["BAR"].expose(), "bar");
+        assert!(doc.remove.contains(&"HID".to_string()));
+    }
 }
 
 #[test]
