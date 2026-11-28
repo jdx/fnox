@@ -671,8 +671,17 @@ pub struct ProxyConfig {
     #[serde(default)]
     pub sandbox: bool,
 
+    /// Which sandbox Linux uses: `bwrap` (the default) or `landlock`, for
+    /// machines that forbid the user namespaces `bwrap` needs, such as Docker
+    /// containers with the default seccomp profile. The `landlock` sandbox
+    /// leaves the working directory read-only. macOS always uses
+    /// `sandbox-exec` and ignores this setting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sandbox_backend: Option<SandboxBackend>,
+
     /// Extra paths the sandboxed command may write, besides the working
-    /// directory and temporary files. `~` and relative paths are allowed.
+    /// directory (except under the `landlock` sandbox) and temporary files.
+    /// `~` and relative paths are allowed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sandbox_allow_write: Vec<String>,
 
@@ -697,11 +706,41 @@ impl Default for ProxyConfig {
             max_body_bytes: None,
             allow_private: Vec::new(),
             sandbox: false,
+            sandbox_backend: None,
             sandbox_allow_write: Vec::new(),
             sandbox_deny_read: Vec::new(),
             sandbox_allow_read: Vec::new(),
         }
     }
+}
+
+/// The Linux sandbox that `fnox proxy run` uses.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    PartialEq,
+    Eq,
+    usage_rs::ValueEnum,
+    strum::Display,
+    EnumString,
+    VariantNames,
+)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum SandboxBackend {
+    /// bubblewrap: private network, process and mount namespaces. Needs
+    /// unprivileged user namespaces.
+    #[default]
+    Bwrap,
+    /// Landlock and a seccomp filter, with no namespaces. fnox makes each of
+    /// the command's connections itself and refuses all but the proxy. Needs
+    /// Landlock ABI 6 (Linux 6.12) on x86_64 or aarch64.
+    Landlock,
 }
 
 /// Behavior for destinations not covered by a proxy rule.

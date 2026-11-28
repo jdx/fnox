@@ -6,7 +6,7 @@ description: "Run a command with placeholder credentials behind the proxy. Usage
 
 # `fnox proxy run`
 
-- **Usage:** `fnox proxy run [--no-sandbox] [--sandbox] [COMMAND]…`
+- **Usage:** `fnox proxy run [FLAGS] [COMMAND]…`
 
 Run a command with placeholder credentials behind the proxy
 
@@ -34,6 +34,12 @@ The command's HTTP client must honor those proxy and CA settings. fnox exits wit
 - **`--sandbox`** — Run the command in an OS sandbox whose only way out is the proxy
 
   Also enabled by `sandbox = true` in `[proxy]`. Needs `bwrap` on Linux or `sandbox-exec` on macOS, and fails instead of running unsandboxed.
+
+- **`--sandbox-backend <SANDBOX_BACKEND>`** — Which Linux sandbox to use; implies `--sandbox`
+
+  `bwrap` (the default) needs unprivileged user namespaces. `landlock` works without them, as in a Docker container with the default seccomp profile, needs Linux 6.12 or later, and keeps the working directory read-only. Overrides `sandbox_backend` in `[proxy]`; ignored on macOS.
+
+  **Choices:** `bwrap`, `landlock`
 
 - **`-h --help`** — Print help
 

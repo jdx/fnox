@@ -2483,8 +2483,19 @@
           "type": "boolean",
           "default": false
         },
+        "sandbox_backend": {
+          "description": "Which sandbox Linux uses: `bwrap` (the default) or `landlock`, for\nmachines that forbid the user namespaces `bwrap` needs, such as Docker\ncontainers with the default seccomp profile. The `landlock` sandbox\nleaves the working directory read-only. macOS always uses\n`sandbox-exec` and ignores this setting.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SandboxBackend"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "sandbox_allow_write": {
-          "description": "Extra paths the sandboxed command may write, besides the working\ndirectory and temporary files. `~` and relative paths are allowed.",
+          "description": "Extra paths the sandboxed command may write, besides the working\ndirectory (except under the `landlock` sandbox) and temporary files.\n`~` and relative paths are allowed.",
           "type": "array",
           "items": {
             "type": "string"
@@ -2583,6 +2594,21 @@
         },
         {
           "required": ["lease"]
+        }
+      ]
+    },
+    "SandboxBackend": {
+      "description": "The Linux sandbox that `fnox proxy run` uses.",
+      "oneOf": [
+        {
+          "description": "bubblewrap: private network, process and mount namespaces. Needs\nunprivileged user namespaces.",
+          "type": "string",
+          "const": "bwrap"
+        },
+        {
+          "description": "Landlock and a seccomp filter, with no namespaces. fnox makes each of\nthe command's connections itself and refuses all but the proxy. Needs\nLandlock ABI 6 (Linux 6.12) on x86_64 or aarch64.",
+          "type": "string",
+          "const": "landlock"
         }
       ]
     },

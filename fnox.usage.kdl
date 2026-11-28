@@ -1099,6 +1099,19 @@ Run the command in an OS sandbox whose only way out is the proxy
 Also enabled by `sandbox = true` in `[proxy]`. Needs `bwrap` on Linux or `sandbox-exec` on macOS, and fails instead of running unsandboxed.
 """#
         }
+        flag --sandbox-backend help="Which Linux sandbox to use; implies `--sandbox`" {
+            long_help #"""
+Which Linux sandbox to use; implies `--sandbox`
+
+`bwrap` (the default) needs unprivileged user namespaces. `landlock` works without them, as in a Docker container with the default seccomp profile, needs Linux 6.12 or later, and keeps the working directory read-only. Overrides `sandbox_backend` in `[proxy]`; ignored on macOS.
+"""#
+            arg <SANDBOX_BACKEND> {
+                choices {
+                    choice bwrap help="bubblewrap: private network, process and mount namespaces. Needs unprivileged user namespaces."
+                    choice landlock help="Landlock and a seccomp filter, with no namespaces. fnox makes each of the command's connections itself and refuses all but the proxy. Needs Landlock ABI 6 (Linux 6.12) on x86_64 or aarch64."
+                }
+            }
+        }
         flag "-h --help" help="Print help" action=help builtin=#true
         arg "[COMMAND]..." help="Command to run, with its arguments" double_dash=automatic
         complete command type=command_args

@@ -3606,7 +3606,7 @@
           },
           "run": {
             "full_cmd": ["proxy", "run"],
-            "usage": "proxy run [--no-sandbox] [--sandbox] [COMMAND]…",
+            "usage": "proxy run [FLAGS] [COMMAND]…",
             "subcommands": {},
             "args": [
               {
@@ -3641,6 +3641,37 @@
                 "long": ["sandbox"],
                 "hide": false,
                 "global": false
+              },
+              {
+                "name": "sandbox-backend",
+                "usage": "--sandbox-backend <SANDBOX_BACKEND>",
+                "help": "Which Linux sandbox to use; implies `--sandbox`",
+                "help_long": "Which Linux sandbox to use; implies `--sandbox`\n\n`bwrap` (the default) needs unprivileged user namespaces. `landlock` works without them, as in a Docker container with the default seccomp profile, needs Linux 6.12 or later, and keeps the working directory read-only. Overrides `sandbox_backend` in `[proxy]`; ignored on macOS.",
+                "help_first_line": "Which Linux sandbox to use; implies `--sandbox`",
+                "short": [],
+                "long": ["sandbox-backend"],
+                "hide": false,
+                "global": false,
+                "arg": {
+                  "name": "SANDBOX_BACKEND",
+                  "usage": "<SANDBOX_BACKEND>",
+                  "required": true,
+                  "double_dash": "Optional",
+                  "hide": false,
+                  "choices": {
+                    "choices": ["bwrap", "landlock"],
+                    "details": [
+                      {
+                        "value": "bwrap",
+                        "help": "bubblewrap: private network, process and mount namespaces. Needs unprivileged user namespaces."
+                      },
+                      {
+                        "value": "landlock",
+                        "help": "Landlock and a seccomp filter, with no namespaces. fnox makes each of the command's connections itself and refuses all but the proxy. Needs Landlock ABI 6 (Linux 6.12) on x86_64 or aarch64."
+                      }
+                    ]
+                  }
+                }
               },
               {
                 "name": "help",

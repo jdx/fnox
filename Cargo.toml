@@ -68,6 +68,7 @@ apple-native-keyring-store = { version = "1", features = ["keychain"] }
 windows-native-keyring-store = "1"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Pipes", "Win32_System_Threading"] }
 dbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust", "vendored"] }
+landlock = "0.4"
 libc = "0.2"
 libloading = "0.9"
 mlua = { version = "0.12", features = ["lua54", "vendored", "async", "send", "serialize"] }
@@ -200,6 +201,10 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
+
+# The `landlock` proxy sandbox.
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = { workspace = true }
 
 [dev-dependencies]
 async-trait = { workspace = true }
