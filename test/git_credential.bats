@@ -27,8 +27,14 @@ def respond(method, path, body):
 '
 }
 
+# The helper reads backends from the global config only, unless -c names a file.
+global_config() {
+	mkdir -p "$HOME/.config/fnox"
+	echo "$HOME/.config/fnox/config.toml"
+}
+
 write_config() {
-	cat >"$FNOX_CONFIG_FILE" <<EOF
+	cat >"$(global_config)" <<EOF
 root = true
 
 [leases.gl]
@@ -82,7 +88,7 @@ EOF
 	start_gitlab_server
 	# Both backends produce GITLAB_TOKEN; the later one must not answer for the
 	# mock server's host (it would fail, as nothing listens there).
-	cat >"$FNOX_CONFIG_FILE" <<EOF
+	cat >"$(global_config)" <<EOF
 root = true
 
 [leases.gl]
@@ -102,7 +108,7 @@ EOF
 }
 
 @test "git-credential get: plain HTTP to a non-loopback host gets no token" {
-	cat >"$FNOX_CONFIG_FILE" <<EOF
+	cat >"$(global_config)" <<EOF
 root = true
 
 [leases.gl]
@@ -122,4 +128,38 @@ EOF
 	run bash -c "printf 'protocol=https\nhost=github.com\n\n' | fnox git-credential get"
 	assert_success
 	assert_output ""
+}
+
+@test "git-credential get: ignores backends in the repository's fnox.toml" {
+	start_gitlab_server
+	# A repository's own config must not choose where GITLAB_TOKEN is sent.
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[leases.gl]
+type = "gitlab"
+url = "http://127.0.0.1:$MOCK_PORT"
+project = "group/app"
+EOF
+	cd "$TEST_TEMP_DIR"
+
+	run bash -c "printf 'protocol=http\nhost=127.0.0.1:$MOCK_PORT\n\n' | fnox git-credential get"
+	assert_success
+	assert_output ""
+}
+
+@test "git-credential get: -c reads backends from the named file" {
+	start_gitlab_server
+	cat >"$FNOX_CONFIG_FILE" <<EOF
+root = true
+
+[leases.gl]
+type = "gitlab"
+url = "http://127.0.0.1:$MOCK_PORT"
+project = "group/app"
+EOF
+
+	run bash -c "printf 'protocol=http\nhost=127.0.0.1:$MOCK_PORT\n\n' | fnox -c '$FNOX_CONFIG_FILE' git-credential get"
+	assert_success
+	assert_line "password=glpat-child"
 }

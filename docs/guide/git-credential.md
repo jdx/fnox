@@ -16,10 +16,10 @@ It serves tokens from these lease backends:
 
 ## Set up
 
-Define a lease backend, then register the helper with git:
+Define a lease backend in your global config, then register the helper with git:
 
 ```toml
-# fnox.toml
+# ~/.config/fnox/config.toml
 [leases.github]
 type = "github-oauth"
 client_id = "Iv1.0123456789abcdef"
@@ -31,7 +31,13 @@ git config --global credential.helper '!fnox git-credential'
 
 Now `git clone https://github.com/you/repo` asks fnox for a token. fnox reuses a cached lease while it is valid, and creates a new one when it is not.
 
-git runs the helper from the repository's directory, so that project's `fnox.toml` applies. A first `git clone` runs before the repository's `fnox.toml` exists, so define the backend for cloning, or for use everywhere, in `~/.config/fnox/config.toml`.
+The helper reads lease backends only from the global config. git runs it on its own inside any repository it works in, including ones you just cloned, so a `fnox.toml` in the repository is ignored: otherwise that file could point a backend at a server of its choosing and receive your parent token. To use a specific file instead, pass `-c`:
+
+```sh
+git config --global credential.helper '!fnox -c ~/work/fnox.toml git-credential'
+```
+
+Leases for git share one cache, kept in the fnox config directory, across all repositories.
 
 ## Choosing a backend
 
@@ -42,7 +48,7 @@ git config --global credential.https://github.com.helper ''
 git config --global --add credential.https://github.com.helper '!fnox git-credential --backend work'
 ```
 
-When no backend serves the host, or no fnox config is found, fnox prints nothing and exits 0, so git moves on to its next helper. `store` and `erase` do nothing, because leases expire on their own.
+When no backend serves the host, or there is no global config, fnox prints nothing and exits 0, so git moves on to its next helper. `store` and `erase` do nothing, because leases expire on their own.
 
 fnox returns tokens only for HTTPS requests, or plain HTTP to `localhost`, `127.0.0.1` or `::1`, so a token never crosses a network in cleartext.
 

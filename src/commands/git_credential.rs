@@ -1,9 +1,9 @@
 use crate::commands::get::resolve_named_lease;
 use crate::commands::{Cli, load_read_config};
-use crate::config::Config;
+use crate::config::{Config, uses_config_discovery};
 use crate::error::{FnoxError, Result};
 use crate::lease_backends::LeaseBackendConfig;
-use std::io::{Read, Write};
+use std::io::{BufRead, Write};
 
 /// Git credential helper that serves short-lived GitHub and GitLab tokens
 ///
@@ -21,9 +21,10 @@ use std::io::{Read, Write};
 /// Tokens are returned only for HTTPS requests, or plain HTTP to a loopback
 /// address, so they never cross a network in cleartext.
 ///
-/// git runs the helper from the repository's directory, so a project's
-/// `fnox.toml` applies. Outside a project, define the backend in the global
-/// config or pass `-c`; with no config at all, fnox prints nothing.
+/// Backends come from the global config (`~/.config/fnox/config.toml`) only,
+/// because git runs the helper inside repositories you may not trust; a
+/// `fnox.toml` in the repository is ignored. Pass `-c PATH` to read a specific
+/// file instead. With no config, fnox prints nothing.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     name = "git-credential",
@@ -59,19 +60,50 @@ struct Request {
     host: Option<String>,
 }
 
-fn parse_request(input: &str) -> Request {
+/// Read git's request up to the blank line that ends it, or EOF. Fields are
+/// read as bytes, so a value fnox ignores (a path, a password) need not be
+/// UTF-8; only `protocol` and `host` are decoded.
+fn read_request(mut input: impl BufRead) -> Request {
     let mut request = Request::default();
-    for line in input.lines() {
-        if line.is_empty() {
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        match input.read_until(b'\n', &mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        let record = line.strip_suffix(b"\n").unwrap_or(&line);
+        let record = record.strip_suffix(b"\r").unwrap_or(record);
+        if record.is_empty() {
             break;
         }
-        match line.split_once('=') {
-            Some(("protocol", value)) => request.protocol = Some(value.to_string()),
-            Some(("host", value)) => request.host = Some(value.to_string()),
-            _ => {}
-        }
+        let Some(eq) = record.iter().position(|&b| b == b'=') else {
+            continue;
+        };
+        let (key, value) = (&record[..eq], &record[eq + 1..]);
+        let field = match key {
+            b"protocol" => &mut request.protocol,
+            b"host" => &mut request.host,
+            _ => continue,
+        };
+        *field = String::from_utf8(value.to_vec()).ok();
     }
     request
+}
+
+/// The config whose lease backends may answer git. git runs the helper on its
+/// own, from inside whatever repository it is working in, so a `fnox.toml`
+/// checked into that repository must not decide where fnox sends a parent
+/// token. Only the global config is read, unless `-c` names a file.
+fn load_helper_config(cli: &Cli) -> Result<Config> {
+    if !uses_config_discovery(&cli.config) {
+        return load_read_config(cli);
+    }
+    let mut config = Config::load_global_only()?;
+    // Share one lease ledger across repositories rather than one per repo.
+    config.project_dir = Some(crate::env::FNOX_CONFIG_DIR.clone());
+    config.validate_profiles(&Config::get_profiles(&cli.profile), None)?;
+    Ok(config)
 }
 
 /// `host[:port]` of a URL, lowercased, with the scheme's default port dropped.
@@ -147,18 +179,16 @@ impl GitCredentialCommand {
     pub async fn run(&self, cli: &Cli) -> Result<()> {
         // Git sends its request on stdin for every operation; read it so git
         // never sees a broken pipe.
-        let mut input = String::new();
-        let _ = std::io::stdin().read_to_string(&mut input);
+        let request = read_request(std::io::stdin().lock());
         if self.operation != "get" {
             return Ok(());
         }
-        let Some(host) = request_authority(&parse_request(&input)) else {
+        let Some(host) = request_authority(&request) else {
             return Ok(());
         };
 
-        // A globally registered helper also runs outside fnox projects; with
-        // no config there is no backend, so let git try its next helper.
-        let config = match load_read_config(cli) {
+        // With no config there is no backend, so let git try its next helper.
+        let config = match load_helper_config(cli) {
             Ok(config) => config,
             Err(FnoxError::ConfigNotFound { .. }) => return Ok(()),
             Err(error) => return Err(error),
@@ -207,9 +237,14 @@ mod tests {
 
     #[test]
     fn parses_the_request_until_the_blank_line() {
-        let request = parse_request("protocol=https\nhost=GitHub.com\npath=a/b\n\nhost=other\n");
+        let request = read_request(
+            &b"protocol=https\r\nhost=GitHub.com\npath=a/\xff\npassword=\xfe\n\nhost=other\n"[..],
+        );
         assert_eq!(request.protocol.as_deref(), Some("https"));
         assert_eq!(request.host.as_deref(), Some("GitHub.com"));
+
+        let request = read_request(&b"protocol=https\nhost=github.com"[..]);
+        assert_eq!(request.host.as_deref(), Some("github.com"));
     }
 
     #[test]

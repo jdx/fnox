@@ -14,7 +14,7 @@ Lets git (and tools that use git's credential protocol, such as cargo and go) au
 
 fnox picks the lease backend whose host matches the request: `github.com` for GitHub backends (the host of `api_base` for GitHub Enterprise) and the host of `url` for GitLab backends (`gitlab.com` by default). When no backend matches, fnox prints nothing and exits 0, so git falls through to its next helper. `store` and `erase` do nothing, because leases expire on their own. Tokens are returned only for HTTPS requests, or plain HTTP to a loopback address, so they never cross a network in cleartext.
 
-git runs the helper from the repository's directory, so a project's `fnox.toml` applies. Outside a project, define the backend in the global config or pass `-c`; with no config at all, fnox prints nothing.
+Backends come from the global config (`~/.config/fnox/config.toml`) only, because git runs the helper inside repositories you may not trust; a `fnox.toml` in the repository is ignored. Pass `-c PATH` to read a specific file instead. With no config, fnox prints nothing.
 
 ## Arguments
 
