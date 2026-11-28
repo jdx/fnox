@@ -45,8 +45,9 @@ The settings are independent. `share_across_commands` shares entries within a
 daemon. `socket_scope = "user"` shares the daemon process across profiles and
 flags for the same global configuration directory and socket directory. Cache
 entries still distinguish profiles, `--no-defaults`, age key paths, and
-missing-value overrides. Use the same `--if-missing` setting when warming and
-reading a value. With `socket_scope = "context"` (the default), those settings
+missing-value overrides. Warm and read from the same directory with the same
+`--if-missing` setting. With `socket_scope = "context"` (the default), profiles,
+`--no-defaults`, age key paths, and missing-value overrides
 select separate daemons. In user scope, the first caller to start the daemon
 sets the process idle timeout.
 

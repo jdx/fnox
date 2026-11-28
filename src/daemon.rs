@@ -2018,13 +2018,16 @@ fn provider_daemon_cache_enabled(
     source_allows_cache && sync_allows_cache
 }
 
-fn cache_purpose<'a>(config: &Config, purpose: &'a str) -> &'a str {
-    if config
+fn shares_cache_across_commands(config: &Config) -> bool {
+    config
         .daemon
         .as_ref()
         .and_then(|daemon| daemon.share_across_commands)
         .unwrap_or(false)
-    {
+}
+
+fn cache_purpose<'a>(config: &Config, purpose: &'a str) -> &'a str {
+    if shares_cache_across_commands(config) {
         ""
     } else {
         purpose
@@ -2067,11 +2070,17 @@ fn request_fingerprint(
     if_missing: Option<&str>,
 ) -> Result<String> {
     let fingerprint = config_fingerprint(config, env)?;
-    if age_key_file.is_none() && if_missing.is_none() {
+    let shared = shares_cache_across_commands(config) || uses_user_socket(config);
+    if !shared && age_key_file.is_none() && if_missing.is_none() {
         return Ok(fingerprint);
     }
     let mut hasher = blake3::Hasher::new();
     hasher.update(fingerprint.as_bytes());
+    if shared {
+        // Providers can interpret relative paths from the caller's working directory.
+        hasher.update(b"\0cwd\0");
+        hasher.update(cwd.as_os_str().as_encoded_bytes());
+    }
     if let Some(age_key_file) = age_key_file {
         hasher.update(b"\0age-key-file\0");
         // Relative paths can select different identities in different directories.

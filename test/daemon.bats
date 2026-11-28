@@ -795,3 +795,34 @@ EOF
 	assert_success
 	assert_output "fnox daemon not running"
 }
+
+@test "shared cache resolves relative provider paths from each caller's directory" {
+	counting_pass_provider
+	cat >"$TEST_TEMP_DIR/bin/pass" <<'EOF'
+#!/bin/sh
+cat "$PASSWORD_STORE_DIR/$2"
+EOF
+	export FNOX_PASSWORD_STORE_DIR=store
+	mkdir -p one/store two/store
+	printf 'first-directory\n' >one/store/demo
+	printf 'second-directory\n' >two/store/demo
+	cat >fnox.toml <<'EOF'
+root = true
+
+[daemon]
+enabled = true
+share_across_commands = true
+socket_scope = "user"
+
+[providers.pass]
+type = "password-store"
+
+[secrets]
+FOO = { provider = "pass", value = "demo" }
+EOF
+	local config="$PWD/fnox.toml"
+	(cd one && "$FNOX_BIN" -c "$config" export --all >/dev/null)
+	run bash -c 'cd "$1" && "$2" -c "$3" get FOO' _ two "$FNOX_BIN" "$config"
+	assert_success
+	assert_output "second-directory"
+}
