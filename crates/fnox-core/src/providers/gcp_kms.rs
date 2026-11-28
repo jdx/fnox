@@ -73,8 +73,18 @@ impl GcpKmsProvider {
         permission: &str,
         not_found_hint: Option<&str>,
     ) -> FnoxError {
-        let code = e.status().map(|s| s.code.name());
         let details = e.to_string();
+        // Credential failures (e.g. a revoked ADC refresh token) happen before
+        // the RPC is sent, so they carry no status code.
+        if e.is_authentication() {
+            return FnoxError::ProviderAuthFailed {
+                provider: PROVIDER_NAME.to_string(),
+                details,
+                hint: "Run 'gcloud auth application-default login' or set GOOGLE_APPLICATION_CREDENTIALS".to_string(),
+                url: URL.to_string(),
+            };
+        }
+        let code = e.status().map(|s| s.code.name());
         match (code, not_found_hint) {
             (Some("PERMISSION_DENIED" | "UNAUTHENTICATED"), _) => FnoxError::ProviderAuthFailed {
                 provider: PROVIDER_NAME.to_string(),
