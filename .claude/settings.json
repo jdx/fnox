@@ -18,38 +18,6 @@
           }
         ],
         "matcher": "TaskCreate|TaskUpdate"
-      },
-      {
-        "hooks": [
-          {
-            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude post-tool-use'",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash|Read"
-      },
-      {
-        "hooks": [
-          {
-            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude post-edit'",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write|MultiEdit"
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "hooks": [
-          {
-            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude post-tool-use-failure'",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
       }
     ],
     "PreToolUse": [
@@ -61,16 +29,6 @@
           }
         ],
         "matcher": "Agent"
-      },
-      {
-        "hooks": [
-          {
-            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude pre-tool-use'",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash|Read|Grep|Edit|Write|MultiEdit|NotebookEdit"
       },
       {
         "hooks": [
@@ -102,15 +60,6 @@
           }
         ],
         "matcher": ""
-      },
-      {
-        "hooks": [
-          {
-            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude session-start'",
-            "timeout": 10,
-            "type": "command"
-          }
-        ]
       }
     ],
     "Stop": [
@@ -122,15 +71,6 @@
           }
         ],
         "matcher": ""
-      },
-      {
-        "hooks": [
-          {
-            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude stop'",
-            "timeout": 10,
-            "type": "command"
-          }
-        ]
       }
     ],
     "StopFailure": [

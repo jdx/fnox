@@ -16,7 +16,6 @@ communique = { version = "latest", minimum_release_age = "0s" }
 git-cliff = "latest"
 hk = { version = "latest", minimum_release_age = "0s" }
 jactionlint = "latest"
-jouet = "v0.0.5"
 pkl = "latest"
 oxfmt = "latest"
 shellcheck = "latest"
