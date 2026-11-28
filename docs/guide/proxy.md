@@ -261,7 +261,7 @@ Or for one run: `fnox proxy run --sandbox-backend landlock -- node agent.js`. It
 
 Instead of namespaces, the command is confined with two kernel features any process may use:
 
-- **Landlock** limits its files to the same hidden and read-only paths as above. `/tmp` and `/run` are hidden too, and so is `/dev`, apart from standard devices such as `/dev/null` and `/dev/urandom` and the terminal the command was started in. The command gets a private temporary directory through `TMPDIR`, `TMP`, and `TEMP`.
+- **Landlock** limits its files to the same hidden and read-only paths as above. `/tmp` and `/run` are hidden too, apart from a working directory inside them that `sandbox_deny_read` doesn't cover, and so is `/dev`, apart from standard devices such as `/dev/null` and `/dev/urandom` and the terminal the command was started in. The command gets a private temporary directory through `TMPDIR`, `TMP`, and `TEMP`.
 - **A seccomp filter** stops every `connect()` and asks fnox. fnox makes a connection to the proxy itself and gives the command that socket; every other destination, including other local ports and Unix sockets, fails with `EACCES`. The command can't create UDP, raw, or packet sockets, can't listen on a port, and can't use io_uring.
 
 It differs from `bwrap` in a few ways:

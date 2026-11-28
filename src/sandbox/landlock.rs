@@ -369,12 +369,14 @@ fn ruleset(policy: &SandboxPolicy, dir: &Path) -> Result<OwnedFd> {
     let read: BitFlags<AccessFs> = AccessFs::ReadFile | AccessFs::Execute;
     let device: BitFlags<AccessFs> = AccessFs::ReadFile | AccessFs::WriteFile | AccessFs::IoctlDev;
 
-    let mut hidden: Vec<PathBuf> = policy
+    // Hidden by the policy: the config, credentials and sandbox_deny_read.
+    let denied: Vec<PathBuf> = policy
         .hide
         .iter()
         .map(|hidden| hidden.path.clone())
         .filter(|path| path.exists())
         .collect();
+    let mut hidden = denied.clone();
     hidden.extend(ALWAYS_HIDDEN.iter().map(PathBuf::from));
 
     // Listing directories reveals names, not contents, and without it on
@@ -388,19 +390,16 @@ fn ruleset(policy: &SandboxPolicy, dir: &Path) -> Result<OwnedFd> {
     );
     // As under `bwrap`, which mounts it back over its empty /tmp, the
     // working directory stays readable even inside /tmp or /run, and even if
-    // it is one of them. /dev, with its terminals, gets no such exception.
-    if let Some(root) = ["/tmp", "/run"]
+    // it is one of them. /dev, with its terminals, gets no such exception, and
+    // neither does a working directory the policy hides: the policy has
+    // dropped the hidden paths inside it, such as the config, from its list.
+    if ["/tmp", "/run"]
         .iter()
-        .map(Path::new)
-        .find(|root| policy.cwd.starts_with(root))
+        .any(|root| policy.cwd.starts_with(root))
+        && !denied.iter().any(|path| policy.cwd.starts_with(path))
     {
-        let hidden: Vec<PathBuf> = hidden
-            .iter()
-            .filter(|path| *path != root)
-            .cloned()
-            .collect();
         rules.extend(
-            read_roots(&policy.cwd, &hidden)
+            read_roots(&policy.cwd, &denied)
                 .into_iter()
                 .map(|path| (path, read)),
         );

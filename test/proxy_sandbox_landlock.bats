@@ -236,6 +236,23 @@ except PermissionError:
 	assert_line "config-hidden"
 }
 
+@test "landlock sandbox keeps a denied /tmp hidden from a working directory in it" {
+	local dir
+	dir="$(mktemp -d /tmp/fnox-landlock-cwd.XXXXXX)"
+	sed 's|^sandbox_deny_read = .*|sandbox_deny_read = ["/tmp"]|' fnox.toml >"$dir/fnox.toml"
+	echo "tmp-contents" >"$dir/readme.txt"
+	cd "$dir"
+	run "$FNOX_BIN" proxy run --sandbox-backend landlock -- sh -c '
+		cat readme.txt >/dev/null 2>&1 && echo readme-readable || echo readme-hidden
+		cat fnox.toml >/dev/null 2>&1 && echo config-readable || echo config-hidden
+	'
+	cd "$TEST_TEMP_DIR"
+	rm -r "$dir"
+	assert_success
+	assert_line "readme-hidden"
+	assert_line "config-hidden"
+}
+
 @test "landlock sandbox passes on only standard descriptors" {
 	run "$FNOX_BIN" proxy run --sandbox-backend landlock -- sh -c '
 		(: <&7) 2>/dev/null && echo fd-inherited || echo fd-closed
