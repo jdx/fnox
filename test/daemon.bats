@@ -769,14 +769,20 @@ EOF
 	assert_output --partial "MISSING_USER"
 }
 
-@test "daemon stop checks both scopes when configuration is broken" {
-	daemon_config
-	"$FNOX_BIN" daemon start >/dev/null
+@test "daemon status and stop check both scopes when configuration is broken" {
 	cat >fnox.toml <<'EOF'
 [daemon]
 enabled = true
 socket_scope = "user"
 EOF
+	"$FNOX_BIN" daemon start >/dev/null
+	printf 'invalid = [\n' >fnox.toml
+
+	run "$FNOX_BIN" daemon status
+	assert_success
+	assert_line "fnox daemon running"
+
+	daemon_config
 	"$FNOX_BIN" daemon start >/dev/null
 	printf 'invalid = [\n' >fnox.toml
 

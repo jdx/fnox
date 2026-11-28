@@ -628,7 +628,11 @@ pub fn format_entries(entries: &[CacheEntryInfo]) -> String {
 }
 
 pub async fn status(cli: &Cli) -> Result<Option<DaemonStatus>> {
-    status_at(socket_path(cli)).await
+    let (primary, fallback) = management_socket_paths(cli);
+    match (status_at(primary).await?, fallback) {
+        (None, Some(path)) => status_at(path).await,
+        (status, _) => Ok(status),
+    }
 }
 
 async fn status_at(path: PathBuf) -> Result<Option<DaemonStatus>> {
@@ -765,14 +769,12 @@ fn daemon_socket_paths() -> Result<Vec<PathBuf>> {
 }
 
 pub async fn shutdown(cli: &Cli) -> Result<()> {
-    let ctx = ResolveContext::from_cli(cli);
-    match Config::load_smart(&cli.config) {
-        Ok(config) => shutdown_at(socket_path_for_context(&ctx, uses_user_socket(&config))).await,
-        Err(_) => {
-            let context = shutdown_at(socket_path_for_context(&ctx, false)).await;
-            let user = shutdown_at(socket_path_for_context(&ctx, true)).await;
-            context.and(user)
-        }
+    let (primary, fallback) = management_socket_paths(cli);
+    let result = shutdown_at(primary).await;
+    if let Some(path) = fallback {
+        result.and(shutdown_at(path).await)
+    } else {
+        result
     }
 }
 
@@ -2207,10 +2209,21 @@ fn provider_env_key(key: &str) -> bool {
 }
 
 fn socket_path(cli: &Cli) -> PathBuf {
-    let user_socket = Config::load_smart(&cli.config)
-        .as_ref()
-        .is_ok_and(uses_user_socket);
-    socket_path_for_context(&ResolveContext::from_cli(cli), user_socket)
+    management_socket_paths(cli).0
+}
+
+fn management_socket_paths(cli: &Cli) -> (PathBuf, Option<PathBuf>) {
+    let ctx = ResolveContext::from_cli(cli);
+    match Config::load_smart(&cli.config) {
+        Ok(config) => (
+            socket_path_for_context(&ctx, uses_user_socket(&config)),
+            None,
+        ),
+        Err(_) => (
+            socket_path_for_context(&ctx, false),
+            Some(socket_path_for_context(&ctx, true)),
+        ),
+    }
 }
 
 fn socket_path_for_context(ctx: &ResolveContext, user_socket: bool) -> PathBuf {
