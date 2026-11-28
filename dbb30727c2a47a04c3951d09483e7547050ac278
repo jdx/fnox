@@ -1,0 +1,1 @@
+{"v":1,"kind":"test","cmd":"cargo test --workspace","ms":88370,"exit":0,"host":"685fdcb56b00","ci":true,"cpus":4,"os":"linux","ts":1794255638}
