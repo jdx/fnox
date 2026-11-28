@@ -2579,6 +2579,7 @@ dependencies = [
  "keeper-secrets-manager-core",
  "keyring-core",
  "kube",
+ "libc",
  "libloading",
  "miette",
  "mlua",
