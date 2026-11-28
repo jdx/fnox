@@ -22,7 +22,8 @@ oxfmt = "latest"
 shellcheck = "latest"
 shfmt = "latest"
 1password = "latest"
-bitwarden = "latest"
+# Select Bitwarden CLI tags and bw-bit archives explicitly.
+"github:bitwarden/clients" = { version = "latest", version_prefix = "cli-v", matching = "bw-bit-" }
 bitwarden-secrets-manager = "latest"
 vault = "latest"
 infisical = "latest"
