@@ -549,7 +549,8 @@ jobs:
           # so add the report to the summary even when that update fails.
           append_coverage() {
             if [[ -f "$RUNNER_TEMP/communique-coverage.md" ]]; then
-              cat "$RUNNER_TEMP/communique-coverage.md" >> "$GITHUB_STEP_SUMMARY"
+              cat "$RUNNER_TEMP/communique-coverage.md" >> "$GITHUB_STEP_SUMMARY" ||
+                echo "::warning::could not add the communique coverage report to the job summary"
             fi
           }
           trap append_coverage EXIT
