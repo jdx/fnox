@@ -70,17 +70,34 @@ static NSString *fnox_current_process_team_identifier(void) {
   return [team isKindOfClass:[NSString class]] && team.length > 0 ? team : nil;
 }
 
-static BOOL fnox_is_biometry_current_set(id access_control) {
+// Reports whether the stored item refuses to release its data without user
+// authentication. The access control the Keychain returns carries more
+// constraints than a freshly created one (for example the enrolled-biometry
+// hash and default delete rules), so comparing the two with CFEqual never
+// matches; Security.framework has no public API to read an access control's
+// flags back. Instead, ask for the data with interaction forbidden: an item
+// protected by an access control must refuse, while an unprotected item would
+// be returned without any prompt.
+static BOOL fnox_requires_user_authentication(NSString *service, NSString *account,
+                                              id access_control) {
   if (!access_control || CFGetTypeID((__bridge CFTypeRef)access_control) != SecAccessControlGetTypeID()) return NO;
-  CFErrorRef error = NULL;
-  SecAccessControlRef expected = SecAccessControlCreateWithFlags(
-      kCFAllocatorDefault, kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-      kSecAccessControlBiometryCurrentSet, &error);
-  if (!expected) { if (error) CFRelease(error); return NO; }
-  BOOL matches = CFEqual((__bridge CFTypeRef)access_control, expected);
-  CFRelease(expected);
-  if (error) CFRelease(error);
-  return matches;
+  LAContext *probe_context = [LAContext new];
+  probe_context.interactionNotAllowed = YES;
+  NSMutableDictionary *query = [@{
+    (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
+    (__bridge id)kSecAttrService : service,
+    (__bridge id)kSecAttrAccount : account,
+    (__bridge id)kSecUseAuthenticationContext : probe_context,
+    (__bridge id)kSecUseDataProtectionKeychain : @YES,
+    (__bridge id)kSecReturnData : @YES,
+    (__bridge id)kSecMatchLimit : (__bridge id)kSecMatchLimitOne,
+  } mutableCopy];
+  NSString *access_group = NSBundle.mainBundle.infoDictionary[@"FNOXKeychainAccessGroup"];
+  if (access_group.length > 0) query[(__bridge id)kSecAttrAccessGroup] = access_group;
+  CFTypeRef result = NULL;
+  OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+  if (result) CFRelease(result);
+  return status != errSecSuccess && status != errSecItemNotFound;
 }
 
 extern "C" {
@@ -214,8 +231,8 @@ int fnox_touch_id_get(const char *service_utf8, const char *account_utf8,
 
     NSDictionary *item = CFBridgingRelease(result);
     id access_control = item[(__bridge id)kSecAttrAccessControl];
-    if (!fnox_is_biometry_current_set(access_control)) {
-      *error_out = fnox_copy_error(@"The matching Keychain item is not protected by the required current-set Touch ID policy");
+    if (!fnox_requires_user_authentication(service, account, access_control)) {
+      *error_out = fnox_copy_error(@"The matching Keychain item is not protected by a Touch ID access control");
       return (int)errSecAuthFailed;
     }
     NSData *data = item[(__bridge id)kSecValueData];
@@ -330,8 +347,8 @@ int fnox_touch_id_set(const char *service_utf8, const char *account_utf8,
       if (status == errSecSuccess) {
         NSDictionary *existing = CFBridgingRelease(existing_result);
         id existing_access_control = existing[(__bridge id)kSecAttrAccessControl];
-        if (!fnox_is_biometry_current_set(existing_access_control)) {
-          *error_out = fnox_copy_error(@"Refusing to update a Keychain item without the required current-set Touch ID policy; remove it and write it again");
+        if (!fnox_requires_user_authentication(service, account, existing_access_control)) {
+          *error_out = fnox_copy_error(@"Refusing to update a Keychain item that is not protected by a Touch ID access control; remove it and write it again");
           return (int)errSecAuthFailed;
         }
         LAContext *context = [LAContext new];
