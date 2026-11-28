@@ -2,159 +2,168 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Agent",
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code post-task'"
+            "command": "sh -c 'if ! command -v entire \u003e/dev/null 2\u003e\u00261; then exit 0; fi; exec entire hooks claude-code post-task'",
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "Agent"
       },
       {
-        "matcher": "TaskCreate|TaskUpdate",
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code post-todo'"
+            "command": "sh -c 'if ! command -v entire \u003e/dev/null 2\u003e\u00261; then exit 0; fi; exec entire hooks claude-code post-todo'",
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "TaskCreate|TaskUpdate"
       },
       {
-        "matcher": "Bash|Read",
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'command -v jouet >/dev/null 2>&1 || exit 0; exec jouet hook claude post-tool-use'",
-            "timeout": 10
+            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude post-tool-use'",
+            "timeout": 10,
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "Bash|Read"
       },
       {
-        "matcher": "Edit|Write|MultiEdit",
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'command -v jouet >/dev/null 2>&1 || exit 0; exec jouet hook claude post-edit'",
-            "timeout": 10
+            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude post-edit'",
+            "timeout": 10,
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "Edit|Write|MultiEdit"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude post-tool-use-failure'",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "Agent",
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code pre-task'"
+            "command": "sh -c 'if ! command -v entire \u003e/dev/null 2\u003e\u00261; then exit 0; fi; exec entire hooks claude-code pre-task'",
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "Agent"
       },
       {
-        "matcher": "Bash|Read|Grep|Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'command -v jouet >/dev/null 2>&1 || exit 0; exec jouet hook claude pre-tool-use'",
-            "timeout": 10
+            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude pre-tool-use'",
+            "timeout": 10,
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "Bash|Read|Grep|Edit|Write|MultiEdit|NotebookEdit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "sh -c 'if command -v entire-brain \u003e/dev/null 2\u003e\u00261; then exec entire-brain hook pre-edit --claude-hook; fi; if command -v entire \u003e/dev/null 2\u003e\u00261; then exec entire brain hook pre-edit --claude-hook; fi; exit 0'",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit"
       }
     ],
     "SessionEnd": [
       {
-        "matcher": "",
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code session-end'"
+            "command": "sh -c 'if ! command -v entire \u003e/dev/null 2\u003e\u00261; then exit 0; fi; exec entire hooks claude-code session-end'",
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": ""
       }
     ],
     "SessionStart": [
       {
-        "matcher": "",
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then printf \"%s\\n\" \"{\\\"systemMessage\\\":\\\"\\\\n\\\\nEntire CLI is enabled but not installed or not on PATH.\\\\nInstallation guide: https://docs.entire.io/cli/installation#installation-methods\\\"}\"; exit 0; fi; exec entire hooks claude-code session-start'"
+            "command": "sh -c 'if ! command -v entire \u003e/dev/null 2\u003e\u00261; then printf \"%s\\n\" \"{\\\"systemMessage\\\":\\\"\\\\n\\\\nEntire CLI is enabled but not installed or not on PATH.\\\\nInstallation guide: https://docs.entire.io/cli/installation#installation-methods\\\"}\"; exit 0; fi; exec entire hooks claude-code session-start'",
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": ""
       },
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'command -v jouet >/dev/null 2>&1 || exit 0; exec jouet hook claude session-start'",
-            "timeout": 10
+            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude session-start'",
+            "timeout": 10,
+            "type": "command"
           }
         ]
       }
     ],
     "Stop": [
       {
-        "matcher": "",
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code stop'"
+            "command": "sh -c 'if ! command -v entire \u003e/dev/null 2\u003e\u00261; then exit 0; fi; exec entire hooks claude-code stop'",
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": ""
       },
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'command -v jouet >/dev/null 2>&1 || exit 0; exec jouet hook claude stop'",
-            "timeout": 10
+            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude stop'",
+            "timeout": 10,
+            "type": "command"
           }
         ]
       }
     ],
     "StopFailure": [
       {
-        "matcher": "",
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code stop-failure'"
+            "command": "sh -c 'if ! command -v entire \u003e/dev/null 2\u003e\u00261; then exit 0; fi; exec entire hooks claude-code stop-failure'",
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": ""
       }
     ],
     "SubagentStop": [
       {
-        "matcher": "",
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code subagent-stop'"
+            "command": "sh -c 'if ! command -v entire \u003e/dev/null 2\u003e\u00261; then exit 0; fi; exec entire hooks claude-code subagent-stop'",
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": ""
       }
     ],
     "UserPromptSubmit": [
       {
-        "matcher": "",
         "hooks": [
           {
-            "type": "command",
-            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code user-prompt-submit'"
+            "command": "sh -c 'if ! command -v entire \u003e/dev/null 2\u003e\u00261; then exit 0; fi; exec entire hooks claude-code user-prompt-submit'",
+            "type": "command"
           }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh -c 'command -v jouet >/dev/null 2>&1 || exit 0; exec jouet hook claude post-tool-use-failure'",
-            "timeout": 10
-          }
-        ]
+        ],
+        "matcher": ""
       }
     ]
   }
