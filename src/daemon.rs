@@ -3306,7 +3306,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
 
     fn env_request(scope: EnvScope, keys: Option<&[&str]>) -> ResolveEnvRequest {
         ResolveEnvRequest {
-            protocol: 8,
+            protocol: u32::from(WIRE_VERSION),
             cwd: PathBuf::from("."),
             config: PathBuf::from("fnox.toml"),
             profile: vec!["default".to_string()],
@@ -3635,7 +3635,8 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
 
     #[tokio::test]
     async fn resolve_env_checks_the_protocol_before_anything_else() {
-        for protocol in [7, 9] {
+        let current_protocol = u32::from(WIRE_VERSION);
+        for protocol in [MIN_PROTOCOL - 1, current_protocol + 1] {
             let mut req = env_request(EnvScope::Exec, None);
             req.protocol = protocol;
             // The request's cwd and config do not exist; the protocol check comes first.
@@ -3648,7 +3649,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
             .await
             .unwrap();
             assert!(
-                matches!(response, Response::UnsupportedProtocol { min: 8, max: 8 }),
+                matches!(response, Response::UnsupportedProtocol { min: MIN_PROTOCOL, max } if max == current_protocol),
                 "{response:?}"
             );
             let response = process_request(
@@ -3660,7 +3661,7 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
             .unwrap();
             assert!(matches!(
                 response,
-                Response::UnsupportedProtocol { min: 8, max: 8 }
+                Response::UnsupportedProtocol { min: MIN_PROTOCOL, max } if max == current_protocol
             ));
         }
     }
@@ -3668,7 +3669,9 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
     #[tokio::test]
     async fn hello_reports_the_protocol_range_and_pid() {
         let response = process_request(
-            Request::Hello { protocol: 8 },
+            Request::Hello {
+                protocol: u32::from(WIRE_VERSION),
+            },
             empty_state(),
             Arc::new(Mutex::new(())),
         )
@@ -3683,7 +3686,10 @@ NOCACHE = { provider = "plain", value = "nc", daemon_cache = false }
         else {
             panic!("expected hello");
         };
-        assert_eq!((protocol, min_protocol), (8, 8));
+        assert_eq!(
+            (protocol, min_protocol),
+            (u32::from(WIRE_VERSION), MIN_PROTOCOL)
+        );
         assert_eq!(fnox_version, env!("CARGO_PKG_VERSION"));
         assert_eq!(pid, std::process::id());
     }
