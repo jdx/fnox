@@ -23,8 +23,10 @@ use std::io::{BufRead, Write};
 ///
 /// Backends come from the global config (`~/.config/fnox/config.toml`) only,
 /// because git runs the helper inside repositories you may not trust; a
-/// `fnox.toml` in the repository is ignored. Pass `-c PATH` to read a specific
-/// file instead. With no config, fnox prints nothing.
+/// `fnox.toml` in the repository is ignored. Pass `-c` with an absolute path to
+/// read that file instead; a relative path would resolve inside the repository,
+/// and a bare `fnox.toml` keeps the global-only behavior. With no config, fnox
+/// prints nothing.
 #[derive(Debug, usage_rs::Args)]
 #[usage(
     name = "git-credential",

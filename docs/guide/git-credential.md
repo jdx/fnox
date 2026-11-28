@@ -31,7 +31,7 @@ git config --global credential.helper '!fnox git-credential'
 
 Now `git clone https://github.com/you/repo` asks fnox for a token. fnox reuses a cached lease while it is valid, and creates a new one when it is not.
 
-The helper reads lease backends only from the global config. git runs it on its own inside any repository it works in, including ones you just cloned, so a `fnox.toml` in the repository is ignored: otherwise that file could point a backend at a server of its choosing and receive your parent token. To use a specific file instead, pass `-c`:
+The helper reads lease backends only from the global config. git runs it on its own inside any repository it works in, including ones you just cloned, so a `fnox.toml` in the repository is ignored: otherwise that file could point a backend at a server of its choosing and receive your parent token. To use a specific file instead, pass `-c` with an absolute path. A relative path would resolve inside whatever repository git is working in, and a bare `-c fnox.toml` is the same as no `-c`:
 
 ```sh
 git config --global credential.helper '!fnox -c ~/work/fnox.toml git-credential'
