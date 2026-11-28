@@ -2487,6 +2487,7 @@ mod tests {
     };
     use fnox_client::document::EnvScope;
     use fnox_client::path::RuntimeEnv;
+    use fnox_client::{MIN_PROTOCOL, WIRE_VERSION};
     use fnox_core::config::{Config, ProviderConfig, SecretConfig};
     use indexmap::IndexMap;
     use std::time::{Duration, Instant};
