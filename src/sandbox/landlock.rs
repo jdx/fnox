@@ -39,11 +39,15 @@ use std::path::{Path, PathBuf};
 /// The Landlock ABI that this sandbox is written against.
 const LANDLOCK_ABI: ABI = ABI::V6;
 
-/// Always hidden, as under `bwrap`, where they are empty. They hold other
-/// processes' sockets and temporary files.
-const ALWAYS_HIDDEN: &[&str] = &["/tmp", "/run", "/dev/shm"];
+/// Always hidden, as under `bwrap`, which gives the command empty ones and a
+/// `/dev` of its own. They hold other processes' sockets, temporary files and
+/// terminals.
+const ALWAYS_HIDDEN: &[&str] = &["/tmp", "/run", "/dev"];
 
-/// Devices the command may write.
+/// Devices the command may use, as `bwrap --dev` provides them. Other
+/// terminals in `/dev/pts` are left out: one that belongs to the same user
+/// could be read or written. The command's own terminal is added by
+/// [`stdio_terminals`].
 const DEVICES: &[&str] = &[
     "/dev/null",
     "/dev/zero",
@@ -52,7 +56,6 @@ const DEVICES: &[&str] = &[
     "/dev/urandom",
     "/dev/tty",
     "/dev/ptmx",
-    "/dev/pts",
 ];
 
 #[cfg(target_arch = "x86_64")]
@@ -259,17 +262,27 @@ fn check_abi() -> Result<()> {
     )))
 }
 
-/// Landlock can only grant access, so a writable path cannot have a part
-/// that stays hidden or read-only.
+/// Landlock can only grant access, so a writable path can neither hold a
+/// path that stays hidden or read-only nor lie inside one: its grant would
+/// open that part up.
 fn check_writable(policy: &SandboxPolicy) -> Result<()> {
     for writable in &policy.writable {
-        let protected = policy
-            .hide
-            .iter()
-            .map(|hidden| &hidden.path)
-            .chain(&policy.read_only)
-            .find(|path| path.starts_with(writable));
-        if let Some(path) = protected {
+        let protected = || {
+            policy
+                .hide
+                .iter()
+                .map(|hidden| &hidden.path)
+                .chain(&policy.read_only)
+        };
+        if let Some(path) = protected().find(|path| writable.starts_with(path)) {
+            return Err(FnoxError::Config(format!(
+                "the landlock sandbox cannot let the command write {}, which is or is inside {}, \
+                 which it must not read or change; remove it from sandbox_allow_write",
+                writable.display(),
+                path.display()
+            )));
+        }
+        if let Some(path) = protected().find(|path| path.starts_with(writable)) {
             return Err(FnoxError::Config(format!(
                 "the landlock sandbox cannot let the command write {} without letting it \
                  change {}, which it must not read or change; allow a narrower directory in \
@@ -280,6 +293,18 @@ fn check_writable(policy: &SandboxPolicy) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// The terminals on fnox's standard input, output and error, which the
+/// command inherits. It can use them through the descriptors anyway; the
+/// grant lets it reopen them, as `/dev/stderr` does.
+fn stdio_terminals() -> Vec<PathBuf> {
+    (0..3)
+        // SAFETY: isatty only inspects the descriptor.
+        .filter(|fd| unsafe { libc::isatty(*fd) } == 1)
+        .filter_map(|fd| std::fs::read_link(format!("/proc/self/fd/{fd}")).ok())
+        .filter(|path| path.starts_with("/dev/"))
+        .collect()
 }
 
 /// The paths the command may read files beneath: everything except the
@@ -351,7 +376,9 @@ fn ruleset(policy: &SandboxPolicy, dir: &Path) -> Result<OwnedFd> {
     rules.extend(
         DEVICES
             .iter()
-            .map(|path| (PathBuf::from(path), device | AccessFs::ReadDir)),
+            .map(PathBuf::from)
+            .chain(stdio_terminals())
+            .map(|path| (path, device)),
     );
     rules.push((dir.to_path_buf(), AccessFs::ReadFile | AccessFs::ReadDir));
     rules.push((dir.join("tmp"), all));
@@ -1296,11 +1323,13 @@ mod tests {
     }
 
     #[test]
-    fn a_writable_path_cannot_hold_a_protected_one() {
+    fn a_writable_path_cannot_overlap_a_protected_one() {
         let root = tempfile::tempdir().unwrap();
         let project = std::fs::canonicalize(root.path()).unwrap();
         std::fs::create_dir(project.join("target")).unwrap();
         std::fs::write(project.join("fnox.toml"), "").unwrap();
+        std::fs::create_dir_all(project.join("secrets/cache")).unwrap();
+        std::fs::create_dir_all(project.join(".git/hooks/sub")).unwrap();
         let policy = |allow_write: &str| {
             SandboxPolicy::build(PolicyInputs {
                 cwd: project.clone(),
@@ -1311,6 +1340,7 @@ mod tests {
                 environment: Vec::new(),
                 config: &ProxyConfig {
                     sandbox_allow_write: vec![allow_write.to_string()],
+                    sandbox_deny_read: vec!["secrets".to_string()],
                     ..ProxyConfig::default()
                 },
             })
@@ -1319,13 +1349,24 @@ mod tests {
         assert_eq!(narrow.writable, [project.join("target")]);
         assert_eq!(
             narrow.hide,
-            [HiddenPath {
-                path: project.join("fnox.toml"),
-                is_dir: false
-            }]
+            [
+                HiddenPath {
+                    path: project.join("fnox.toml"),
+                    is_dir: false
+                },
+                HiddenPath {
+                    path: project.join("secrets"),
+                    is_dir: true
+                }
+            ]
         );
         check_writable(&narrow).unwrap();
         let error = check_writable(&policy(".")).unwrap_err().to_string();
         assert!(error.contains("fnox.toml"), "{error}");
+        // Inside a hidden directory, or a read-only one.
+        for inside in ["secrets/cache", ".git/hooks", ".git/hooks/sub"] {
+            let error = check_writable(&policy(inside)).unwrap_err().to_string();
+            assert!(error.contains("which is or is inside"), "{inside}: {error}");
+        }
     }
 }

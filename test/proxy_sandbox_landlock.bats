@@ -32,7 +32,17 @@ TOML
 	mkdir out
 	local output
 	if ! output="$("$FNOX_BIN" proxy run --sandbox-backend landlock -- true 2>&1)"; then
-		skip "landlock sandbox unavailable: ${output:0:200}"
+		# Only a machine that cannot run the backend skips; any other failure
+		# is a bug in it.
+		case "$output" in
+		*"needs Landlock ABI"* | *"ptrace_scope"* | *"only supported on x86_64 and aarch64"*)
+			skip "landlock sandbox unavailable: ${output:0:200}"
+			;;
+		*)
+			echo "$output" >&2
+			return 1
+			;;
+		esac
 	fi
 }
 
@@ -74,6 +84,45 @@ teardown() {
 	run "$FNOX_BIN" proxy run --sandbox-backend landlock -- true
 	assert_failure
 	assert_output --partial "sandbox_allow_write"
+}
+
+@test "landlock sandbox refuses a writable path inside a hidden one" {
+	mkdir -p secrets/cache
+	sed -i 's/^sandbox_deny_read = .*/sandbox_deny_read = ["decoy.txt", "secrets"]/; s/^sandbox_allow_write = .*/sandbox_allow_write = ["secrets\/cache"]/' fnox.toml
+	run "$FNOX_BIN" proxy run --sandbox-backend landlock -- true
+	assert_failure
+	assert_output --partial "is or is inside"
+}
+
+@test "landlock sandbox keeps other terminals out of reach" {
+	command -v python3 >/dev/null 2>&1 || skip "python3 is needed to open a terminal"
+	python3 -c 'import os, pty, time
+primary, secondary = pty.openpty()
+print(os.ttyname(secondary), flush=True)
+time.sleep(60)' >pty.path &
+	local holder=$!
+	for _ in $(seq 1 50); do
+		[[ -s pty.path ]] && break
+		sleep 0.1
+	done
+	OTHER_TTY="$(cat pty.path)"
+	export OTHER_TTY
+	run "$FNOX_BIN" proxy run --sandbox-backend landlock -- sh -c '
+		(: <"$OTHER_TTY") 2>/dev/null && echo tty-readable || echo tty-blocked
+		(: >"$OTHER_TTY") 2>/dev/null && echo tty-writable || echo tty-blocked
+	'
+	kill "$holder" 2>/dev/null || true
+	assert_success
+	refute_line "tty-readable"
+	refute_line "tty-writable"
+}
+
+@test "landlock sandbox lets the command reopen its own terminal" {
+	command -v script >/dev/null 2>&1 || skip "script is needed to give the command a terminal"
+	run script -qec "\"$FNOX_BIN\" proxy run --sandbox-backend landlock -- sh -c 'echo to-stderr >/dev/stderr && echo reopened'" /dev/null
+	assert_success
+	assert_output --partial "to-stderr"
+	assert_output --partial "reopened"
 }
 
 @test "landlock sandbox reaches only the proxy" {

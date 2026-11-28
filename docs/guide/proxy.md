@@ -261,13 +261,14 @@ Or for one run: `fnox proxy run --sandbox-backend landlock -- node agent.js`. It
 
 Instead of namespaces, the command is confined with two kernel features any process may use:
 
-- **Landlock** limits its files to the same hidden and read-only paths as above. `/tmp`, `/run`, and `/dev/shm` are hidden too, and the command gets a private temporary directory through `TMPDIR`, `TMP`, and `TEMP`.
+- **Landlock** limits its files to the same hidden and read-only paths as above. `/tmp` and `/run` are hidden too, and so is `/dev`, apart from standard devices such as `/dev/null` and `/dev/urandom` and the terminal the command was started in. The command gets a private temporary directory through `TMPDIR`, `TMP`, and `TEMP`.
 - **A seccomp filter** stops every `connect()` and asks fnox. fnox makes a connection to the proxy itself and gives the command that socket; every other destination, including other local ports and Unix sockets, fails with `EACCES`. The command can't create UDP, raw, or packet sockets, can't listen on a port, and can't use io_uring.
 
 It differs from `bwrap` in a few ways:
 
-- **The working directory is read-only.** Landlock can only grant access, so it can't let the command write the working directory while keeping `fnox.toml` or `.git/hooks` inside it out of reach. List the directories the command should write, such as a build output directory, in `sandbox_allow_write`. fnox refuses to start if a `sandbox_allow_write` path contains a path that must stay hidden or read-only.
+- **The working directory is read-only.** Landlock can only grant access, so it can't let the command write the working directory while keeping `fnox.toml` or `.git/hooks` inside it out of reach. List the directories the command should write, such as a build output directory, in `sandbox_allow_write`. fnox refuses to start if a `sandbox_allow_write` path contains, or lies inside, a path that must stay hidden or read-only.
 - **Other processes stay visible.** The command can list other processes and read their command lines in `/proc`, but Landlock stops it from signalling or tracing anything outside the sandbox, fnox included, and from reaching abstract Unix sockets created outside it.
+- **The command can't open new terminals.** Its own terminal keeps working, but every other terminal in `/dev/pts` is out of reach, including ones it creates, so tools that open a pseudo-terminal, such as `script`, `expect`, or a pty library, fail with `EACCES`.
 - **Hidden directories can be listed.** The command can see the names of files in a hidden directory, such as `~/.ssh`, but can't read them. A file created after the command starts, in a directory that also holds a hidden path, isn't readable until the next run.
 - **Leftover processes are stopped.** When the command exits, fnox stops any process it left running in the background.
 - **fnox must be able to read the command's memory** to see where it connects. With `kernel.yama.ptrace_scope` at 2 or 3, the sandbox fails to start.
