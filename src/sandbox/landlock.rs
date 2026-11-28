@@ -280,9 +280,18 @@ fn check_abi() -> Result<()> {
 
 /// Landlock can only grant access, so a writable path can neither hold a
 /// path that stays hidden or read-only nor lie inside one: its grant would
-/// open that part up.
+/// open that part up. Nor can it be in `/dev`, whose terminals must stay out
+/// of reach; the devices the command needs are granted already. Other
+/// always-hidden paths, such as a directory in `/tmp`, may be allowed.
 fn check_writable(policy: &SandboxPolicy) -> Result<()> {
     for writable in &policy.writable {
+        if writable.starts_with("/dev") {
+            return Err(FnoxError::Config(format!(
+                "the landlock sandbox cannot let the command write {}, which would expose \
+                 other terminals in /dev; remove it from sandbox_allow_write",
+                writable.display()
+            )));
+        }
         let protected = || {
             policy
                 .hide
@@ -1415,6 +1424,13 @@ mod tests {
         for inside in ["secrets/cache", ".git/hooks", ".git/hooks/sub"] {
             let error = check_writable(&policy(inside)).unwrap_err().to_string();
             assert!(error.contains("which is or is inside"), "{inside}: {error}");
+        }
+        for device in ["/dev", "/dev/pts"] {
+            let error = check_writable(&policy(device)).unwrap_err().to_string();
+            assert!(
+                error.contains("other terminals in /dev"),
+                "{device}: {error}"
+            );
         }
     }
 }

@@ -106,7 +106,11 @@ time.sleep(60)' >pty.path &
 		sleep 0.1
 	done
 	OTHER_TTY="$(cat pty.path)"
+	[[ "$OTHER_TTY" == /dev/* ]] || fail "the terminal holder did not open a terminal"
 	export OTHER_TTY
+	# The terminal can be opened outside the sandbox, so failing inside
+	# means the sandbox refused it.
+	(: <"$OTHER_TTY" && : >"$OTHER_TTY") || fail "the terminal is not usable outside the sandbox"
 	run "$FNOX_BIN" proxy run --sandbox-backend landlock -- sh -c '
 		(: <"$OTHER_TTY") 2>/dev/null && echo tty-readable || echo tty-blocked
 		(: >"$OTHER_TTY") 2>/dev/null && echo tty-writable || echo tty-blocked
