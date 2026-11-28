@@ -86,6 +86,7 @@ Put fnox options before the `--` that starts a child command, as in `fnox -P pro
 - [`fnox files list`](/cli/files/list.md)
 - [`fnox files write [-n --dry-run] [PATHS]…`](/cli/files/write.md)
 - [`fnox get [FLAGS] [KEY]`](/cli/get.md)
+- [`fnox git-credential [--backend <BACKEND>] <OPERATION>`](/cli/git-credential.md)
 - [`fnox import <FLAGS> [FORMAT]`](/cli/import.md)
 - [`fnox init [FLAGS]`](/cli/init.md)
 - [`fnox lease [SUBCOMMAND]`](/cli/lease.md)

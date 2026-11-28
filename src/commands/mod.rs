@@ -19,6 +19,7 @@ pub mod exec;
 pub mod export;
 pub mod files;
 pub mod get;
+pub mod git_credential;
 pub mod hook_env;
 pub mod import;
 pub mod init;
@@ -183,6 +184,8 @@ pub enum Commands {
     Files(files::FilesCommand),
 
     Get(get::GetCommand),
+
+    GitCredential(git_credential::GitCredentialCommand),
 
     /// Internal command used by shell hooks to load secrets
     #[usage(hide)]
@@ -393,6 +396,7 @@ impl Commands {
             Commands::Export(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Files(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Get(cmd) => cmd.run(cli, self.load_config(cli)?).await,
+            Commands::GitCredential(cmd) => cmd.run(cli).await,
             Commands::Import(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::Lease(cmd) => cmd.run(cli, self.load_config(cli)?).await,
             Commands::List(cmd) => cmd.run(cli, self.load_config(cli)?).await,

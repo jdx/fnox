@@ -53,6 +53,7 @@ const guide = [
       page("Push targets", "/guide/push"),
       page("Memory cache (daemon)", "/guide/daemon"),
       page("Credential leases", "/guide/leases"),
+      page("Git credential helper", "/guide/git-credential"),
       page("Credential proxy", "/guide/proxy"),
       page("MCP server", "/guide/mcp"),
       page("Audit log", "/guide/audit"),
