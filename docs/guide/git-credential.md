@@ -31,14 +31,15 @@ git config --global credential.helper '!fnox git-credential'
 
 Now `git clone https://github.com/you/repo` asks fnox for a token. fnox reuses a cached lease while it is valid, and creates a new one when it is not.
 
-git runs the helper from the repository's directory, so that project's `fnox.toml` applies. To use one backend everywhere, define it in `~/.config/fnox/config.toml`.
+git runs the helper from the repository's directory, so that project's `fnox.toml` applies. A first `git clone` runs before the repository's `fnox.toml` exists, so define the backend for cloning, or for use everywhere, in `~/.config/fnox/config.toml`.
 
 ## Choosing a backend
 
-fnox picks the backend whose host matches the request. If several backends serve the same host, the last one in the config wins; pass `--backend` to pick one:
+fnox picks the backend whose host matches the request. If several backends serve the same host, the last one in the config wins; pass `--backend` to pick one. The empty entry clears the helpers inherited from `credential.helper`, so the general fnox helper doesn't answer first:
 
 ```sh
-git config credential.https://github.com.helper '!fnox git-credential --backend work'
+git config --global credential.https://github.com.helper ''
+git config --global --add credential.https://github.com.helper '!fnox git-credential --backend work'
 ```
 
 When no backend serves the host, or no fnox config is found, fnox prints nothing and exits 0, so git moves on to its next helper. `store` and `erase` do nothing, because leases expire on their own.
