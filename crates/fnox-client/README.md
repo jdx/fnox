@@ -141,4 +141,4 @@ daemon's global config, not yours. `fnox` behaves the same way.
   `CallError`, `CliFlags`, `SocketKey`, `RuntimeEnv`, `document::*`,
   `profile::*`, `platform_supported` and `daemon_env_override`. The `wire`,
   `path` and `peer` modules are shared with the fnox daemon and are not.
-- **MSRV.** Rust 1.91.1, the same as fnox.
+- **MSRV.** Rust 1.95, the same as fnox.
