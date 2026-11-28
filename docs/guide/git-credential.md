@@ -37,7 +37,11 @@ The helper reads lease backends only from the global config. git runs it on its 
 git config --global credential.helper '!fnox -c ~/work/fnox.toml git-credential'
 ```
 
-Leases for git share one cache, kept in the fnox config directory, across all repositories.
+Without `-c`, leases for git share one cache across all repositories, stored under `$FNOX_STATE_DIR/leases` (`~/.local/state/fnox/leases` by default on Unix). To list or revoke them, point `fnox lease` at the global config, as `fnox lease list` run inside a repository reads that project's leases instead:
+
+```sh
+fnox -c ~/.config/fnox/config.toml lease list
+```
 
 ## Choosing a backend
 

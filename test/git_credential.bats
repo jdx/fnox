@@ -163,3 +163,24 @@ EOF
 	assert_success
 	assert_line "password=glpat-child"
 }
+
+@test "git-credential get: a profile the global config lacks prints nothing" {
+	start_gitlab_server
+	write_config
+
+	run bash -c "printf 'protocol=http\nhost=127.0.0.1:$MOCK_PORT\n\n' | FNOX_PROFILE=staging fnox git-credential get"
+	assert_success
+	assert_output ""
+}
+
+@test "git-credential get: leases land in the global config's ledger" {
+	start_gitlab_server
+	write_config
+
+	run bash -c "printf 'protocol=http\nhost=127.0.0.1:$MOCK_PORT\n\n' | fnox git-credential get"
+	assert_success
+	run fnox -c "$HOME/.config/fnox/config.toml" lease list
+	assert_success
+	refute_output --partial "No leases found"
+	assert_output --partial "gl"
+}

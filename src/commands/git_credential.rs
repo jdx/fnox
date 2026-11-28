@@ -187,10 +187,16 @@ impl GitCredentialCommand {
             return Ok(());
         };
 
-        // With no config there is no backend, so let git try its next helper.
+        // With no config, or a profile (say from FNOX_PROFILE in the shell)
+        // that the config doesn't define, there is no backend, so let git try
+        // its next helper.
         let config = match load_helper_config(cli) {
             Ok(config) => config,
             Err(FnoxError::ConfigNotFound { .. }) => return Ok(()),
+            Err(FnoxError::ProfileNotFound { profile, .. }) => {
+                tracing::debug!("profile '{profile}' is not defined; serving no git credentials");
+                return Ok(());
+            }
             Err(error) => return Err(error),
         };
         let profile = Config::get_profiles(cli.profile.as_slice());
