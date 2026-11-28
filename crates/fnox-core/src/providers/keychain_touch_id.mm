@@ -72,8 +72,12 @@ static NSString *fnox_current_process_team_identifier(void) {
 
 // Security has no public accessor for an access control's policy, so these
 // private (but long-standing) functions expose its protection and constraints.
-extern "C" CFTypeRef SecAccessControlGetProtection(SecAccessControlRef access_control);
-extern "C" CFDictionaryRef SecAccessControlGetConstraints(SecAccessControlRef access_control);
+// They are weakly imported so a macOS release without them fails this check
+// closed instead of keeping fnox from launching.
+extern "C" CFTypeRef SecAccessControlGetProtection(SecAccessControlRef access_control)
+    __attribute__((weak_import));
+extern "C" CFDictionaryRef SecAccessControlGetConstraints(SecAccessControlRef access_control)
+    __attribute__((weak_import));
 
 // When an item is stored, Keychain fills the biometry constraint with the
 // enrolled set's identifiers (`pbioc`, `pbioh`), which a fresh policy leaves
@@ -99,6 +103,7 @@ static BOOL fnox_constraints_match(id stored, id expected) {
 
 static BOOL fnox_is_biometry_current_set(id access_control) {
   if (!access_control || CFGetTypeID((__bridge CFTypeRef)access_control) != SecAccessControlGetTypeID()) return NO;
+  if (!SecAccessControlGetProtection || !SecAccessControlGetConstraints) return NO;
   CFErrorRef error = NULL;
   SecAccessControlRef expected = SecAccessControlCreateWithFlags(
       kCFAllocatorDefault, kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
