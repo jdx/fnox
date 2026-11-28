@@ -6,7 +6,7 @@ description: "Run a command with placeholder credentials behind the proxy. Usage
 
 # `fnox proxy run`
 
-- **Usage:** `fnox proxy run [--no-sandbox] [--sandbox] [COMMAND]…`
+- **Usage:** `fnox proxy run [FLAGS] [COMMAND]…`
 
 Run a command with placeholder credentials behind the proxy
 
@@ -18,7 +18,7 @@ Resolves the secrets that `[[proxy.rules]]` names, the parent credentials of the
 - CA variables such as `SSL_CERT_FILE` pointing at the proxy's certificate
 - every configured secret and common cloud credential variables removed
 
-With `--sandbox` (or `sandbox = true`), the command also runs in an OS sandbox: its only network route is the proxy, the filesystem is read-only except for the working directory and temporary files, and fnox's configuration, keys and common credential directories are hidden.
+With `--sandbox` (or `sandbox = true`), the command also runs in an OS sandbox: its only network route is the proxy, the filesystem is read-only except for the working directory and temporary files, and fnox's configuration, keys and common credential directories are hidden. With the `landlock` backend the working directory is read-only too, and only `sandbox_allow_write` paths and temporary files can be written.
 
 A lease is minted when a request first needs it and renewed before it expires; when the command exits, fnox revokes every lease it minted.
 
@@ -33,7 +33,13 @@ The command's HTTP client must honor those proxy and CA settings. fnox exits wit
 - **`--no-sandbox`** — Run the command without the sandbox, even if `[proxy]` enables it
 - **`--sandbox`** — Run the command in an OS sandbox whose only way out is the proxy
 
-  Also enabled by `sandbox = true` in `[proxy]`. Needs `bwrap` on Linux or `sandbox-exec` on macOS, and fails instead of running unsandboxed.
+  Also enabled by `sandbox = true` in `[proxy]`. Needs `bwrap` (or, with `--sandbox-backend landlock`, Linux 6.12 or later) on Linux, or `sandbox-exec` on macOS, and fails instead of running unsandboxed.
+
+- **`--sandbox-backend <SANDBOX_BACKEND>`** — Which Linux sandbox to use; implies `--sandbox`
+
+  `bwrap` (the default) needs unprivileged user namespaces. `landlock` works without them, as in a Docker container with the default seccomp profile, needs Linux 6.12 or later, and keeps the working directory read-only. Overrides `sandbox_backend` in `[proxy]`; ignored on macOS.
+
+  **Choices:** `bwrap`, `landlock`
 
 - **`-h --help`** — Print help
 

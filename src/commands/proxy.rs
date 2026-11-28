@@ -3,7 +3,7 @@ use crate::config::{Config, ProxyConfig, SecretConfig};
 use crate::error::{FnoxError, Result};
 use crate::lease_backends::LeaseBackendConfig;
 use crate::proxy::{ProxyListener, ProxyPlan, RunningProxy};
-use crate::sandbox::{Sandbox, SandboxPolicy};
+use crate::sandbox::{Sandbox, SandboxBackend, SandboxPolicy};
 use crate::secret_session::SecretSession;
 use indexmap::IndexMap;
 use std::process::Stdio;
@@ -158,7 +158,9 @@ enum ProxySubcommand {
 /// With `--sandbox` (or `sandbox = true`), the command also runs in an OS
 /// sandbox: its only network route is the proxy, the filesystem is read-only
 /// except for the working directory and temporary files, and fnox's
-/// configuration, keys and common credential directories are hidden.
+/// configuration, keys and common credential directories are hidden. With
+/// the `landlock` backend the working directory is read-only too, and only
+/// `sandbox_allow_write` paths and temporary files can be written.
 ///
 /// A lease is minted when a request first needs it and renewed before it
 /// expires; when the command exits, fnox revokes every lease it minted.
@@ -180,10 +182,20 @@ struct ProxyRunCommand {
 
     /// Run the command in an OS sandbox whose only way out is the proxy
     ///
-    /// Also enabled by `sandbox = true` in `[proxy]`. Needs `bwrap` on Linux or
+    /// Also enabled by `sandbox = true` in `[proxy]`. Needs `bwrap` (or, with
+    /// `--sandbox-backend landlock`, Linux 6.12 or later) on Linux, or
     /// `sandbox-exec` on macOS, and fails instead of running unsandboxed.
     #[usage(long)]
     sandbox: bool,
+
+    /// Which Linux sandbox to use; implies `--sandbox`
+    ///
+    /// `bwrap` (the default) needs unprivileged user namespaces. `landlock`
+    /// works without them, as in a Docker container with the default seccomp
+    /// profile, needs Linux 6.12 or later, and keeps the working directory
+    /// read-only. Overrides `sandbox_backend` in `[proxy]`; ignored on macOS.
+    #[usage(long, value_enum)]
+    sandbox_backend: Option<SandboxBackend>,
 
     /// Command to run, with its arguments
     #[usage(
@@ -357,7 +369,7 @@ fn collect_requested_secrets(
 
 impl ProxyRunCommand {
     fn sandbox_enabled(&self, proxy: &ProxyConfig) -> bool {
-        self.sandbox || (proxy.sandbox && !self.no_sandbox)
+        self.sandbox || self.sandbox_backend.is_some() || (proxy.sandbox && !self.no_sandbox)
     }
 
     async fn run(&self, cli: &Cli, config: Config) -> Result<()> {
@@ -372,8 +384,12 @@ impl ProxyRunCommand {
         // Checked before any secret is resolved, so a machine that cannot
         // sandbox fails without having fetched anything.
         let sandbox = if self.sandbox_enabled(proxy_config) {
-            let policy = SandboxPolicy::from_environment(cli, &config, proxy_config)?;
-            Some(Sandbox::prepare(policy)?)
+            let backend = self
+                .sandbox_backend
+                .or(proxy_config.sandbox_backend)
+                .unwrap_or_default();
+            let policy = SandboxPolicy::from_environment(cli, &config, proxy_config, backend)?;
+            Some(Sandbox::prepare(policy, backend)?)
         } else {
             None
         };
@@ -493,10 +509,12 @@ impl ProxyRunCommand {
             .map_or(ProxyListener::Loopback, Sandbox::listener);
         let running = RunningProxy::start(plan, listener).await?;
         let mut mount_points = Vec::new();
+        let mut sandbox_env = Vec::new();
         let (program, args, proxy_url, ca_path) = match &sandbox {
             Some(sandbox) => {
                 let launch = sandbox.launch(&running, &self.command)?;
                 mount_points = launch.mount_points;
+                sandbox_env = launch.env;
                 (
                     launch.program,
                     launch.args,
@@ -550,6 +568,7 @@ impl ProxyRunCommand {
                 command.env_remove(key);
             }
         }
+        command.envs(sandbox_env);
         command.env("FNOX_DAEMON", "off");
         command.env("FNOX_NON_INTERACTIVE", "1");
         // `fnox mcp` in the child relays to the tools this process serves
@@ -587,11 +606,18 @@ impl ProxyRunCommand {
             command.env(key, &ca_path);
         }
 
+        if let Some(sandbox) = &sandbox {
+            sandbox.confine(&mut command, &running)?;
+        }
+
         let outcome = if sandbox.is_some() {
             run_until_interrupted(command).await
         } else {
             run_forwarding_signals(command).await
         };
+        if let Some(sandbox) = &sandbox {
+            sandbox.stop_remaining();
+        }
         crate::sandbox::remove_mount_points(&mount_points);
         running.shutdown().await;
         // `process::exit` below skips destructors, so this removes the

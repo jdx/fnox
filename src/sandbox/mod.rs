@@ -12,12 +12,15 @@
 //! - **Sockets**: on Linux the whole `/run` tree is hidden, which takes the
 //!   fnox daemon, D-Bus, gpg-agent and the Docker socket with it.
 //!
-//! Linux uses `bwrap` (bubblewrap). The proxy listens on a Unix socket that is
-//! bind-mounted into the sandbox, and `fnox sandbox-bridge` runs inside it to
-//! offer that socket to the child as an ordinary `127.0.0.1` proxy. macOS uses
-//! `sandbox-exec` and lets the child reach the proxy's loopback port. Other
-//! platforms are not supported, and an unavailable sandbox is an error: the
-//! command is never run unsandboxed.
+//! Linux uses `bwrap` (bubblewrap) by default. The proxy listens on a Unix
+//! socket that is bind-mounted into the sandbox, and `fnox sandbox-bridge` runs
+//! inside it to offer that socket to the child as an ordinary `127.0.0.1`
+//! proxy. Where user namespaces are unavailable, the `landlock` backend
+//! confines the child with Landlock and a seccomp filter instead, and keeps the
+//! working directory read-only (see [`landlock`]). macOS uses `sandbox-exec`
+//! and lets the child reach the proxy's loopback port. Other platforms are not
+//! supported, and an unavailable sandbox is an error: the command is never run
+//! unsandboxed.
 
 use crate::commands::Cli;
 use crate::config::{Config, ProxyConfig, all_config_filenames, uses_config_discovery};
@@ -26,6 +29,14 @@ use crate::error::{FnoxError, Result};
 use crate::proxy::{ProxyListener, RunningProxy};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+
+pub use crate::config::SandboxBackend;
+
+#[cfg(all(
+    target_os = "linux",
+    any(target_arch = "x86_64", target_arch = "aarch64")
+))]
+mod landlock;
 
 /// Port of the bridge inside the sandbox. The sandbox has its own network
 /// namespace, so nothing else can be using it.
@@ -92,6 +103,9 @@ pub struct HiddenPath {
 /// Everything the policy is derived from, so tests can supply their own.
 pub struct PolicyInputs<'a> {
     pub cwd: PathBuf,
+    /// Whether the command may write the working directory. The `landlock`
+    /// backend cannot keep parts of it read-only, so it keeps all of it so.
+    pub cwd_writable: bool,
     pub home: PathBuf,
     /// fnox's own configuration, state and data directories.
     pub fnox_dirs: Vec<PathBuf>,
@@ -106,6 +120,7 @@ impl SandboxPolicy {
     pub fn build(inputs: PolicyInputs<'_>) -> Self {
         let PolicyInputs {
             cwd,
+            cwd_writable,
             home,
             fnox_dirs,
             fnox_files,
@@ -114,7 +129,11 @@ impl SandboxPolicy {
         } = inputs;
         let resolve = |entry: &String| expand(entry, &home, &cwd);
 
-        let mut writable = vec![cwd.clone()];
+        let mut writable = if cwd_writable {
+            vec![cwd.clone()]
+        } else {
+            Vec::new()
+        };
         writable.extend(config.sandbox_allow_write.iter().map(resolve));
         writable.retain(|path| path.exists());
         let writable_path = |path: &Path| writable.iter().any(|bound| path.starts_with(bound));
@@ -183,7 +202,12 @@ impl SandboxPolicy {
     }
 
     /// Gathers the inputs from the running process and the loaded config.
-    pub fn from_environment(cli: &Cli, config: &Config, proxy: &ProxyConfig) -> Result<Self> {
+    pub fn from_environment(
+        cli: &Cli,
+        config: &Config,
+        proxy: &ProxyConfig,
+        backend: SandboxBackend,
+    ) -> Result<Self> {
         let cwd = env::current_dir()
             .and_then(std::fs::canonicalize)
             .map_err(|error| {
@@ -227,6 +251,7 @@ impl SandboxPolicy {
 
         Ok(Self::build(PolicyInputs {
             cwd,
+            cwd_writable: !(cfg!(target_os = "linux") && backend == SandboxBackend::Landlock),
             home: env::HOME_DIR.clone(),
             fnox_dirs: vec![
                 env::FNOX_CONFIG_DIR.clone(),
@@ -518,31 +543,61 @@ pub struct Launch {
     /// Empty files the sandbox may leave behind; pass to
     /// [`remove_mount_points`] after the command exits.
     pub mount_points: Vec<PathBuf>,
+    /// Variables the sandbox sets for the child.
+    pub env: Vec<(String, OsString)>,
 }
 
 /// A sandbox that has been checked to work on this machine.
 pub struct Sandbox {
     policy: SandboxPolicy,
     #[cfg(target_os = "linux")]
-    socket_dir: tempfile::TempDir,
+    backend: Backend,
+}
+
+#[cfg(target_os = "linux")]
+enum Backend {
+    Bwrap {
+        socket_dir: tempfile::TempDir,
+    },
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    Landlock(landlock::Confinement),
 }
 
 impl Sandbox {
     /// Fails unless the platform's sandbox tool is present and works.
-    pub fn prepare(policy: SandboxPolicy) -> Result<Self> {
+    /// `backend` only matters on Linux.
+    pub fn prepare(policy: SandboxPolicy, backend: SandboxBackend) -> Result<Self> {
         #[cfg(target_os = "linux")]
         {
-            check_bwrap()?;
-            let socket_dir = tempfile::Builder::new()
-                .prefix("fnox-sandbox-")
-                .tempdir()
-                .map_err(|error| {
-                    FnoxError::Config(format!("failed to create the sandbox directory: {error}"))
-                })?;
-            Ok(Self { policy, socket_dir })
+            let backend = match backend {
+                SandboxBackend::Bwrap => {
+                    check_bwrap()?;
+                    let socket_dir = tempfile::Builder::new()
+                        .prefix("fnox-sandbox-")
+                        .tempdir()
+                        .map_err(|error| {
+                            FnoxError::Config(format!(
+                                "failed to create the sandbox directory: {error}"
+                            ))
+                        })?;
+                    Backend::Bwrap { socket_dir }
+                }
+                #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+                SandboxBackend::Landlock => {
+                    Backend::Landlock(landlock::Confinement::prepare(&policy)?)
+                }
+                #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+                SandboxBackend::Landlock => {
+                    return Err(FnoxError::Config(
+                        "the landlock sandbox is only supported on x86_64 and aarch64".to_string(),
+                    ));
+                }
+            };
+            Ok(Self { policy, backend })
         }
         #[cfg(target_os = "macos")]
         {
+            let _ = backend;
             if !Path::new(SANDBOX_EXEC).exists() {
                 return Err(FnoxError::Config(format!(
                     "the sandbox needs {SANDBOX_EXEC}, which was not found"
@@ -552,7 +607,7 @@ impl Sandbox {
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
-            let _ = policy;
+            let _ = (policy, backend);
             Err(FnoxError::Config(
                 "the proxy sandbox is only supported on Linux and macOS".to_string(),
             ))
@@ -563,7 +618,13 @@ impl Sandbox {
     pub fn listener(&self) -> ProxyListener {
         #[cfg(target_os = "linux")]
         {
-            ProxyListener::Unix(self.socket_dir.path().join("proxy.sock"))
+            match &self.backend {
+                Backend::Bwrap { socket_dir } => {
+                    ProxyListener::Unix(socket_dir.path().join("proxy.sock"))
+                }
+                #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+                Backend::Landlock(_) => ProxyListener::Loopback,
+            }
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -575,19 +636,36 @@ impl Sandbox {
     pub fn launch(&self, running: &RunningProxy, command: &[String]) -> Result<Launch> {
         #[cfg(target_os = "linux")]
         {
-            let exe = env::current_exe().map_err(|error| {
-                FnoxError::Config(format!("failed to locate the fnox executable: {error}"))
-            })?;
-            let socket = self.socket_dir.path().join("proxy.sock");
-            let args = bwrap_args(&self.policy, &exe, &socket, running.ca_path(), command);
-            let bridge: std::net::SocketAddr = ([127, 0, 0, 1], BRIDGE_PORT).into();
-            Ok(Launch {
-                program: "bwrap".into(),
-                args,
-                proxy_url: running.session_url(bridge),
-                ca_path: Path::new(SANDBOX_DIR).join("ca.pem"),
-                mount_points: pending_mount_points(&self.policy),
-            })
+            match &self.backend {
+                Backend::Bwrap { socket_dir } => {
+                    let exe = env::current_exe().map_err(|error| {
+                        FnoxError::Config(format!("failed to locate the fnox executable: {error}"))
+                    })?;
+                    let socket = socket_dir.path().join("proxy.sock");
+                    let args = bwrap_args(&self.policy, &exe, &socket, running.ca_path(), command);
+                    let bridge: std::net::SocketAddr = ([127, 0, 0, 1], BRIDGE_PORT).into();
+                    Ok(Launch {
+                        program: "bwrap".into(),
+                        args,
+                        proxy_url: running.session_url(bridge),
+                        ca_path: Path::new(SANDBOX_DIR).join("ca.pem"),
+                        mount_points: pending_mount_points(&self.policy),
+                        env: Vec::new(),
+                    })
+                }
+                #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+                Backend::Landlock(confinement) => Ok(Launch {
+                    program: command[0].clone().into(),
+                    args: command[1..].iter().map(OsString::from).collect(),
+                    proxy_url: running
+                        .proxy_url()
+                        .expect("a loopback proxy has a proxy URL"),
+                    // The CA's own directory is hidden with the rest of /tmp.
+                    ca_path: confinement.place_ca(running.ca_path())?,
+                    mount_points: Vec::new(),
+                    env: confinement.env(),
+                }),
+            }
         }
         #[cfg(target_os = "macos")]
         {
@@ -607,12 +685,48 @@ impl Sandbox {
                     .expect("a loopback proxy has a proxy URL"),
                 ca_path: running.ca_path().to_path_buf(),
                 mount_points: Vec::new(),
+                env: Vec::new(),
             })
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
             let _ = (running, command);
             unreachable!("prepare fails on this platform")
+        }
+    }
+
+    /// Applies what the sandbox does to the command as it starts, after
+    /// [`Sandbox::launch`] has built it.
+    pub fn confine(
+        &self,
+        command: &mut tokio::process::Command,
+        running: &RunningProxy,
+    ) -> Result<()> {
+        #[cfg(all(
+            target_os = "linux",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        ))]
+        if let Backend::Landlock(confinement) = &self.backend {
+            let Some(std::net::SocketAddr::V4(proxy)) = running.local_addr() else {
+                return Err(FnoxError::Config(
+                    "the landlock sandbox needs the proxy on 127.0.0.1".to_string(),
+                ));
+            };
+            return confinement.apply(command, proxy);
+        }
+        let _ = (command, running);
+        Ok(())
+    }
+
+    /// Stops the command's processes that outlived it. Under `bwrap` and
+    /// `sandbox-exec` they end with the sandbox.
+    pub fn stop_remaining(&self) {
+        #[cfg(all(
+            target_os = "linux",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        ))]
+        if let Backend::Landlock(_) = &self.backend {
+            landlock::stop_remaining();
         }
     }
 }
@@ -644,7 +758,8 @@ fn check_bwrap() -> Result<()> {
         Ok(output) if output.status.success() => Ok(()),
         Ok(output) => Err(FnoxError::Config(format!(
             "the sandbox could not start: {}. bwrap needs unprivileged user namespaces; \
-             see https://fnox.jdx.dev/guide/proxy#sandbox",
+             where they are unavailable, try `sandbox_backend = \"landlock\"`. \
+             See https://fnox.jdx.dev/guide/proxy#sandbox",
             String::from_utf8_lossy(&output.stderr).trim()
         ))),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Err(FnoxError::Config(
@@ -671,6 +786,7 @@ mod tests {
         std::fs::write(home.join(".config/fnox/age.txt"), "").unwrap();
         SandboxPolicy::build(PolicyInputs {
             cwd: std::fs::canonicalize(&cwd).unwrap(),
+            cwd_writable: true,
             home: std::fs::canonicalize(&home).unwrap(),
             fnox_dirs: vec![home.join(".config/fnox"), home.join("missing")],
             fnox_files: vec![cwd.join("fnox.toml"), home.join(".config/fnox/age.txt")],
@@ -757,6 +873,7 @@ mod tests {
         let cwd = std::fs::canonicalize(root.join("project")).unwrap();
         SandboxPolicy::build(PolicyInputs {
             cwd: cwd.clone(),
+            cwd_writable: true,
             home: std::fs::canonicalize(root.join("home")).unwrap(),
             fnox_dirs: Vec::new(),
             fnox_files: fnox_files.iter().map(|file| cwd.join(file)).collect(),
@@ -795,6 +912,7 @@ mod tests {
         let cwd = std::fs::canonicalize(root.path()).unwrap();
         let policy = SandboxPolicy::build(PolicyInputs {
             cwd: cwd.clone(),
+            cwd_writable: true,
             home: PathBuf::from("/nonexistent-fnox-test/home"),
             fnox_dirs: Vec::new(),
             fnox_files: vec![PathBuf::from("/nonexistent-fnox-test/fnox.toml")],

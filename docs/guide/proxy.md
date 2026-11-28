@@ -238,13 +238,43 @@ sandbox_allow_read = ["fnox.toml"]
 
 ### Requirements
 
-| Platform | Needs                                                                   | How it works                                                                                                                                             |
-| -------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Linux    | [`bwrap`](https://github.com/containers/bubblewrap) and user namespaces | The command runs in new network, PID, and IPC namespaces. A small forwarder, `fnox sandbox-bridge`, exposes the proxy on `127.0.0.1` inside the sandbox. |
-| macOS    | `/usr/bin/sandbox-exec`                                                 | A generated seatbelt profile allows network access only to the proxy's loopback port and blocks launching apps with `open`.                              |
-| Windows  | not supported                                                           | `--sandbox` is an error.                                                                                                                                 |
+| Platform                              | Needs                                                                   | How it works                                                                                                                                             |
+| ------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linux                                 | [`bwrap`](https://github.com/containers/bubblewrap) and user namespaces | The command runs in new network, PID, and IPC namespaces. A small forwarder, `fnox sandbox-bridge`, exposes the proxy on `127.0.0.1` inside the sandbox. |
+| Linux, `sandbox_backend = "landlock"` | Linux 6.12 or later on x86_64 or aarch64                                | Landlock limits files, and a seccomp filter hands every connection to fnox. See [without user namespaces](#without-user-namespaces).                     |
+| macOS                                 | `/usr/bin/sandbox-exec`                                                 | A generated seatbelt profile allows network access only to the proxy's loopback port and blocks launching apps with `open`.                              |
+| Windows                               | not supported                                                           | `--sandbox` is an error.                                                                                                                                 |
 
-fnox never falls back to running unsandboxed: if the tool is missing or the machine forbids user namespaces, `fnox proxy run` exits before it resolves any secret. Some distributions restrict unprivileged user namespaces (Ubuntu 24.04 does by default through AppArmor); allow `bwrap` there or relax the restriction.
+fnox never falls back to running unsandboxed: if the tool is missing or the machine forbids user namespaces, `fnox proxy run` exits before it resolves any secret. Some distributions restrict unprivileged user namespaces (Ubuntu 24.04 does by default through AppArmor); allow `bwrap` there, relax the restriction, or use the `landlock` backend.
+
+### Without user namespaces
+
+Where user namespaces are unavailable, such as in a Docker container with Docker's default seccomp profile, the `landlock` backend sandboxes the command without them:
+
+```toml
+[proxy]
+sandbox = true
+sandbox_backend = "landlock"
+```
+
+Or for one run: `fnox proxy run --sandbox-backend landlock -- node agent.js`. It needs Linux 6.12 or later (Landlock ABI 6) on x86_64 or aarch64 and no extra tools. macOS ignores the setting.
+
+Instead of namespaces, the command is confined with two kernel features any process may use:
+
+- **Landlock** limits its files to the same hidden and read-only paths as above. `/tmp` and `/run` are hidden too, apart from a working directory inside them that `sandbox_deny_read` doesn't cover, and so is `/dev`, apart from standard devices such as `/dev/null` and `/dev/urandom` and the terminal the command was started in. The command gets a private temporary directory through `TMPDIR`, `TMP`, and `TEMP`.
+- **A seccomp filter** stops every `connect()` and asks fnox. fnox makes a connection to the proxy itself and gives the command that socket; every other destination, including other local ports and Unix sockets, fails with `EACCES`. The command can't create UDP, raw, or packet sockets, can't listen on a port, and can't use io_uring.
+
+It differs from `bwrap` in a few ways:
+
+- **The working directory is read-only.** Landlock can only grant access, so it can't let the command write the working directory while keeping `fnox.toml` or `.git/hooks` inside it out of reach. List the directories the command should write, such as a build output directory, in `sandbox_allow_write`, and create them before the run: a listed path that doesn't exist yet is skipped, and the command can't create it in the read-only working directory. fnox refuses to start if a `sandbox_allow_write` path contains, or lies inside, a path that must stay hidden or read-only, or is in `/dev`.
+- **Other processes stay visible.** The command can list other processes and read their command lines in `/proc`, but Landlock stops it from signalling or tracing anything outside the sandbox, fnox included, and from reaching abstract Unix sockets created outside it.
+- **The command can't open new terminals.** Its own terminal keeps working, but every other terminal in `/dev/pts` is out of reach, including ones it creates, so tools that open a pseudo-terminal, such as `script`, `expect`, or a pty library, fail with `EACCES`.
+- **Hidden directories can be listed.** The command can see the names of files in a hidden directory, such as `~/.ssh`, but can't read them. A file created after the command starts, in a directory that also holds a hidden path, isn't readable until the next run.
+- **Only standard input, output, and error are passed on.** Other file descriptors fnox inherits are closed when the command starts, because a file opened before the sandbox keeps its access.
+- **Leftover processes are stopped.** When the command exits, fnox stops any process it left running in the background.
+- **fnox must be able to read the command's memory** to see where it connects. With `kernel.yama.ptrace_scope` at 2 or 3, the sandbox fails to start.
+
+Like `bwrap`, it fails before any secret is resolved if the kernel can't run it.
 
 ### Limits
 
@@ -267,7 +297,7 @@ With `audit = true` (the default), fnox logs each request's method, domain, path
 
 #### GitLab CI with the Docker executor
 
-Docker's default seccomp profile can block Bubblewrap from creating namespaces even when the runner host allows unprivileged user namespaces. If `fnox proxy run --sandbox` fails at startup for this reason, the runner administrator can provide the isolation instead:
+Docker's default seccomp profile can block Bubblewrap from creating namespaces even when the runner host allows unprivileged user namespaces. The [`landlock` backend](#without-user-namespaces) can work there without changes to the runner if the runner's kernel is Linux 6.12 or later with Landlock enabled, and `kernel.yama.ptrace_scope` on the host is 0 or 1. fnox checks both before it resolves any secret and exits with an error if either is missing. In that case, or if the kernel is older, the runner administrator can provide the isolation instead:
 
 1. **Run fnox in a trusted launcher.** Have `fnox proxy run --no-sandbox` start a trusted wrapper that launches the review agent in a separate container. Keep provider credentials, fnox config, and GitLab job credentials in the trusted environment. Give the agent only the input files it needs, and keep the Docker socket and credential directories out of its mounts.
 2. **Give the agent one reachable endpoint.** Have the runner enforce a default-deny network policy for the agent container, with an exception for a TCP forwarder on a private interface facing the agent. Run the forwarder in the same network namespace as fnox and point it at fnox's loopback listener. The trusted side needs its own outbound access for proxied requests. GitLab's [per-job bridge network](https://docs.gitlab.com/runner/executors/docker/#create-a-network-for-each-job) gives jobs separate networks, but the runner still needs to block direct egress from the agent, including external DNS, and access to unrelated runner or service endpoints.

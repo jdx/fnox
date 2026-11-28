@@ -33,7 +33,7 @@ fnox proxy run -- node agent.js
 ## Subcommands
 
 - [`fnox proxy rules`](/cli/proxy/rules.md)
-- [`fnox proxy run [--no-sandbox] [--sandbox] [COMMAND]…`](/cli/proxy/run.md)
+- [`fnox proxy run [FLAGS] [COMMAND]…`](/cli/proxy/run.md)
 
 ## See also
 
